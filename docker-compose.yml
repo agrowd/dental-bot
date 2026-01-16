@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongo:
+    image: mongo:7
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=odontobot
+
+  # Next.js Frontend + API
+  nextjs:
+    build:
+      context: .
+      dockerfile: Dockerfile.nextjs
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017/odontobot
+      - JWT_SECRET=${JWT_SECRET}
+      - NODE_ENV=production
+    depends_on:
+      - mongo
+    volumes:
+      - ./src:/app/src
+
+  # WhatsApp Bot Runner
+  bot-runner:
+    build:
+      context: ./bot-runner
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "4000:4000"
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017/odontobot
+      - WHATSAPP_SESSION_PATH=/app/.wwebjs_auth
+    depends_on:
+      - mongo
+    volumes:
+      - whatsapp-session:/app/.wwebjs_auth
+      - ./bot-runner:/app
+
+volumes:
+  mongo-data:
+  whatsapp-session:

@@ -1,0 +1,496 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useParams } from 'next/navigation';
+import Link from 'next/link';
+import { mockFlows } from '@/lib/mock-data';
+import { FlowStep, StepOption, ActivationRules } from '@/lib/types';
+
+type TabType = 'rules' | 'steps';
+
+// Generate unique ID
+const genId = () => `opt-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+const genStepId = () => `step-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+
+// Next available key (A, B, C... Z, AA, AB...)
+const getNextKey = (options: StepOption[]): string => {
+    const keys = options.map(o => o.key);
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+    for (const letter of alphabet) {
+        if (!keys.includes(letter)) return letter;
+    }
+    return `${alphabet.length}`;
+};
+
+export default function FlowEditorPage() {
+    const params = useParams();
+    const flowId = params.flowId as string;
+    const flowData = mockFlows.find(f => f.id === flowId) || mockFlows[0];
+
+    const [activeTab, setActiveTab] = useState<TabType>('steps');
+    const [flowName, setFlowName] = useState(flowData.name);
+    const [flowDescription, setFlowDescription] = useState(flowData.description || '');
+    const [activationRules, setActivationRules] = useState<ActivationRules>(flowData.activationRules);
+    const [isActive, setIsActive] = useState(flowData.isActive);
+    const [steps, setSteps] = useState<Record<string, FlowStep>>(flowData.draft.steps);
+    const [selectedStepId, setSelectedStepId] = useState<string>(flowData.draft.entryStepId);
+    const [entryStepId, setEntryStepId] = useState<string>(flowData.draft.entryStepId);
+    const [hasChanges, setHasChanges] = useState(false);
+    const [showToast, setShowToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+    const [showNewStepModal, setShowNewStepModal] = useState(false);
+    const [newStepTitle, setNewStepTitle] = useState('');
+
+    const selectedStep = steps[selectedStepId];
+    const stepIds = Object.keys(steps);
+
+    useEffect(() => {
+        if (showToast) {
+            const timer = setTimeout(() => setShowToast(null), 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [showToast]);
+
+    // Create new step
+    const handleCreateStep = () => {
+        if (!newStepTitle.trim()) return;
+        const newId = genStepId();
+        setSteps(prev => ({
+            ...prev,
+            [newId]: {
+                id: newId,
+                title: newStepTitle,
+                message: 'Escribí el mensaje aquí...',
+                options: [
+                    { id: genId(), key: 'A', label: 'Opción 1', nextStepId: entryStepId }
+                ]
+            }
+        }));
+        setSelectedStepId(newId);
+        setNewStepTitle('');
+        setShowNewStepModal(false);
+        setHasChanges(true);
+        setShowToast({ type: 'success', message: `Paso "${newStepTitle}" creado` });
+    };
+
+    // Delete step
+    const handleDeleteStep = (stepId: string) => {
+        if (stepId === entryStepId) {
+            setShowToast({ type: 'error', message: 'No podés eliminar el paso inicial' });
+            return;
+        }
+        if (stepIds.length <= 1) {
+            setShowToast({ type: 'error', message: 'Debe haber al menos un paso' });
+            return;
+        }
+        const { [stepId]: removed, ...rest } = steps;
+        setSteps(rest);
+        setSelectedStepId(entryStepId);
+        setHasChanges(true);
+    };
+
+    // Update step field
+    const updateStep = (field: keyof FlowStep, value: string | StepOption[]) => {
+        setSteps(prev => ({
+            ...prev,
+            [selectedStepId]: { ...prev[selectedStepId], [field]: value }
+        }));
+        setHasChanges(true);
+    };
+
+    // Add option to current step
+    const addOption = () => {
+        const currentOptions = selectedStep.options;
+        const newOption: StepOption = {
+            id: genId(),
+            key: getNextKey(currentOptions),
+            label: 'Nueva opción',
+            nextStepId: entryStepId
+        };
+        updateStep('options', [...currentOptions, newOption]);
+    };
+
+    // Remove option
+    const removeOption = (optionId: string) => {
+        if (selectedStep.options.length <= 1) {
+            setShowToast({ type: 'error', message: 'Debe haber al menos una opción' });
+            return;
+        }
+        const filtered = selectedStep.options.filter(o => o.id !== optionId);
+        // Re-key the options (A, B, C...)
+        const reKeyed = filtered.map((opt, i) => ({
+            ...opt,
+            key: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[i] || `${i + 1}`
+        }));
+        updateStep('options', reKeyed);
+    };
+
+    // Update option
+    const updateOption = (optionId: string, field: 'label' | 'nextStepId', value: string) => {
+        const updated = selectedStep.options.map(opt =>
+            opt.id === optionId ? { ...opt, [field]: value } : opt
+        );
+        updateStep('options', updated);
+    };
+
+    // Move option up/down
+    const moveOption = (optionId: string, direction: 'up' | 'down') => {
+        const idx = selectedStep.options.findIndex(o => o.id === optionId);
+        if (direction === 'up' && idx === 0) return;
+        if (direction === 'down' && idx === selectedStep.options.length - 1) return;
+
+        const newIdx = direction === 'up' ? idx - 1 : idx + 1;
+        const newOptions = [...selectedStep.options];
+        [newOptions[idx], newOptions[newIdx]] = [newOptions[newIdx], newOptions[idx]];
+
+        // Re-key
+        const reKeyed = newOptions.map((opt, i) => ({
+            ...opt,
+            key: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[i] || `${i + 1}`
+        }));
+        updateStep('options', reKeyed);
+    };
+
+    const handleSave = () => {
+        setHasChanges(false);
+        setShowToast({ type: 'success', message: 'Cambios guardados' });
+    };
+
+    const handlePublish = () => {
+        setHasChanges(false);
+        setShowToast({ type: 'success', message: '¡Flujo publicado!' });
+    };
+
+    // Generate preview text
+    const generatePreview = (step: FlowStep): string => {
+        let preview = step.message + '\n\n';
+        step.options.forEach(opt => {
+            preview += `${opt.key}) ${opt.label}\n`;
+        });
+        return preview;
+    };
+
+    return (
+        <div className="animate-fadeIn h-[calc(100vh-64px)] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-4">
+                    <Link href="/admin/flows" className="p-2 hover:bg-slate-100 rounded-lg">
+                        <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                    </Link>
+                    <div>
+                        <div className="flex items-center gap-3">
+                            <h1 className="text-xl font-bold text-slate-900">{flowName}</h1>
+                            {hasChanges && <span className="badge badge-warning">Sin guardar</span>}
+                            {isActive ? <span className="badge badge-success">Activo</span> : <span className="badge badge-neutral">Inactivo</span>}
+                        </div>
+                    </div>
+                </div>
+                <div className="flex items-center gap-3">
+                    <button onClick={handleSave} className="btn btn-secondary">Guardar</button>
+                    <button onClick={handlePublish} className="btn btn-success">Publicar</button>
+                </div>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex gap-2 mb-4">
+                <button onClick={() => setActiveTab('rules')} className={`px-4 py-2 rounded-lg font-medium text-sm ${activeTab === 'rules' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                    ⚙️ Reglas
+                </button>
+                <button onClick={() => setActiveTab('steps')} className={`px-4 py-2 rounded-lg font-medium text-sm ${activeTab === 'steps' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                    📝 Constructor de Menús
+                </button>
+            </div>
+
+            {/* Rules Tab */}
+            {activeTab === 'rules' && (
+                <div className="flex-1 overflow-y-auto">
+                    <div className="max-w-2xl space-y-4">
+                        <div className="card p-4">
+                            <label className="label">Nombre</label>
+                            <input type="text" value={flowName} onChange={(e) => { setFlowName(e.target.value); setHasChanges(true); }} className="input" />
+                        </div>
+                        <div className="card p-4">
+                            <label className="label">Descripción</label>
+                            <input type="text" value={flowDescription} onChange={(e) => { setFlowDescription(e.target.value); setHasChanges(true); }} className="input" />
+                        </div>
+                        <div className="card p-4">
+                            <h3 className="font-medium text-slate-900 mb-3">Origen</h3>
+                            <div className="flex gap-4">
+                                <label className={`flex-1 p-3 rounded-lg border-2 cursor-pointer flex items-center gap-3 ${activationRules.sources.meta_ads ? 'border-blue-500 bg-blue-50' : 'border-slate-200'}`}>
+                                    <input type="checkbox" checked={activationRules.sources.meta_ads} onChange={(e) => { setActivationRules(prev => ({ ...prev, sources: { ...prev.sources, meta_ads: e.target.checked } })); setHasChanges(true); }} />
+                                    <span>📢 Meta Ads</span>
+                                </label>
+                                <label className={`flex-1 p-3 rounded-lg border-2 cursor-pointer flex items-center gap-3 ${activationRules.sources.organic ? 'border-blue-500 bg-blue-50' : 'border-slate-200'}`}>
+                                    <input type="checkbox" checked={activationRules.sources.organic} onChange={(e) => { setActivationRules(prev => ({ ...prev, sources: { ...prev.sources, organic: e.target.checked } })); setHasChanges(true); }} />
+                                    <span>💬 Orgánico</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div className="card p-4">
+                            <h3 className="font-medium text-slate-900 mb-3">Estado en WhatsApp</h3>
+                            <div className="flex gap-4">
+                                <label className={`flex-1 p-3 rounded-lg border-2 cursor-pointer flex items-center gap-3 ${activationRules.whatsappStatus.agendado ? 'border-green-500 bg-green-50' : 'border-slate-200'}`}>
+                                    <input type="checkbox" checked={activationRules.whatsappStatus.agendado} onChange={(e) => { setActivationRules(prev => ({ ...prev, whatsappStatus: { ...prev.whatsappStatus, agendado: e.target.checked } })); setHasChanges(true); }} />
+                                    <div>
+                                        <span className="font-medium">📇 Agendado</span>
+                                        <p className="text-xs text-slate-500">Número guardado</p>
+                                    </div>
+                                </label>
+                                <label className={`flex-1 p-3 rounded-lg border-2 cursor-pointer flex items-center gap-3 ${activationRules.whatsappStatus.no_agendado ? 'border-yellow-500 bg-yellow-50' : 'border-slate-200'}`}>
+                                    <input type="checkbox" checked={activationRules.whatsappStatus.no_agendado} onChange={(e) => { setActivationRules(prev => ({ ...prev, whatsappStatus: { ...prev.whatsappStatus, no_agendado: e.target.checked } })); setHasChanges(true); }} />
+                                    <div>
+                                        <span className="font-medium">❓ No agendado</span>
+                                        <p className="text-xs text-slate-500">Número desconocido</p>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                        <div className="card p-4">
+                            <h3 className="font-medium text-slate-900 mb-3">Prioridad</h3>
+                            <div className="flex items-center gap-3">
+                                <input type="number" min="1" max="100" value={activationRules.priority} onChange={(e) => { setActivationRules(prev => ({ ...prev, priority: parseInt(e.target.value) || 1 })); setHasChanges(true); }} className="input w-20 text-center" />
+                                <span className="text-sm text-slate-500">Mayor = más prioridad</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Steps Tab - Visual Builder */}
+            {activeTab === 'steps' && (
+                <div className="flex-1 grid grid-cols-12 gap-4 min-h-0">
+                    {/* Steps List */}
+                    <div className="col-span-3 card flex flex-col min-h-0">
+                        <div className="p-3 border-b border-[var(--border)] flex items-center justify-between">
+                            <h2 className="font-semibold text-slate-900 text-sm">Pasos ({stepIds.length})</h2>
+                            <button onClick={() => setShowNewStepModal(true)} className="p-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700" title="Agregar paso">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                            {stepIds.map((stepId) => {
+                                const step = steps[stepId];
+                                const isEntry = stepId === entryStepId;
+                                const isSelected = stepId === selectedStepId;
+                                return (
+                                    <button
+                                        key={stepId}
+                                        onClick={() => setSelectedStepId(stepId)}
+                                        className={`w-full text-left p-2 rounded-lg text-sm transition-colors ${isSelected ? 'bg-blue-100 border-2 border-blue-500' : 'hover:bg-slate-100 border-2 border-transparent'} ${isEntry ? 'ring-2 ring-green-400' : ''}`}
+                                    >
+                                        <div className="flex items-center justify-between">
+                                            <span className="font-medium text-slate-900 truncate">{step.title}</span>
+                                            {isEntry && <span className="text-xs bg-green-500 text-white px-1.5 py-0.5 rounded">Inicio</span>}
+                                        </div>
+                                        <div className="text-xs text-slate-500 mt-0.5">{step.options.length} opciones</div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* Step Editor */}
+                    <div className="col-span-5 card flex flex-col min-h-0">
+                        {selectedStep && (
+                            <>
+                                <div className="p-3 border-b border-[var(--border)] flex items-center justify-between">
+                                    <h2 className="font-semibold text-slate-900 text-sm">✏️ Editando: {selectedStep.title}</h2>
+                                    <div className="flex items-center gap-2">
+                                        {selectedStepId !== entryStepId && (
+                                            <button onClick={() => { setEntryStepId(selectedStepId); setHasChanges(true); }} className="text-xs text-green-600 hover:underline">
+                                                Hacer inicio
+                                            </button>
+                                        )}
+                                        {selectedStepId !== entryStepId && (
+                                            <button onClick={() => handleDeleteStep(selectedStepId)} className="p-1 text-red-500 hover:bg-red-50 rounded">
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                                    {/* Title */}
+                                    <div>
+                                        <label className="label text-xs">Título del paso</label>
+                                        <input
+                                            type="text"
+                                            value={selectedStep.title}
+                                            onChange={(e) => updateStep('title', e.target.value)}
+                                            className="input text-sm"
+                                            placeholder="Ej: Bienvenida, Selección, etc."
+                                        />
+                                    </div>
+
+                                    {/* Message */}
+                                    <div>
+                                        <label className="label text-xs">Mensaje del bot</label>
+                                        <textarea
+                                            value={selectedStep.message}
+                                            onChange={(e) => updateStep('message', e.target.value)}
+                                            className="input min-h-[80px] resize-y text-sm"
+                                            placeholder="Escribí el mensaje que verá el usuario..."
+                                        />
+                                        <p className="text-xs text-slate-400 mt-1">Tip: Usá emojis para hacerlo más amigable 👋</p>
+                                    </div>
+
+                                    {/* Options */}
+                                    <div>
+                                        <div className="flex items-center justify-between mb-2">
+                                            <label className="label text-xs mb-0">Opciones del menú</label>
+                                            <button onClick={addOption} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                                </svg>
+                                                Agregar opción
+                                            </button>
+                                        </div>
+                                        <div className="space-y-2">
+                                            {selectedStep.options.map((opt, idx) => (
+                                                <div key={opt.id} className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg group">
+                                                    {/* Reorder buttons */}
+                                                    <div className="flex flex-col opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <button onClick={() => moveOption(opt.id, 'up')} className="p-0.5 hover:bg-slate-200 rounded" disabled={idx === 0}>
+                                                            <svg className="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                                            </svg>
+                                                        </button>
+                                                        <button onClick={() => moveOption(opt.id, 'down')} className="p-0.5 hover:bg-slate-200 rounded" disabled={idx === selectedStep.options.length - 1}>
+                                                            <svg className="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+
+                                                    {/* Key badge */}
+                                                    <span className="w-6 h-6 rounded bg-blue-600 text-white flex items-center justify-center font-bold text-xs flex-shrink-0">
+                                                        {opt.key}
+                                                    </span>
+
+                                                    {/* Label input */}
+                                                    <input
+                                                        type="text"
+                                                        value={opt.label}
+                                                        onChange={(e) => updateOption(opt.id, 'label', e.target.value)}
+                                                        placeholder="Texto de la opción"
+                                                        className="input flex-1 text-sm py-1.5"
+                                                    />
+
+                                                    {/* Arrow */}
+                                                    <span className="text-slate-300">→</span>
+
+                                                    {/* Next step select */}
+                                                    <select
+                                                        value={opt.nextStepId}
+                                                        onChange={(e) => updateOption(opt.id, 'nextStepId', e.target.value)}
+                                                        className="input w-28 text-sm py-1.5"
+                                                    >
+                                                        {stepIds.map((id) => <option key={id} value={id}>{steps[id].title}</option>)}
+                                                    </select>
+
+                                                    {/* Delete button */}
+                                                    <button
+                                                        onClick={() => removeOption(opt.id)}
+                                                        className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                                                        title="Eliminar opción"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Actions */}
+                                    <div>
+                                        <label className="label text-xs">Acciones automáticas</label>
+                                        <div className="p-3 bg-slate-50 rounded-lg space-y-2">
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedStep.actions?.pauseConversation || false}
+                                                    onChange={(e) => {
+                                                        setSteps(prev => ({
+                                                            ...prev,
+                                                            [selectedStepId]: {
+                                                                ...prev[selectedStepId],
+                                                                actions: { ...prev[selectedStepId].actions, pauseConversation: e.target.checked }
+                                                            }
+                                                        }));
+                                                        setHasChanges(true);
+                                                    }}
+                                                    className="rounded"
+                                                />
+                                                <span className="text-sm">👤 Pausar bot (handoff a humano)</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </div>
+
+                    {/* Preview */}
+                    <div className="col-span-4 card flex flex-col min-h-0 bg-gradient-to-b from-green-50 to-green-100">
+                        <div className="p-3 border-b border-green-200">
+                            <h2 className="font-semibold text-green-900 text-sm">📱 Vista Previa</h2>
+                            <p className="text-xs text-green-700">Así se verá en WhatsApp</p>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4">
+                            {selectedStep && (
+                                <div className="bg-white rounded-2xl rounded-tl-sm p-4 shadow-sm max-w-[280px]">
+                                    <p className="text-sm whitespace-pre-wrap text-slate-800">
+                                        {selectedStep.message}
+                                    </p>
+                                    <div className="mt-3 pt-3 border-t border-slate-100">
+                                        {selectedStep.options.map((opt) => (
+                                            <div key={opt.id} className="text-sm text-slate-700 py-1">
+                                                <span className="font-medium text-blue-600">{opt.key})</span> {opt.label}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* New Step Modal */}
+            {showNewStepModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowNewStepModal(false)}>
+                    <div className="bg-white rounded-xl p-6 w-96 shadow-xl" onClick={e => e.stopPropagation()}>
+                        <h3 className="text-lg font-semibold text-slate-900 mb-4">Crear nuevo paso</h3>
+                        <input
+                            type="text"
+                            value={newStepTitle}
+                            onChange={(e) => setNewStepTitle(e.target.value)}
+                            placeholder="Nombre del paso (ej: Selección de Servicio)"
+                            className="input w-full mb-4"
+                            autoFocus
+                            onKeyDown={(e) => e.key === 'Enter' && handleCreateStep()}
+                        />
+                        <div className="flex justify-end gap-3">
+                            <button onClick={() => setShowNewStepModal(false)} className="btn btn-secondary">Cancelar</button>
+                            <button onClick={handleCreateStep} className="btn btn-primary" disabled={!newStepTitle.trim()}>Crear</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Toast */}
+            {showToast && (
+                <div className={`toast ${showToast.type === 'success' ? 'toast-success' : 'toast-error'}`}>
+                    {showToast.message}
+                </div>
+            )}
+        </div>
+    );
+}
