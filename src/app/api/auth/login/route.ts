@@ -56,7 +56,16 @@ export async function POST(req: NextRequest) {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'lax',
-            maxAge: 60 * 60 * 24 * 7, // 7 days
+            maxAge: 30 * 60, // 30 minutes
+            path: '/',
+        });
+
+        // Set client-readable expiry cookie
+        response.cookies.set('session-expiry', (Date.now() + 30 * 60 * 1000).toString(), {
+            httpOnly: false, // Client can read
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: 30 * 60,
             path: '/',
         });
 

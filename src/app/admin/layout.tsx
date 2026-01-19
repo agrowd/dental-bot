@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ReactNode } from 'react';
+import SessionMonitor from '@/components/SessionMonitor';
 
 interface NavItem {
     name: string;
@@ -128,12 +129,15 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                 </div>
             </aside>
 
+
             {/* Main content */}
             <main className="flex-1 overflow-auto">
                 <div className="p-8">
                     {children}
                 </div>
             </main>
+
+            <SessionMonitor />
         </div>
     );
 }
