@@ -1,16 +1,33 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { mockConversations } from '@/lib/mock-data';
 import { ConversationState } from '@/lib/types';
 
 export default function ConversationsPage() {
     const [stateFilter, setStateFilter] = useState<ConversationState | 'all'>('all');
     const [searchQuery, setSearchQuery] = useState('');
+    const [conversations, setConversations] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        fetchConversations();
+    }, []);
+
+    async function fetchConversations() {
+        try {
+            const res = await fetch('/api/conversations');
+            const data = await res.json();
+            setConversations(data.conversations || []);
+        } catch (error) {
+            console.error('Error fetching conversations:', error);
+        } finally {
+            setLoading(false);
+        }
+    }
 
     // Filter conversations
-    const filteredConversations = mockConversations.filter(conv => {
+    const filteredConversations = conversations.filter(conv => {
         const matchesState = stateFilter === 'all' || conv.state === stateFilter;
         const matchesSearch = conv.phone.includes(searchQuery);
         return matchesState && matchesSearch;
@@ -30,6 +47,14 @@ export default function ConversationsPage() {
         return <span className={`badge ${badges[state]}`}>{labels[state]}</span>;
     };
 
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <div className="text-slate-500">Cargando conversaciones...</div>
+            </div>
+        );
+    }
+
     return (
         <div className="animate-fadeIn">
             {/* Header */}
@@ -47,21 +72,21 @@ export default function ConversationsPage() {
                     className={`card p-4 text-left transition-all ${stateFilter === 'all' ? 'ring-2 ring-blue-500' : 'hover:shadow-md'}`}
                 >
                     <p className="text-sm text-slate-500">Total</p>
-                    <p className="text-2xl font-bold text-slate-900">{mockConversations.length}</p>
+                    <p className="text-2xl font-bold text-slate-900">{conversations.length}</p>
                 </button>
                 <button
                     onClick={() => setStateFilter('active')}
                     className={`card p-4 text-left transition-all ${stateFilter === 'active' ? 'ring-2 ring-green-500' : 'hover:shadow-md'}`}
                 >
                     <p className="text-sm text-green-600">Activas</p>
-                    <p className="text-2xl font-bold text-green-600">{mockConversations.filter(c => c.state === 'active').length}</p>
+                    <p className="text-2xl font-bold text-green-600">{conversations.filter(c => c.state === 'active').length}</p>
                 </button>
                 <button
                     onClick={() => setStateFilter('paused')}
                     className={`card p-4 text-left transition-all ${stateFilter === 'paused' ? 'ring-2 ring-yellow-500' : 'hover:shadow-md'}`}
                 >
                     <p className="text-sm text-yellow-600">Pausadas (Handoff)</p>
-                    <p className="text-2xl font-bold text-yellow-600">{mockConversations.filter(c => c.state === 'paused').length}</p>
+                    <p className="text-2xl font-bold text-yellow-600">{conversations.filter(c => c.state === 'paused').length}</p>
                 </button>
             </div>
 
@@ -117,7 +142,7 @@ export default function ConversationsPage() {
                             </tr>
                         ) : (
                             filteredConversations.map((conv) => (
-                                <tr key={conv.id}>
+                                <tr key={conv._id}>
                                     <td>
                                         <div className="flex items-center gap-3">
                                             <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
@@ -137,7 +162,7 @@ export default function ConversationsPage() {
                                             {conv.tags.length === 0 ? (
                                                 <span className="text-slate-400 text-sm">—</span>
                                             ) : (
-                                                conv.tags.map((tag, i) => (
+                                                conv.tags.map((tag: string, i: number) => (
                                                     <span key={i} className="badge badge-neutral">{tag}</span>
                                                 ))
                                             )}

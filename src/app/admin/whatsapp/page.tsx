@@ -16,17 +16,20 @@ export default function WhatsAppPage() {
     const [countdown, setCountdown] = useState(45);
     const [loading, setLoading] = useState(false);
 
+    // Bot API URL from environment or fallback to localhost
+    const BOT_URL = process.env.NEXT_PUBLIC_BOT_URL || 'http://localhost:4000';
+
     // Poll bot status
     useEffect(() => {
         const checkStatus = async () => {
             try {
-                const res = await fetch('http://localhost:4000/bot/status');
+                const res = await fetch(`${BOT_URL}/bot/status`);
                 const data = await res.json();
                 setStatus(data.status);
 
                 // If connecting, try to get QR
                 if (data.status === 'connecting') {
-                    const qrRes = await fetch('http://localhost:4000/bot/qr');
+                    const qrRes = await fetch(`${BOT_URL}/bot/qr`);
                     if (qrRes.ok) {
                         const qrData = await qrRes.json();
                         setQrCode(qrData.qr);
@@ -37,7 +40,7 @@ export default function WhatsAppPage() {
 
                 // If connected, get bot info
                 if (data.status === 'connected') {
-                    const infoRes = await fetch('http://localhost:4000/bot/info');
+                    const infoRes = await fetch(`${BOT_URL}/bot/info`);
                     if (infoRes.ok) {
                         const infoData = await infoRes.json();
                         setBotInfo(infoData);
@@ -51,7 +54,7 @@ export default function WhatsAppPage() {
         checkStatus();
         const interval = setInterval(checkStatus, 3000); // Poll every 3 seconds
         return () => clearInterval(interval);
-    }, []);
+    }, [BOT_URL]);
 
     // QR countdown
     useEffect(() => {
@@ -67,7 +70,7 @@ export default function WhatsAppPage() {
     const handleActivate = async () => {
         setLoading(true);
         try {
-            const res = await fetch('http://localhost:4000/bot/start', { method: 'POST' });
+            const res = await fetch(`${BOT_URL}/bot/start`, { method: 'POST' });
             if (!res.ok) {
                 const error = await res.json();
                 alert(error.error || 'Error activating bot');

@@ -1,9 +1,89 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { mockFlows } from '@/lib/mock-data';
 
 export default function FlowsPage() {
+    const [flows, setFlows] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [showCreateModal, setShowCreateModal] = useState(false);
+    const [newFlowName, setNewFlowName] = useState('');
+    const [creating, setCreating] = useState(false);
+
+    useEffect(() => {
+        fetchFlows();
+    }, []);
+
+    async function fetchFlows() {
+        try {
+            const res = await fetch('/api/flows');
+            const data = await res.json();
+            setFlows(data.flows || []);
+        } catch (error) {
+            console.error('Error fetching flows:', error);
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    async function handleCreateFlow() {
+        if (!newFlowName.trim()) {
+            alert('Por favor ingresa un nombre para el flujo');
+            return;
+        }
+
+        setCreating(true);
+        try {
+            const res = await fetch('/api/flows', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: newFlowName,
+                    description: '',
+                    activationRules: {
+                        sources: { meta_ads: false, organic: true },
+                        whatsappStatus: { agendado: false, no_agendado: true },
+                        priority: 10
+                    },
+                    draft: {
+                        entryStepId: 'welcome',
+                        steps: {
+                            welcome: {
+                                id: 'welcome',
+                                title: 'Bienvenida',
+                                message: 'Hola! ¿En qué puedo ayudarte?',
+                                options: []
+                            }
+                        }
+                    }
+                })
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                setShowCreateModal(false);
+                setNewFlowName('');
+                // Redirect to edit page
+                window.location.href = `/admin/flows/${data.flow.id}`;
+            } else {
+                const error = await res.json();
+                alert(error.error || 'Error creating flow');
+            }
+        } catch (error) {
+            alert('Error creating flow');
+        } finally {
+            setCreating(false);
+        }
+    }
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <div className="text-slate-500">Cargando flujos...</div>
+            </div>
+        );
+    }
+
     return (
         <div className="animate-fadeIn">
             {/* Header */}
@@ -12,7 +92,10 @@ export default function FlowsPage() {
                     <h1 className="text-2xl font-bold text-slate-900">Flow Builder</h1>
                     <p className="text-slate-500 mt-1">Configurá flujos según origen y si el contacto está agendado en WhatsApp</p>
                 </div>
-                <button className="btn btn-primary">
+                <button
+                    className="btn btn-primary"
+                    onClick={() => setShowCreateModal(true)}
+                >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                     </svg>
@@ -40,7 +123,7 @@ export default function FlowsPage() {
 
             {/* Flows Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                {mockFlows.map((flow) => (
+                {flows.map((flow) => (
                     <Link
                         key={flow.id}
                         href={`/admin/flows/${flow.id}`}
@@ -96,7 +179,7 @@ export default function FlowsPage() {
                         {/* Footer */}
                         <div className="pt-4 border-t border-[var(--border)] flex items-center justify-between">
                             <div className="text-sm text-slate-500">
-                                {Object.keys(flow.draft.steps).length} pasos
+                                {Object.keys(flow.draft?.steps || {}).length} pasos
                             </div>
                             <span className="text-sm text-blue-600 font-medium group-hover:underline">
                                 Editar flujo →
@@ -106,7 +189,10 @@ export default function FlowsPage() {
                 ))}
 
                 {/* Create new flow card */}
-                <button className="card p-6 border-2 border-dashed hover:border-blue-300 hover:bg-blue-50/50 transition-all group flex flex-col items-center justify-center min-h-[240px]">
+                <button
+                    className="card p-6 border-2 border-dashed hover:border-blue-300 hover:bg-blue-50/50 transition-all group flex flex-col items-center justify-center min-h-[240px]"
+                    onClick={() => setShowCreateModal(true)}
+                >
                     <div className="p-4 bg-slate-100 rounded-full text-slate-400 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors mb-4">
                         <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -116,6 +202,45 @@ export default function FlowsPage() {
                     <p className="text-sm text-slate-400 mt-1">Configurar reglas de activación</p>
                 </button>
             </div>
+
+            {/* Create Modal */}
+            {showCreateModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowCreateModal(false)}>
+                    <div className="card p-6 max-w-md w-full m-4" onClick={(e) => e.stopPropagation()}>
+                        <h2 className="text-xl font-bold text-slate-900 mb-4">Crear nuevo flujo</h2>
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium text-slate-700 mb-2">
+                                Nombre del flujo
+                            </label>
+                            <input
+                                type="text"
+                                className="input w-full"
+                                placeholder="Ej: Flujo para clientes nuevos"
+                                value={newFlowName}
+                                onChange={(e) => setNewFlowName(e.target.value)}
+                                onKeyPress={(e) => e.key === 'Enter' && handleCreateFlow()}
+                                autoFocus
+                            />
+                        </div>
+                        <div className="flex gap-3 justify-end">
+                            <button
+                                className="btn btn-secondary"
+                                onClick={() => setShowCreateModal(false)}
+                                disabled={creating}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                className="btn btn-primary"
+                                onClick={handleCreateFlow}
+                                disabled={creating || !newFlowName.trim()}
+                            >
+                                {creating ? 'Creando...' : 'Crear'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

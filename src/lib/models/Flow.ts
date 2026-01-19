@@ -49,8 +49,8 @@ const FlowSchema = new Schema<IFlowDoc>({
     published: { type: FlowContentSchema, default: null },
     publishedVersion: { type: Number, default: 0 },
     isActive: { type: Boolean, default: true },
-    createdAt: { type: Date, default: Date.now },
-    updatedAt: { type: Date, default: Date.now },
+    createdAt: { type: Date, default: Date.now as any },
+    updatedAt: { type: Date, default: Date.now as any },
 });
 
 // Update timestamp on save

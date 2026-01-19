@@ -26,10 +26,10 @@ const ConversationSchema = new Schema<IConversationDoc>({
     loopDetection: {
         currentStepId: { type: String, default: '' },
         messagesInCurrentStep: { type: Number, default: 0 },
-        lastStepChangeAt: { type: Date, default: Date.now },
+        lastStepChangeAt: { type: Date, default: Date.now as any },
     },
-    createdAt: { type: Date, default: Date.now },
-    updatedAt: { type: Date, default: Date.now },
+    createdAt: { type: Date, default: Date.now as any },
+    updatedAt: { type: Date, default: Date.now as any },
 });
 
 // Update timestamp on save

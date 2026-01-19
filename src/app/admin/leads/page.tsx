@@ -1,27 +1,54 @@
 'use client';
 
-import { useState } from 'react';
-import { mockContacts } from '@/lib/mock-data';
+import { useState, useEffect } from 'react';
 import { LeadStatus } from '@/lib/types';
 
 export default function LeadsPage() {
     const [statusFilter, setStatusFilter] = useState<LeadStatus | 'all'>('all');
     const [searchQuery, setSearchQuery] = useState('');
+    const [leads, setLeads] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [stats, setStats] = useState({
+        total: 0,
+        agendados: 0,
+        pendientes: 0,
+        noAgendados: 0
+    });
+
+    useEffect(() => {
+        async function fetchLeads() {
+            try {
+                setLoading(true);
+                const res = await fetch('/api/contacts');
+                const data = await res.json();
+
+                if (data.contacts) {
+                    setLeads(data.contacts);
+
+                    // Calculate stats
+                    setStats({
+                        total: data.contacts.length,
+                        agendados: data.contacts.filter((l: any) => l.status === 'agendado').length,
+                        pendientes: data.contacts.filter((l: any) => l.status === 'pendiente').length,
+                        noAgendados: data.contacts.filter((l: any) => l.status === 'no_agendado').length
+                    });
+                }
+            } catch (error) {
+                console.error('Error fetching leads:', error);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        fetchLeads();
+    }, []);
 
     // Filter leads
-    const filteredLeads = mockContacts.filter(lead => {
+    const filteredLeads = leads.filter(lead => {
         const matchesStatus = statusFilter === 'all' || lead.status === statusFilter;
         const matchesSearch = lead.phone.includes(searchQuery);
         return matchesStatus && matchesSearch;
     });
-
-    // Stats
-    const stats = {
-        total: mockContacts.length,
-        agendados: mockContacts.filter(l => l.status === 'agendado').length,
-        pendientes: mockContacts.filter(l => l.status === 'pendiente').length,
-        noAgendados: mockContacts.filter(l => l.status === 'no_agendado').length
-    };
 
     const getStatusBadge = (status: LeadStatus) => {
         const badges = {
@@ -42,6 +69,14 @@ export default function LeadsPage() {
             ? <span className="badge badge-info">Meta Ads</span>
             : <span className="badge badge-neutral">Orgánico</span>;
     };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <div className="text-slate-500">Cargando leads...</div>
+            </div>
+        );
+    }
 
     return (
         <div className="animate-fadeIn">
@@ -143,7 +178,7 @@ export default function LeadsPage() {
                             </tr>
                         ) : (
                             filteredLeads.map((lead) => (
-                                <tr key={lead.id}>
+                                <tr key={lead._id}>
                                     <td>
                                         <div className="flex items-center gap-3">
                                             <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
@@ -161,7 +196,7 @@ export default function LeadsPage() {
                                             {lead.tags.length === 0 ? (
                                                 <span className="text-slate-400 text-sm">—</span>
                                             ) : (
-                                                lead.tags.map((tag, i) => (
+                                                lead.tags.map((tag: string, i: number) => (
                                                     <span key={i} className="badge badge-neutral">{tag}</span>
                                                 ))
                                             )}

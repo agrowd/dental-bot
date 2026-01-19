@@ -1,6 +1,6 @@
 'use client';
 
-import { mockStats, mockContacts, mockConversations } from '@/lib/mock-data';
+import { useEffect, useState } from 'react';
 
 // Stat card component
 function StatCard({
@@ -67,9 +67,45 @@ function ActivityItem({
 }
 
 export default function DashboardPage() {
-    // Get recent leads
-    const recentLeads = mockContacts.slice(0, 3);
-    const recentConversations = mockConversations.slice(0, 3);
+    const [stats, setStats] = useState<any>(null);
+    const [contacts, setContacts] = useState<any[]>([]);
+    const [conversations, setConversations] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        async function fetchData() {
+            try {
+                // Fetch stats
+                const statsRes = await fetch('/api/stats');
+                const statsData = await statsRes.json();
+                setStats(statsData);
+
+                // Fetch recent contacts
+                const contactsRes = await fetch('/api/contacts?limit=3');
+                const contactsData = await contactsRes.json();
+                setContacts(contactsData.contacts || []);
+
+                // Fetch recent conversations
+                const conversationsRes = await fetch('/api/conversations?limit=3');
+                const conversationsData = await conversationsRes.json();
+                setConversations(conversationsData.conversations || []);
+            } catch (error) {
+                console.error('Error fetching dashboard data:', error);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        fetchData();
+    }, []);
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <div className="text-slate-500">Cargando...</div>
+            </div>
+        );
+    }
 
     return (
         <div className="animate-fadeIn">
@@ -83,8 +119,8 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 <StatCard
                     title="Total Leads"
-                    value={mockStats.totalLeads}
-                    subtitle={`+${mockStats.leadsThisWeek} esta semana`}
+                    value={stats?.totalLeads || 0}
+                    subtitle={`+${stats?.leadsThisWeek || 0} esta semana`}
                     color="blue"
                     icon={
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -94,8 +130,8 @@ export default function DashboardPage() {
                 />
                 <StatCard
                     title="Agendados"
-                    value={mockStats.agendados}
-                    subtitle={`${Math.round(mockStats.agendados / mockStats.totalLeads * 100)}% conversión`}
+                    value={stats?.agendados || 0}
+                    subtitle={stats?.totalLeads > 0 ? `${Math.round((stats?.agendados || 0) / stats.totalLeads * 100)}% conversión` : '0% conversión'}
                     color="green"
                     icon={
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -105,7 +141,7 @@ export default function DashboardPage() {
                 />
                 <StatCard
                     title="Pendientes"
-                    value={mockStats.pendientes}
+                    value={stats?.pendientes || 0}
                     color="yellow"
                     icon={
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -115,8 +151,8 @@ export default function DashboardPage() {
                 />
                 <StatCard
                     title="Conversaciones Activas"
-                    value={mockStats.activeConversations}
-                    subtitle={`${mockStats.pausedConversations} en pausa`}
+                    value={stats?.activeConversations || 0}
+                    subtitle={`${stats?.pausedConversations || 0} en pausa`}
                     color="purple"
                     icon={
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -139,9 +175,9 @@ export default function DashboardPage() {
                         </div>
                     </div>
                     <div className="p-6 divide-y divide-[var(--border)]">
-                        {recentLeads.map((lead) => (
+                        {contacts.length > 0 ? contacts.map((lead: any) => (
                             <ActivityItem
-                                key={lead.id}
+                                key={lead._id}
                                 phone={lead.phone}
                                 action={`${lead.source === 'meta_ads' ? 'Meta Ads' : 'Orgánico'} • ${lead.status}`}
                                 time={new Date(lead.lastSeenAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
@@ -151,7 +187,9 @@ export default function DashboardPage() {
                                     </svg>
                                 }
                             />
-                        ))}
+                        )) : (
+                            <p className="text-sm text-slate-500 text-center py-8">No hay leads recientes</p>
+                        )}
                     </div>
                 </div>
 
@@ -166,9 +204,9 @@ export default function DashboardPage() {
                         </div>
                     </div>
                     <div className="p-6 divide-y divide-[var(--border)]">
-                        {recentConversations.map((conv) => (
+                        {conversations.length > 0 ? conversations.map((conv: any) => (
                             <ActivityItem
-                                key={conv.id}
+                                key={conv._id}
                                 phone={conv.phone}
                                 action={`Step: ${conv.currentStepId} • ${conv.state === 'paused' ? '⏸️ Pausado' : '🟢 Activo'}`}
                                 time={new Date(conv.updatedAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
@@ -178,7 +216,9 @@ export default function DashboardPage() {
                                     </svg>
                                 }
                             />
-                        ))}
+                        )) : (
+                            <p className="text-sm text-slate-500 text-center py-8">No hay conversaciones activas</p>
+                        )}
                     </div>
                 </div>
             </div>
@@ -225,7 +265,7 @@ export default function DashboardPage() {
                             </div>
                             <div>
                                 <p className="font-semibold text-slate-900">Leads Pendientes</p>
-                                <p className="text-sm text-slate-500">{mockStats.pendientes} por atender</p>
+                                <p className="text-sm text-slate-500">{stats?.pendientes || 0} por atender</p>
                             </div>
                         </div>
                     </a>

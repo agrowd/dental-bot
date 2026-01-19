@@ -6,13 +6,14 @@ import Flow from '@/lib/models/Flow';
 // GET /api/flows/[id]
 export async function GET(
     req: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         await requireAuth(req);
         await dbConnect();
 
-        const flow = await Flow.findById(params.id);
+        const { id } = await params;
+        const flow = await Flow.findById(id);
 
         if (!flow) {
             return NextResponse.json({ error: 'Flow not found' }, { status: 404 });
@@ -44,7 +45,7 @@ export async function GET(
 // PUT /api/flows/[id] - Update draft
 export async function PUT(
     req: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         await requireAuth(req);
@@ -52,8 +53,9 @@ export async function PUT(
 
         const data = await req.json();
 
+        const { id } = await params;
         const flow = await Flow.findByIdAndUpdate(
-            params.id,
+            id,
             {
                 name: data.name,
                 description: data.description,
@@ -95,13 +97,14 @@ export async function PUT(
 // DELETE /api/flows/[id]
 export async function DELETE(
     req: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         await requireAuth(req);
         await dbConnect();
 
-        const flow = await Flow.findByIdAndDelete(params.id);
+        const { id } = await params;
+        const flow = await Flow.findByIdAndDelete(id);
 
         if (!flow) {
             return NextResponse.json({ error: 'Flow not found' }, { status: 404 });

@@ -10,8 +10,8 @@ const ContactSchema = new Schema<IContactDoc>({
         unique: true,
         index: true,
     },
-    firstSeenAt: { type: Date, default: Date.now },
-    lastSeenAt: { type: Date, default: Date.now },
+    firstSeenAt: { type: Date, default: Date.now as any },
+    lastSeenAt: { type: Date, default: Date.now as any },
     source: {
         type: String,
         enum: ['meta_ads', 'organic'],

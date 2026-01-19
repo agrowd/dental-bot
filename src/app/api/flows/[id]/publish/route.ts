@@ -6,13 +6,14 @@ import Flow from '@/lib/models/Flow';
 // POST /api/flows/[id]/publish - Publish draft to production
 export async function POST(
     req: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         await requireAuth(req);
         await dbConnect();
 
-        const flow = await Flow.findById(params.id);
+        const { id } = await params;
+        const flow = await Flow.findById(id);
 
         if (!flow) {
             return NextResponse.json({ error: 'Flow not found' }, { status: 404 });

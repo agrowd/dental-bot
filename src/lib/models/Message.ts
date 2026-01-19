@@ -15,7 +15,7 @@ const MessageSchema = new Schema<IMessageDoc>({
         required: true,
     },
     text: { type: String, required: true },
-    timestamp: { type: Date, default: Date.now, index: true },
+    timestamp: { type: Date, default: Date.now as any, index: true },
 });
 
 // Compound index for efficient queries

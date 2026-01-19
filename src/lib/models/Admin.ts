@@ -20,7 +20,7 @@ const AdminSchema = new Schema<IAdmin>({
     },
     createdAt: {
         type: Date,
-        default: Date.now,
+        default: Date.now as any,
     },
 });
 
