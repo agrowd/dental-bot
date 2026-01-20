@@ -14,33 +14,28 @@ export default function LoginPage() {
         e.preventDefault();
         setError('');
         setLoading(true);
-
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+        console.log('Initiating login for:', email);
 
         try {
             const res = await fetch('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password }),
-                signal: controller.signal,
             });
-            clearTimeout(timeoutId);
 
+            console.log('Login response status:', res.status);
             const data = await res.json();
 
             if (res.ok) {
+                console.log('Login success, redirecting...');
                 router.push('/admin');
             } else {
+                console.error('Login failed:', data.error);
                 setError(data.error || 'Error al iniciar sesión');
             }
-        } catch (err: any) {
-            clearTimeout(timeoutId);
-            if (err.name === 'AbortError') {
-                setError('El servidor no responde (Timeout de base de datos). Revisa la conexión MongoDB.');
-            } else {
-                setError('Error de conexión. Intente nuevamente.');
-            }
+        } catch (err) {
+            console.error('Login fetch error:', err);
+            setError('Error de conexión. Intente nuevamente.');
         } finally {
             setLoading(false);
         }

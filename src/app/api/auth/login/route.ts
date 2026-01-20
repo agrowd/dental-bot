@@ -7,10 +7,14 @@ import { signToken } from '@/lib/auth';
 export async function POST(req: NextRequest) {
     try {
         await dbConnect();
+        console.log('[LOGIN DB] Connected');
 
         const { email, password } = await req.json();
 
+        console.log('[LOGIN ATTEMPT]', { email }); // Log attempt
+
         if (!email || !password) {
+            console.log('[LOGIN ERROR] Missing fields');
             return NextResponse.json(
                 { error: 'Email and password required' },
                 { status: 400 }
@@ -42,6 +46,8 @@ export async function POST(req: NextRequest) {
             adminId: admin._id.toString(),
             email: admin.email,
         });
+
+        console.log('[LOGIN SUCCESS]', { email });
 
         // Set cookie
         const response = NextResponse.json({
