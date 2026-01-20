@@ -16,8 +16,8 @@ export default function WhatsAppPage() {
     const [countdown, setCountdown] = useState(45);
     const [loading, setLoading] = useState(false);
 
-    // Bot API URL from environment or fallback to localhost
-    const BOT_URL = process.env.NEXT_PUBLIC_BOT_URL || 'http://localhost:4000';
+    // Bot API URL uses local proxy
+    const BOT_URL = '/api/bot';
 
     // Poll bot status
     useEffect(() => {
