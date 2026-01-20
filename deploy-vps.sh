@@ -28,4 +28,4 @@ echo "✅ Despliegue completado."
 echo "📜 Mostrando logs en vivo (Presiona Ctrl+C para salir)..."
 echo "-----------------------------------------------------"
 sleep 2
-docker logs -f dental-bot_nextjs_1
+docker logs -f dental-bot-nextjs
