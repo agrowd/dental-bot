@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
 
         response.cookies.set('auth-token', token, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
+            secure: false, // Changed for HTTP VPS
             sameSite: 'lax',
             maxAge: 30 * 60, // 30 minutes
             path: '/',
@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
         // Set client-readable expiry cookie
         response.cookies.set('session-expiry', (Date.now() + 30 * 60 * 1000).toString(), {
             httpOnly: false, // Client can read
-            secure: process.env.NODE_ENV === 'production',
+            secure: false, // Changed for HTTP VPS
             sameSite: 'lax',
             maxAge: 30 * 60,
             path: '/',

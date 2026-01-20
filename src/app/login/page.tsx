@@ -28,6 +28,7 @@ export default function LoginPage() {
 
             if (res.ok) {
                 console.log('Login success, redirecting...');
+                console.log('Checking cookie presence (client-side):', document.cookie);
                 router.push('/admin');
             } else {
                 console.error('Login failed:', data.error);
