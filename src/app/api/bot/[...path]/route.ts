@@ -7,7 +7,7 @@ export async function GET(
 ) {
     const { path } = await params;
     const pathString = path.join('/');
-    const targetUrl = `http://bot-runner:4000/bot/${pathString}`;
+    const targetUrl = `http://dental-bot-runner:4000/bot/${pathString}`;
 
     try {
         const res = await fetch(targetUrl);
@@ -28,7 +28,7 @@ export async function POST(
 ) {
     const { path } = await params;
     const pathString = path.join('/');
-    const targetUrl = `http://bot-runner:4000/bot/${pathString}`;
+    const targetUrl = `http://dental-bot-runner:4000/bot/${pathString}`;
 
     try {
         const body = await request.json().catch(() => ({}));
