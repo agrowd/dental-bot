@@ -189,6 +189,11 @@ async function startBot() {
 
 // Main message handler
 async function handleIncomingMessage(msg) {
+    // Ignore status updates, broadcasts, and linked device notifications
+    if (msg.from.includes('status') || msg.from.includes('broadcast') || msg.from.includes('@lid')) {
+        return;
+    }
+
     const phone = msg.from.replace('@c.us', '');
     console.log(`Message from ${phone}: ${msg.body}`);
 
