@@ -15,12 +15,17 @@ export default function LoginPage() {
         setError('');
         setLoading(true);
 
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
         try {
             const res = await fetch('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password }),
+                signal: controller.signal,
             });
+            clearTimeout(timeoutId);
 
             const data = await res.json();
 
@@ -29,8 +34,13 @@ export default function LoginPage() {
             } else {
                 setError(data.error || 'Error al iniciar sesión');
             }
-        } catch (err) {
-            setError('Error de conexión. Intente nuevamente.');
+        } catch (err: any) {
+            clearTimeout(timeoutId);
+            if (err.name === 'AbortError') {
+                setError('El servidor no responde (Timeout de base de datos). Revisa la conexión MongoDB.');
+            } else {
+                setError('Error de conexión. Intente nuevamente.');
+            }
         } finally {
             setLoading(false);
         }
@@ -41,13 +51,8 @@ export default function LoginPage() {
             <div className="animate-fadeIn w-full max-w-md">
                 {/* Logo/Brand */}
                 <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-white rounded-2xl shadow-lg shadow-blue-500/10 mb-4 p-2">
-                        {/* Use the new icon/logo if available, or keep svg but styled better */}
-                        <img src="/icon.png" alt="Logo" className="w-full h-full object-contain" onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                            e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                        }} />
-                        <svg className="w-8 h-8 text-blue-600 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-600 to-blue-700 rounded-2xl shadow-lg shadow-blue-500/30 mb-4">
+                        <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                         </svg>
                     </div>

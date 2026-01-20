@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "OdontoBot - NexteMarketing",
+  title: "OdontoBot",
   description: "Desarrollado por NexteMarketing y NatoH Software",
 };
 
