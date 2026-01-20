@@ -195,7 +195,16 @@ async function handleIncomingMessage(msg) {
     }
 
     const phone = msg.from.replace('@c.us', '');
-    console.log(`Message from ${phone}: ${msg.body}`);
+    console.log(`[DEBUG] Message from ${phone}: ${msg.body}`);
+
+    // DEBUG: Reset command
+    if (msg.body.trim().toUpperCase() === 'RESET') {
+        await Conversation.updateMany({ phone }, { state: 'closed' });
+        const chat = await msg.getChat();
+        await chat.sendMessage('🔄 Conversación reiniciada por comando RESET.');
+        console.log(`[DEBUG] Conversation reset for ${phone}`);
+        return;
+    }
 
     // Save incoming message
     await Message.create({
@@ -208,6 +217,7 @@ async function handleIncomingMessage(msg) {
     // Get or create contact
     let contact = await Contact.findOne({ phone });
     if (!contact) {
+        console.log(`[DEBUG] Creating new contact for ${phone}`);
         // New contact - detect source (TODO: integrate with Meta webhook)
         contact = await Contact.create({
             phone,
@@ -225,18 +235,22 @@ async function handleIncomingMessage(msg) {
     // Check if contact is saved in WhatsApp contacts
     const chatContact = await msg.getContact();
     const isAgendado = chatContact.isMyContact;
+    console.log(`[DEBUG] Contact ${phone} - Is Agendado: ${isAgendado}, Source: ${contact.source}`);
 
     // Get active conversation or create new
     let conversation = await Conversation.findOne({ phone, state: { $ne: 'closed' } });
 
     if (!conversation) {
+        console.log('[DEBUG] No active conversation. Attempting to start new flow.');
         // Select appropriate flow
         const flow = await selectFlow({ isAgendado, source: contact.source });
 
         if (!flow) {
-            console.log('No active flow found for contact');
+            console.log('[DEBUG] No matching flow found for contact rules.');
+            // Optional: Send a default message if no flow matches?
             return;
         }
+        console.log(`[DEBUG] Flow selected: ${flow.name} (v${flow.publishedVersion})`);
 
         conversation = await Conversation.create({
             phone,
@@ -250,124 +264,140 @@ async function handleIncomingMessage(msg) {
                 lastStepChangeAt: new Date(),
             },
         });
-    }
-
-    // Check if conversation is paused (handoff mode)
-    if (conversation.state === 'paused') {
-        console.log('Conversation paused - handoff active');
-        return; // Do not respond
-    }
-
-    // Get current flow
-    const flow = await Flow.findOne({ publishedVersion: conversation.flowVersion });
-    if (!flow || !flow.published) {
-        console.log('Flow not found or not published');
-        return;
-    }
-
-    const steps = flow.published.steps;
-    const currentStep = steps.get(conversation.currentStepId);
-
-    if (!currentStep) {
-        console.log('Current step not found');
-        return;
-    }
-
-    // *** LOOP DETECTION ***
-    if (conversation.loopDetection.currentStepId === conversation.currentStepId) {
-        conversation.loopDetection.messagesInCurrentStep++;
     } else {
-        conversation.loopDetection = {
-            currentStepId: conversation.currentStepId,
-            messagesInCurrentStep: 1,
-            lastStepChangeAt: new Date(),
-        };
+        console.log(`[DEBUG] Found existing active conversation in state: ${conversation.state}`);
     }
 
-    // Auto-handoff after 6 messages without progress
-    if (conversation.loopDetection.messagesInCurrentStep >= 6) {
-        console.log('Loop detected - triggering auto-handoff');
-        await triggerAutoHandoff(conversation, contact, currentStep);
-        return;
-    }
-
-    await conversation.save();
-
-    // Get chat for sending messages
-    const chat = await msg.getChat();
-
-    // Show typing indicator
-    await sendTyping(chat);
-
-    // *** HUMAN-LIKE DELAY (10-15 seconds) ***
-    const messageLength = currentStep.message.length;
-    const baseDelay = 10000;
-    const extraDelay = messageLength > 100 ? 5000 : 0; // 15-20s for long messages
-    await randomDelay(baseDelay, 5000 + extraDelay);
-
-    // Parse user input
-    const userInput = msg.body.trim().toUpperCase();
-    const matchedOption = currentStep.options.find(opt => opt.key.toUpperCase() === userInput);
-
-    if (matchedOption) {
-        // Valid option - advance to next step
-        const nextStepId = matchedOption.nextStepId;
-        const nextStep = steps.get(nextStepId);
-
-        if (!nextStep) {
-            console.log('Next step not found:', nextStepId);
-            return;
-        }
-
-        // Execute actions
-        if (currentStep.actions) {
-            if (currentStep.actions.addTags) {
-                conversation.tags.push(...currentStep.actions.addTags);
-                contact.tags.push(...currentStep.actions.addTags);
-                await contact.save();
-            }
-            if (currentStep.actions.setLeadStatus) {
-                contact.status = currentStep.actions.setLeadStatus;
-                await contact.save();
-            }
-            if (currentStep.actions.pauseConversation) {
-                conversation.state = 'paused';
-            }
-        }
-
-        // Update conversation
-        conversation.currentStepId = nextStepId;
-        conversation.loopDetection = {
-            currentStepId: nextStepId,
+    conversation = await Conversation.create({
+        phone,
+        flowVersion: flow.publishedVersion,
+        currentStepId: flow.published.entryStepId,
+        state: 'active',
+        tags: [],
+        loopDetection: {
+            currentStepId: flow.published.entryStepId,
             messagesInCurrentStep: 0,
             lastStepChangeAt: new Date(),
-        };
-        await conversation.save();
+        },
+    });
+}
 
-        // Send next step
-        const response = formatMessage(nextStep);
-        await chat.sendMessage(response);
+// Check if conversation is paused (handoff mode)
+if (conversation.state === 'paused') {
+    console.log('Conversation paused - handoff active');
+    return; // Do not respond
+}
 
-        // Save outgoing message
-        await Message.create({
-            phone,
-            direction: 'out',
-            text: response,
-            timestamp: new Date(),
-        });
+// Get current flow
+const flow = await Flow.findOne({ publishedVersion: conversation.flowVersion });
+if (!flow || !flow.published) {
+    console.log('Flow not found or not published');
+    return;
+}
 
-    } else {
-        // Invalid option - fallback
-        const fallbackMsg = '⚠️ Para avanzar, elegí una de las opciones disponibles.\n\n' + formatMessage(currentStep);
-        await chat.sendMessage(fallbackMsg);
+const steps = flow.published.steps;
+const currentStep = steps.get(conversation.currentStepId);
 
-        await Message.create({
-            phone,
-            direction: 'out',
-            text: fallbackMsg,
-            timestamp: new Date(),
-        });
+if (!currentStep) {
+    console.log('Current step not found');
+    return;
+}
+
+// *** LOOP DETECTION ***
+if (conversation.loopDetection.currentStepId === conversation.currentStepId) {
+    conversation.loopDetection.messagesInCurrentStep++;
+} else {
+    conversation.loopDetection = {
+        currentStepId: conversation.currentStepId,
+        messagesInCurrentStep: 1,
+        lastStepChangeAt: new Date(),
+    };
+}
+
+// Auto-handoff after 6 messages without progress
+if (conversation.loopDetection.messagesInCurrentStep >= 6) {
+    console.log('Loop detected - triggering auto-handoff');
+    await triggerAutoHandoff(conversation, contact, currentStep);
+    return;
+}
+
+await conversation.save();
+
+// Get chat for sending messages
+const chat = await msg.getChat();
+
+// Show typing indicator
+await sendTyping(chat);
+
+// *** HUMAN-LIKE DELAY (10-15 seconds) ***
+const messageLength = currentStep.message.length;
+const baseDelay = 10000;
+const extraDelay = messageLength > 100 ? 5000 : 0; // 15-20s for long messages
+await randomDelay(baseDelay, 5000 + extraDelay);
+
+// Parse user input
+const userInput = msg.body.trim().toUpperCase();
+const matchedOption = currentStep.options.find(opt => opt.key.toUpperCase() === userInput);
+
+if (matchedOption) {
+    // Valid option - advance to next step
+    const nextStepId = matchedOption.nextStepId;
+    const nextStep = steps.get(nextStepId);
+
+    if (!nextStep) {
+        console.log('Next step not found:', nextStepId);
+        return;
     }
+
+    // Execute actions
+    if (currentStep.actions) {
+        if (currentStep.actions.addTags) {
+            conversation.tags.push(...currentStep.actions.addTags);
+            contact.tags.push(...currentStep.actions.addTags);
+            await contact.save();
+        }
+        if (currentStep.actions.setLeadStatus) {
+            contact.status = currentStep.actions.setLeadStatus;
+            await contact.save();
+        }
+        if (currentStep.actions.pauseConversation) {
+            conversation.state = 'paused';
+        }
+    }
+
+    // Update conversation
+    conversation.currentStepId = nextStepId;
+    conversation.loopDetection = {
+        currentStepId: nextStepId,
+        messagesInCurrentStep: 0,
+        lastStepChangeAt: new Date(),
+    };
+    await conversation.save();
+
+    // Send next step
+    const response = formatMessage(nextStep);
+    await chat.sendMessage(response);
+
+    // Save outgoing message
+    await Message.create({
+        phone,
+        direction: 'out',
+        text: response,
+        timestamp: new Date(),
+    });
+
+} else {
+    // Invalid option - fallback
+    const fallbackMsg = '⚠️ Para avanzar, elegí una de las opciones disponibles.\n\n' + formatMessage(currentStep);
+    await chat.sendMessage(fallbackMsg);
+
+    await Message.create({
+        phone,
+        direction: 'out',
+        text: fallbackMsg,
+        timestamp: new Date(),
+    });
+}
 }
 
 // Format message with options
