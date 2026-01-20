@@ -13,16 +13,16 @@ async function startBot() {
     botState = 'connecting';
     currentQR = null;
 
-    // CLEANUP: Remove lock files from previous sessions to prevent "Code: 21"
+    // CLEANUP: Nuclear cleanup of session directory to prevent "Code: 21"
     const authPath = process.env.WHATSAPP_SESSION_PATH || './.wwebjs_auth';
     try {
-        const lockFile = path.join(authPath, 'session', 'SingletonLock');
-        if (fs.existsSync(lockFile)) {
-            console.log('[INIT] Removed stale SingletonLock file');
-            fs.unlinkSync(lockFile);
+        if (fs.existsSync(authPath)) {
+            console.log('[INIT] Removing existing session directory...');
+            fs.rmSync(authPath, { recursive: true, force: true });
+            console.log('[INIT] Session directory removed.');
         }
     } catch (e) {
-        console.warn('[INIT] Warning checking lock files:', e.message);
+        console.warn('[INIT] Warning during cleanup:', e.message);
     }
 
     client = new Client({

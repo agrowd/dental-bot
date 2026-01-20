@@ -4,7 +4,6 @@
     "description": "WhatsApp bot runner for OdontoBot",
     "main": "index.js",
     "scripts": {
-        "prestart": "rm -rf .wwebjs_auth",
         "start": "node index.js"
     },
     "dependencies": {
