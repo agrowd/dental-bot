@@ -5,8 +5,16 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 
 // Connect to MongoDB
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/odontobot';
-mongoose.connect(MONGODB_URI);
+// Connect to MongoDB
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://mongo:27017/odontobot';
+console.log('[INIT] Attempting to connect to MongoDB...', MONGODB_URI.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@')); // Mask credentials
+
+mongoose.connect(MONGODB_URI)
+    .then(() => console.log('[INIT] MongoDB Connected'))
+    .catch(err => {
+        console.error('[FATAL] MongoDB Connection Error:', err);
+        process.exit(1);
+    });
 
 // Define schemas (simplified versions)
 const FlowSchema = new mongoose.Schema({}, { strict: false });

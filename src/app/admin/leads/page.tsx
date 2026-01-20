@@ -218,6 +218,32 @@ export default function LeadsPage() {
                                             >
                                                 Ver chat
                                             </a>
+                                            <button
+                                                onClick={async () => {
+                                                    if (!confirm('¿Estás seguro de eliminar este lead? Se borrará todo su historial.')) return;
+                                                    try {
+                                                        const res = await fetch(`/api/contacts/${lead._id}`, { method: 'DELETE' });
+                                                        if (res.ok) {
+                                                            setLeads(prev => prev.filter(l => l._id !== lead._id));
+                                                            // Update stats locally
+                                                            setStats(prev => ({
+                                                                ...prev,
+                                                                total: prev.total - 1,
+                                                                [lead.status === 'agendado' ? 'agendados' : lead.status === 'pendiente' ? 'pendientes' : 'noAgendados']: (prev as any)[lead.status === 'agendado' ? 'agendados' : lead.status === 'pendiente' ? 'pendientes' : 'noAgendados'] - 1
+                                                            }));
+                                                        }
+                                                    } catch (e) {
+                                                        console.error('Error deleting lead:', e);
+                                                        alert('Error al eliminar lead');
+                                                    }
+                                                }}
+                                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                title="Eliminar lead"
+                                            >
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                            </button>
                                         </div>
                                     </td>
                                 </tr>
