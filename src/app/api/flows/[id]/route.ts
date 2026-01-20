@@ -52,6 +52,7 @@ export async function PUT(
         await dbConnect();
 
         const data = await req.json();
+        console.log('[DEBUG-API] Update Flow Payload:', JSON.stringify(data, null, 2));
 
         const { id } = await params;
         const flow = await Flow.findByIdAndUpdate(
@@ -66,6 +67,7 @@ export async function PUT(
             },
             { new: true }
         );
+        console.log('[DEBUG-API] Flow Updated Result:', JSON.stringify(flow?.activationRules, null, 2));
 
         if (!flow) {
             return NextResponse.json({ error: 'Flow not found' }, { status: 404 });

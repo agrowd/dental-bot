@@ -20,11 +20,13 @@ export async function POST(
         }
 
         // Copy draft to published
+        console.log('[DEBUG-API] Publishing Flow. Draft activation rules:', JSON.stringify(flow.draft?.activationRules || flow.activationRules, null, 2));
         flow.published = flow.draft;
         flow.publishedVersion += 1;
         flow.updatedAt = new Date();
 
         await flow.save();
+        console.log('[DEBUG-API] Publish Complete. Version:', flow.publishedVersion);
 
         return NextResponse.json({
             flow: {
