@@ -3,6 +3,7 @@ version: '3.8'
 services:
   # Next.js Frontend + API
   nextjs:
+    container_name: dental-bot-nextjs
     build:
       context: .
       dockerfile: Dockerfile.nextjs
@@ -15,9 +16,12 @@ services:
       - ADMIN_EMAIL=${ADMIN_EMAIL}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - NODE_ENV=production
+    depends_on:
+      - bot-runner
 
   # WhatsApp Bot Runner
   bot-runner:
+    container_name: dental-bot-runner
     build:
       context: ./bot-runner
       dockerfile: Dockerfile
@@ -27,8 +31,3 @@ services:
     environment:
       - MONGODB_URI=${MONGODB_URI}
       - WHATSAPP_SESSION_PATH=/app/.wwebjs_auth
-    volumes:
-      - whatsapp-session:/app/.wwebjs_auth
-
-volumes:
-  whatsapp-session:
