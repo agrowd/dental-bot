@@ -222,9 +222,9 @@ export default function LeadsPage() {
                                                 onClick={async () => {
                                                     if (!confirm('¿Estás seguro de eliminar este lead? Se borrará todo su historial.')) return;
                                                     try {
-                                                        const res = await fetch(`/api/contacts/${lead._id}`, { method: 'DELETE' });
+                                                        const res = await fetch(`/api/contacts/${lead.id}`, { method: 'DELETE' });
                                                         if (res.ok) {
-                                                            setLeads(prev => prev.filter(l => l._id !== lead._id));
+                                                            setLeads(prev => prev.filter(l => l.id !== lead.id));
                                                             // Update stats locally
                                                             setStats(prev => ({
                                                                 ...prev,
