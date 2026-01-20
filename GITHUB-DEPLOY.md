@@ -30,7 +30,7 @@ git branch -M main
 ### Conectar y Subir
 ```bash
 # Agregar remoto (reemplaza URL)
-git remote add origin https://github.com/TU_USUARIO/odontobot.git
+git remote add origin https://github.com/agrowd/dental-bot.git
 
 # Subir código
 git push -u origin main
@@ -52,7 +52,7 @@ ssh root@149.50.128.73
    *(Necesitarás un token de acceso personal de GitHub o una clave SSH configurada en el VPS)*
    ```bash
    cd /var/www
-   git clone https://github.com/TU_USUARIO/odontobot.git
+   git clone https://github.com/agrowd/dental-bot.git
    cd odontobot
    ```
 

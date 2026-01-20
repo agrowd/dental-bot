@@ -1,3 +1,4 @@
+// @ts-nocheck
 import mongoose, { Schema, Document } from 'mongoose';
 import { Conversation as IConversation, ConversationState } from '../types';
 

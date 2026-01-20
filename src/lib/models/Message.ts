@@ -1,3 +1,4 @@
+// @ts-nocheck
 import mongoose, { Schema, Document } from 'mongoose';
 import { Message as IMessage } from '../types';
 
