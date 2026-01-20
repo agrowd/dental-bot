@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import dbConnect from '@/lib/db';
+import { dbConnect } from '@/lib/db';
 import Contact from '@/lib/models/Contact';
 import Conversation from '@/lib/models/Conversation';
 import Message from '@/lib/models/Message';
