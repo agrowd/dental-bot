@@ -268,18 +268,7 @@ async function handleIncomingMessage(msg) {
         console.log(`[DEBUG] Found existing active conversation in state: ${conversation.state}`);
     }
 
-    conversation = await Conversation.create({
-        phone,
-        flowVersion: flow.publishedVersion,
-        currentStepId: flow.published.entryStepId,
-        state: 'active',
-        tags: [],
-        loopDetection: {
-            currentStepId: flow.published.entryStepId,
-            messagesInCurrentStep: 0,
-            lastStepChangeAt: new Date(),
-        },
-    });
+
 }
 
 // Check if conversation is paused (handoff mode)
