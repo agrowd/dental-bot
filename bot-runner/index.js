@@ -3,140 +3,27 @@ const qrcode = require('qrcode-terminal');
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
 
-// Connect to MongoDB
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://mongo:27017/odontobot';
-console.log('[INIT] Attempting to connect to MongoDB...', MONGODB_URI.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@')); // Mask credentials
-
-mongoose.connect(MONGODB_URI)
-    .then(() => console.log('[INIT] MongoDB Connected'))
-    .catch(err => {
-        console.error('[FATAL] MongoDB Connection Error:', err);
-        process.exit(1);
-    });
-
-// Define schemas (simplified versions)
-const FlowSchema = new mongoose.Schema({}, { strict: false });
-const ContactSchema = new mongoose.Schema({}, { strict: false });
-const ConversationSchema = new mongoose.Schema({}, { strict: false });
-const MessageSchema = new mongoose.Schema({}, { strict: false });
-
-const Flow = mongoose.model('Flow', FlowSchema);
-const Contact = mongoose.model('Contact', ContactSchema);
-const Conversation = mongoose.model('Conversation', ConversationSchema);
-const Message = mongoose.model('Message', MessageSchema);
-
-// Bot state
-let botState = 'disconnected'; // disconnected | connecting | connected | error
-let currentQR = null;
-let qrTimeout = null;
-let client = null;
-let retryCount = 0;
-let lastRetryTime = 0;
-
-// Express API for bot control
-const app = express();
-app.use(cors());
-app.use(express.json());
-
-// GET /bot/status
-app.get('/bot/status', (req, res) => {
-    res.json({ status: botState });
-});
-
-// GET /bot/qr
-app.get('/bot/qr', (req, res) => {
-    if (botState !== 'connecting' || !currentQR) {
-        return res.status(404).json({ error: 'No QR available' });
-    }
-    res.json({ qr: currentQR });
-});
-
-// POST /bot/start
-app.post('/bot/start', async (req, res) => {
-    if (botState === 'connected') {
-        return res.json({ status: 'already_connected' });
-    }
-
-    if (botState === 'connecting') {
-        return res.json({ status: 'already_connecting' });
-    }
-
-    // Check cooldown (2 minutes between retries)
-    const now = Date.now();
-    const cooldownMs = 2 * 60 * 1000;
-    if (lastRetryTime && (now - lastRetryTime) < cooldownMs) {
-        const remaining = Math.ceil((cooldownMs - (now - lastRetryTime)) / 1000);
-        return res.status(429).json({ error: `Cooldown active. Wait ${remaining}s` });
-    }
-
-    // Check retry limit (3 per hour)
-    if (retryCount >= 3) {
-        return res.status(429).json({ error: 'Max retries exceeded. Wait 1 hour.' });
-    }
-
-    try {
-        await startBot();
-        retryCount++;
-        lastRetryTime = now;
-        setTimeout(() => { retryCount = 0; }, 60 * 60 * 1000); // Reset after 1 hour
-
-        res.json({ status: 'starting' });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// POST /bot/logout
-app.post('/bot/logout', async (req, res) => {
-    try {
-        if (client) {
-            await client.destroy();
-            client = null;
-        }
-        botState = 'disconnected';
-        currentQR = null;
-        res.json({ success: true });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// GET /bot/info
-app.get('/bot/info', async (req, res) => {
-    if (botState !== 'connected' || !client) {
-        return res.status(404).json({ error: 'Bot not connected' });
-    }
-
-    try {
-        const info = client.info;
-        res.json({
-            phone: info.wid.user,
-            name: info.pushname,
-        });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Helper: Random delay (10-15 seconds)
-const randomDelay = (baseMs = 10000, rangeMs = 5000) => {
-    return new Promise(resolve => setTimeout(resolve, baseMs + Math.random() * rangeMs));
-};
-
-// Helper: Send typing indicator
-const sendTyping = async (chat) => {
-    try {
-        await chat.sendStateTyping();
-    } catch (e) {
-        console.error('Error sending typing state:', e);
-    }
-};
+// ... (existing code)
 
 // Start WhatsApp client
 async function startBot() {
     botState = 'connecting';
     currentQR = null;
+
+    // CLEANUP: Remove lock files from previous sessions to prevent "Code: 21"
+    const authPath = process.env.WHATSAPP_SESSION_PATH || './.wwebjs_auth';
+    try {
+        const lockFile = path.join(authPath, 'session', 'SingletonLock');
+        if (fs.existsSync(lockFile)) {
+            console.log('[INIT] Removed stale SingletonLock file');
+            fs.unlinkSync(lockFile);
+        }
+    } catch (e) {
+        console.warn('[INIT] Warning checking lock files:', e.message);
+    }
 
     client = new Client({
         authStrategy: new LocalAuth({
