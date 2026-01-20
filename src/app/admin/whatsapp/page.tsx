@@ -23,13 +23,14 @@ export default function WhatsAppPage() {
     useEffect(() => {
         const checkStatus = async () => {
             try {
-                const res = await fetch(`${BOT_URL}/bot/status`);
+                // Correct path: /api/bot/status (proxy adds /bot/)
+                const res = await fetch(`${BOT_URL}/status`);
                 const data = await res.json();
                 setStatus(data.status);
 
                 // If connecting, try to get QR
                 if (data.status === 'connecting') {
-                    const qrRes = await fetch(`${BOT_URL}/bot/qr`);
+                    const qrRes = await fetch(`${BOT_URL}/qr`);
                     if (qrRes.ok) {
                         const qrData = await qrRes.json();
                         setQrCode(qrData.qr);
@@ -40,7 +41,7 @@ export default function WhatsAppPage() {
 
                 // If connected, get bot info
                 if (data.status === 'connected') {
-                    const infoRes = await fetch(`${BOT_URL}/bot/info`);
+                    const infoRes = await fetch(`${BOT_URL}/info`);
                     if (infoRes.ok) {
                         const infoData = await infoRes.json();
                         setBotInfo(infoData);
@@ -48,6 +49,7 @@ export default function WhatsAppPage() {
                 }
             } catch (error) {
                 console.error('Error checking bot status:', error);
+                setStatus('error'); // Ensure we enter error state
             }
         };
 
@@ -70,7 +72,7 @@ export default function WhatsAppPage() {
     const handleActivate = async () => {
         setLoading(true);
         try {
-            const res = await fetch(`${BOT_URL}/bot/start`, { method: 'POST' });
+            const res = await fetch(`${BOT_URL}/start`, { method: 'POST' });
             if (!res.ok) {
                 const error = await res.json();
                 alert(error.error || 'Error activating bot');
@@ -87,7 +89,8 @@ export default function WhatsAppPage() {
 
         setLoading(true);
         try {
-            await fetch('http://localhost:4000/bot/logout', { method: 'POST' });
+            // Use proxy for logout too
+            await fetch(`${BOT_URL}/logout`, { method: 'POST' });
         } catch (error) {
             alert('Error disconnecting bot');
         } finally {
@@ -102,7 +105,7 @@ export default function WhatsAppPage() {
         error: { color: 'text-red-600', bg: 'bg-red-100', emoji: '🔴', label: 'Error' },
     };
 
-    const currentStatus = statusConfig[status];
+    const currentStatus = statusConfig[status] || statusConfig.disconnected;
 
     return (
         <div className="animate-fadeIn">
