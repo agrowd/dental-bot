@@ -8,6 +8,17 @@ const path = require('path');
 
 // ... (existing code)
 
+// Connect to MongoDB
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://mongo:27017/odontobot';
+console.log('[INIT] Attempting to connect to MongoDB...', MONGODB_URI.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@')); // Mask credentials
+
+mongoose.connect(MONGODB_URI)
+    .then(() => console.log('[INIT] MongoDB Connected'))
+    .catch(err => {
+        console.error('[FATAL] MongoDB Connection Error:', err);
+        process.exit(1);
+    });
+
 // Define schemas (simplified versions)
 const FlowSchema = new mongoose.Schema({}, { strict: false });
 const ContactSchema = new mongoose.Schema({}, { strict: false });
@@ -203,6 +214,11 @@ async function startBot() {
 async function handleIncomingMessage(msg) {
     // Ignore status updates, broadcasts, and linked device notifications
     if (msg.from.includes('status') || msg.from.includes('broadcast') || msg.from.includes('@lid')) {
+        return;
+    }
+
+    // Ignore group messages
+    if (msg.from.includes('@g.us')) {
         return;
     }
 
