@@ -254,6 +254,28 @@ export default function FlowEditorPage() {
                                 <span className="text-sm text-slate-500">Mayor = más prioridad</span>
                             </div>
                         </div>
+
+                        {/* Force Restart Option */}
+                        <div className="card p-4">
+                            <h3 className="font-medium text-slate-900 mb-2">Comportamiento de Inicio</h3>
+                            <label className="flex items-start gap-3 p-3 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50 transition-colors">
+                                <input
+                                    type="checkbox"
+                                    checked={activationRules.forceRestart || false}
+                                    onChange={(e) => {
+                                        setActivationRules(prev => ({ ...prev, forceRestart: e.target.checked }));
+                                        setHasChanges(true);
+                                    }}
+                                    className="mt-1"
+                                />
+                                <div>
+                                    <span className="font-medium text-slate-900">⚡ Reinicio Forzado (Siempre responder)</span>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        Si se activa, el bot interrumpirá cualquier conversación anterior y reiniciará el flujo desde cero. útil para menús principales.
+                                    </p>
+                                </div>
+                            </label>
+                        </div>
                     </div>
                 </div>
             )}

@@ -240,14 +240,25 @@ async function handleIncomingMessage(msg) {
     // Get active conversation or create new
     let conversation = await Conversation.findOne({ phone, state: { $ne: 'closed' } });
 
+    // Try to find a forcing flow first
+    const forcingFlow = await selectFlow({ isAgendado, source: contact.source, forceOnly: true });
+
+    if (forcingFlow && forcingFlow.activationRules.forceRestart) {
+        console.log(`[DEBUG] Force restart triggered by flow: ${forcingFlow.name}`);
+        if (conversation) {
+            conversation.state = 'closed';
+            await conversation.save();
+        }
+        conversation = null; // Force creation of new conversation
+    }
+
     if (!conversation) {
         console.log('[DEBUG] No active conversation. Attempting to start new flow.');
-        // Select appropriate flow
-        const flow = await selectFlow({ isAgendado, source: contact.source });
+        // Select appropriate flow (if not already forced)
+        const flow = forcingFlow || await selectFlow({ isAgendado, source: contact.source });
 
         if (!flow) {
             console.log('[DEBUG] No matching flow found for contact rules.');
-            // Optional: Send a default message if no flow matches?
             return;
         }
         console.log(`[DEBUG] Flow selected: ${flow.name} (v${flow.publishedVersion})`);
@@ -399,7 +410,7 @@ function formatMessage(step) {
 }
 
 // Select flow based on rules
-async function selectFlow({ isAgendado, source }) {
+async function selectFlow({ isAgendado, source, forceOnly = false }) {
     const flows = await Flow.find({ isActive: true, published: { $ne: null } });
 
     // Filter by activation rules
@@ -413,6 +424,9 @@ async function selectFlow({ isAgendado, source }) {
         // Check WhatsApp status
         const statusMatch = (isAgendado && rules.whatsappStatus.agendado) ||
             (!isAgendado && rules.whatsappStatus.no_agendado);
+
+        // Check forceRestart if forceOnly is requested
+        if (forceOnly && !rules.forceRestart) return false;
 
         return sourceMatch && statusMatch;
     });

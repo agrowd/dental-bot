@@ -45,6 +45,8 @@ export interface ActivationRules {
   };
   // Priority: higher number = higher priority when multiple flows match
   priority: number;
+  // Always trigger: force restart even if conversation exists
+  forceRestart?: boolean;
 }
 
 export interface FlowDocument {

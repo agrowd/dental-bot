@@ -14,6 +14,7 @@ const ActivationRulesSchema = new Schema<ActivationRules>({
         no_agendado: { type: Boolean, default: true },
     },
     priority: { type: Number, default: 1 },
+    forceRestart: { type: Boolean, default: false },
 }, { _id: false });
 
 const StepOptionSchema = new Schema({
