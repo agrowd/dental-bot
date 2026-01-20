@@ -281,26 +281,44 @@ async function handleIncomingMessage(msg) {
                 currentStepId: flow.published.entryStepId,
                 messagesInCurrentStep: 0,
                 lastStepChangeAt: new Date(),
+            } else {
+                console.log(`[DEBUG] Found existing active conversation in state: ${conversation.state}`);
             },
+        } else {
+            console.log(`[DEBUG] Found existing active conversation in state: ${conversation.state}`);
         });
+    } else {
+        console.log(`[DEBUG] Found existing active conversation in state: ${conversation.state}`);
+    } else {
+        console.log(`[DEBUG] Found existing active conversation in state: ${conversation.state} else {
+        console.log(`[DEBUG] Found existing active conversation in state: ${ conversation.state }`);
+    }`);
     } else {
         console.log(`[DEBUG] Found existing active conversation in state: ${conversation.state}`);
     }
 
 
+} else {
+    console.log(`[DEBUG] Found existing active conversation in state: ${conversation.state}`);
 }
 
 // Check if conversation is paused (handoff mode)
 if (conversation.state === 'paused') {
     console.log('Conversation paused - handoff active');
     return; // Do not respond
+} else {
+    console.log(`[DEBUG] Found existing active conversation in state: ${conversation.state}`);
 }
 
 // Get current flow
-const flow = await Flow.findOne({ publishedVersion: conversation.flowVersion });
+const flow = await Flow.findOne({ publishedVersion: conversation.flowVersion } else {
+    console.log(`[DEBUG] Found existing active conversation in state: ${conversation.state}`);
+});
 if (!flow || !flow.published) {
     console.log('Flow not found or not published');
     return;
+} else {
+    console.log(`[DEBUG] Found existing active conversation in state: ${conversation.state}`);
 }
 
 const steps = flow.published.steps;
@@ -309,17 +327,25 @@ const currentStep = steps.get(conversation.currentStepId);
 if (!currentStep) {
     console.log('Current step not found');
     return;
+} else {
+    console.log(`[DEBUG] Found existing active conversation in state: ${conversation.state}`);
 }
 
 // *** LOOP DETECTION ***
 if (conversation.loopDetection.currentStepId === conversation.currentStepId) {
     conversation.loopDetection.messagesInCurrentStep++;
 } else {
+    console.log(`[DEBUG] Found existing active conversation in state: ${conversation.state}`);
+} else {
     conversation.loopDetection = {
         currentStepId: conversation.currentStepId,
         messagesInCurrentStep: 1,
         lastStepChangeAt: new Date(),
+    } else {
+        console.log(`[DEBUG] Found existing active conversation in state: ${conversation.state}`);
     };
+} else {
+    console.log(`[DEBUG] Found existing active conversation in state: ${conversation.state}`);
 }
 
 // Auto-handoff after 6 messages without progress
@@ -327,6 +353,8 @@ if (conversation.loopDetection.messagesInCurrentStep >= 6) {
     console.log('Loop detected - triggering auto-handoff');
     await triggerAutoHandoff(conversation, contact, currentStep);
     return;
+} else {
+    console.log(`[DEBUG] Found existing active conversation in state: ${conversation.state}`);
 }
 
 await conversation.save();
@@ -355,6 +383,8 @@ if (matchedOption) {
     if (!nextStep) {
         console.log('Next step not found:', nextStepId);
         return;
+    } else {
+        console.log(`[DEBUG] Found existing active conversation in state: ${conversation.state}`);
     }
 
     // Execute actions
@@ -363,49 +393,69 @@ if (matchedOption) {
             conversation.tags.push(...currentStep.actions.addTags);
             contact.tags.push(...currentStep.actions.addTags);
             await contact.save();
+        } else {
+            console.log(`[DEBUG] Found existing active conversation in state: ${conversation.state}`);
         }
         if (currentStep.actions.setLeadStatus) {
             contact.status = currentStep.actions.setLeadStatus;
             await contact.save();
+        } else {
+            console.log(`[DEBUG] Found existing active conversation in state: ${conversation.state}`);
         }
         if (currentStep.actions.pauseConversation) {
             conversation.state = 'paused';
+        } else {
+            console.log(`[DEBUG] Found existing active conversation in state: ${conversation.state}`);
+
+        } else {
+            console.log(`[DEBUG] Found existing active conversation in state: ${conversation.state}`);
         }
+
+        // Update conversation
+        conversation.currentStepId = nextStepId;
+        conversation.loopDetection = {
+            currentStepId: nextStepId,
+            messagesInCurrentStep: 0,
+            lastStepChangeAt: new Date(),
+        } else {
+            console.log(`[DEBUG] Found existing active conversation in state: ${conversation.state}`);
+        };
+        await conversation.save();
+
+        // Send next step
+        const response = formatMessage(nextStep);
+        await chat.sendMessage(response);
+
+        // Save outgoing message
+        await Message.create({
+            phone,
+            direction: 'out',
+            text: response,
+            timestamp: new Date(),
+        } else {
+            console.log(`[DEBUG] Found existing active conversation in state: ${conversation.state}`);
+        });
+
+    } else {
+        console.log(`[DEBUG] Found existing active conversation in state: ${conversation.state}`);
+    } else {
+        // Invalid option - fallback
+        const fallbackMsg = '⚠️ Para avanzar, elegí una de las opciones disponibles.\n\n' + formatMessage(currentStep);
+        await chat.sendMessage(fallbackMsg);
+
+        await Message.create({
+            phone,
+            direction: 'out',
+            text: fallbackMsg,
+            timestamp: new Date(),
+        } else {
+            console.log(`[DEBUG] Found existing active conversation in state: ${conversation.state}`);
+        });
+    } else {
+        console.log(`[DEBUG] Found existing active conversation in state: ${conversation.state}`);
     }
-
-    // Update conversation
-    conversation.currentStepId = nextStepId;
-    conversation.loopDetection = {
-        currentStepId: nextStepId,
-        messagesInCurrentStep: 0,
-        lastStepChangeAt: new Date(),
-    };
-    await conversation.save();
-
-    // Send next step
-    const response = formatMessage(nextStep);
-    await chat.sendMessage(response);
-
-    // Save outgoing message
-    await Message.create({
-        phone,
-        direction: 'out',
-        text: response,
-        timestamp: new Date(),
-    });
-
 } else {
-    // Invalid option - fallback
-    const fallbackMsg = '⚠️ Para avanzar, elegí una de las opciones disponibles.\n\n' + formatMessage(currentStep);
-    await chat.sendMessage(fallbackMsg);
-
-    await Message.create({
-        phone,
-        direction: 'out',
-        text: fallbackMsg,
-        timestamp: new Date(),
-    });
-}
+    console.log(`[DEBUG] Found existing active conversation in state: ${conversation.state}`);
 }
 
 // Format message with options
