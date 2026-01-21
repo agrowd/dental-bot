@@ -329,10 +329,11 @@ async function handleIncomingMessage(msg) {
 
         // Send entry step message
         const steps = flow.published.steps;
-        const currentStep = steps.get(flow.published.entryStepId);
+        // Handle steps being a Map or a plain Object
+        const currentStep = (typeof steps.get === 'function') ? steps.get(flow.published.entryStepId) : steps[flow.published.entryStepId];
 
         if (!currentStep) {
-            console.log('Entry step not found!');
+            console.log(`[DEBUG] Entry step '${flow.published.entryStepId}' not found in flow '${flow.name}'! Keys: ${Object.keys(steps || {})}`);
             return;
         }
 
