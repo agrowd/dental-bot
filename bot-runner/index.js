@@ -368,8 +368,7 @@ async function startBot() {
 
         console.log(`[TRACE] Current Step: "${currentStep.title}" (${conversation.currentStepId})`);
 
-        // Case A: New Conversation (or fresh transition)
-        // Check if we need to send the INITIAL message of the step
+        // Case A: New Conversation or Step Entry
         if (conversation.loopDetection.messagesInCurrentStep === 0) {
             console.log(`[TRACE] 🆕 sending INITIAL message for step ${currentStep.id}`);
             const response = formatMessage(currentStep);
@@ -381,13 +380,19 @@ async function startBot() {
                 console.log(`[TRACE] 📤 Sending: "${response.replace(/\n/g, ' ')}"`);
                 await chat.sendMessage(response);
             } catch (error) {
-                console.error('[ERROR] Failed to send message:', error);
-                await chat.clearStateTyping();
+                if (error.message && error.message.includes('markedUnread')) {
+                    console.warn('[WARN] Ignored known "markedUnread" error during send.');
+                } else {
+                    console.error('[ERROR] Failed to send message:', error);
+                }
+                try { await chat.clearState(); } catch (e) { }
             }
 
-            // Update state
+            // Update state with explicit verification
             conversation.loopDetection.messagesInCurrentStep = 1;
+            conversation.markModified('loopDetection'); // Ensure nested change is tracked
             await conversation.save();
+            console.log(`[TRACE] ✅ State UPDATED: messagesInCurrentStep = 1 for ${conversation._id}`);
             return;
         }
 
@@ -422,8 +427,12 @@ async function startBot() {
                 await randomDelay(500, 200);
                 await chat.sendMessage(`No entendí esa opción. Por favor elegí una de las opciones válidas (ej: A).`);
             } catch (err) {
-                console.error('Error sending fallback:', err);
-                await chat.clearStateTyping();
+                if (err.message && err.message.includes('markedUnread')) {
+                    console.warn('[WARN] Ignored known "markedUnread" error on fallback.');
+                } else {
+                    console.error('Error sending fallback:', err);
+                }
+                try { await chat.clearState(); } catch (e) { }
             }
             return;
         }
@@ -455,8 +464,12 @@ async function startBot() {
             console.log(`[TRACE] 📤 Sending: "${response.replace(/\n/g, ' ')}"`);
             await chat.sendMessage(response);
         } catch (e) {
-            console.error('[ERROR] Failed to send transition message:', e);
-            await chat.clearStateTyping();
+            if (e.message && e.message.includes('markedUnread')) {
+                console.warn('[WARN] Ignored known "markedUnread" error on transition.');
+            } else {
+                console.error('[ERROR] Failed to send transition message:', e);
+            }
+            try { await chat.clearState(); } catch (err) { }
         }
 
         // Mark that we sent the message for this step
