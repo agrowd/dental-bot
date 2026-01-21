@@ -166,6 +166,9 @@ async function startBot() {
 
     // QR code handler
     client.on('qr', (qr) => {
+        // Suppress QR if already connected/authenticated
+        if (botState === 'connected') return;
+
         console.log('QR Code received');
         currentQR = qr;
         qrcode.generate(qr, { small: true });
@@ -186,6 +189,8 @@ async function startBot() {
     // Connected handler
     client.on('authenticated', () => {
         console.log('[INIT] Client authenticated');
+        botState = 'connected';
+        currentQR = null;
     });
 
     client.on('auth_failure', msg => {
