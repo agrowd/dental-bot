@@ -208,6 +208,28 @@ async function startBot() {
     });
 
     await client.initialize();
+
+    // DEBUG: Inspect Database Content
+    console.log('[DEBUG-INIT] Inspecting "flows" collection...');
+    try {
+        const collections = await mongoose.connection.db.listCollections().toArray();
+        console.log('[DEBUG-INIT] Collections in DB:', collections.map(c => c.name));
+
+        const flowCount = await Flow.countDocuments({});
+        console.log(`[DEBUG-INIT] Total documents in 'Flow' model: ${flowCount}`);
+
+        if (flowCount > 0) {
+            const allFlows = await Flow.find({}, 'name isActive published draft activationRules').lean();
+            console.log('[DEBUG-INIT] Dump of all flows:', JSON.stringify(allFlows, null, 2));
+        } else {
+            console.log('[DEBUG-INIT] Collection appears empty via Mongoose.');
+            // Try raw driver
+            const rawCount = await mongoose.connection.db.collection('flows').countDocuments();
+            console.log(`[DEBUG-INIT] Raw 'flows' collection count: ${rawCount}`);
+        }
+    } catch (e) {
+        console.error('[DEBUG-INIT] Error inspecting DB:', e);
+    }
 }
 
 // Main message handler
