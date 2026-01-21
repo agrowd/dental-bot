@@ -241,6 +241,22 @@ export default function FlowEditorPage() {
         }
     };
 
+    const handleDelete = async () => {
+        if (!confirm('¿Estás seguro de eliminar este flujo? Esta acción no se puede deshacer.')) return;
+
+        try {
+            const res = await fetch(`/api/flows/${flowId}`, { method: 'DELETE' });
+            if (res.ok) {
+                window.location.href = '/admin/flows';
+            } else {
+                setShowToast({ type: 'error', message: 'Error al eliminar el flujo' });
+            }
+        } catch (e) {
+            console.error('Delete error:', e);
+            setShowToast({ type: 'error', message: 'Error de conexión' });
+        }
+    };
+
     // Generate preview text
     const generatePreview = (step: FlowStep): string => {
         let preview = step.message + '\n\n';
@@ -268,11 +284,26 @@ export default function FlowEditorPage() {
                         <div className="flex items-center gap-3">
                             <h1 className="text-xl font-bold text-slate-900">{flowName || 'Nuevo Flujo'}</h1>
                             {hasChanges && <span className="badge badge-warning">Sin guardar</span>}
-                            {isActive ? <span className="badge badge-success">Activo</span> : <span className="badge badge-neutral">Inactivo</span>}
+
+                            {/* Active Toggle */}
+                            <label className={`relative inline-flex items-center cursor-pointer`}>
+                                <input
+                                    type="checkbox"
+                                    className="sr-only peer"
+                                    checked={isActive}
+                                    onChange={(e) => { setIsActive(e.target.checked); setHasChanges(true); }}
+                                />
+                                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
+                                <span className="ml-2 text-sm font-medium text-slate-900">{isActive ? 'Activo' : 'Inactivo'}</span>
+                            </label>
                         </div>
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
+                    <button onClick={handleDelete} className="btn bg-red-50 text-red-600 hover:bg-red-100 border-red-200">
+                        Eliminar
+                    </button>
+                    <div className="h-6 w-px bg-slate-200 mx-2"></div>
                     <button onClick={handleSave} disabled={saving} className="btn btn-secondary">
                         {saving ? 'Guardando...' : 'Guardar'}
                     </button>

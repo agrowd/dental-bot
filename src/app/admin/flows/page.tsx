@@ -26,6 +26,20 @@ export default function FlowsPage() {
         }
     }
 
+    async function handleDeleteFlow(id: string) {
+        try {
+            const res = await fetch(`/api/flows/${id}`, { method: 'DELETE' });
+            if (res.ok) {
+                setFlows(prev => prev.filter(f => f.id !== id));
+            } else {
+                alert('Error al eliminar flujo');
+            }
+        } catch (e) {
+            console.error('Delete error:', e);
+            alert('Error al eliminar flujo');
+        }
+    }
+
     async function handleCreateFlow() {
         if (!newFlowName.trim()) {
             alert('Por favor ingresa un nombre para el flujo');
@@ -200,9 +214,23 @@ export default function FlowsPage() {
                             <div className="text-sm text-slate-500">
                                 {Object.keys(flow.draft?.steps || {}).length} pasos
                             </div>
-                            <span className="text-sm text-blue-600 font-medium group-hover:underline">
-                                Editar flujo →
-                            </span>
+                            <div className="flex items-center gap-3">
+                                <button
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        if (confirm('¿Seguro de eliminar este flujo?')) {
+                                            handleDeleteFlow(flow.id);
+                                        }
+                                    }}
+                                    className="text-sm text-red-500 hover:text-red-700 font-medium hover:underline z-10 relative"
+                                >
+                                    Eliminar
+                                </button>
+                                <span className="text-sm text-blue-600 font-medium group-hover:underline">
+                                    Editar flujo →
+                                </span>
+                            </div>
                         </div>
                     </Link>
                 ))}
