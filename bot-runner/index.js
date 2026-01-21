@@ -339,8 +339,20 @@ async function handleIncomingMessage(msg) {
 
         const response = formatMessage(currentStep);
         const chat = await msg.getChat();
+
+        // Log incoming message content
+        console.log(`[LOG] 📩 Message received from ${phone}: "${msg.body}"`);
+
+        try {
+            await chat.sendSeen();
+        } catch (e) {
+            console.error('[WARN] Failed to send "Seen" status (ignoring to prevent crash):', e.message);
+        }
+
         await sendTyping(chat);
-        await randomDelay(2000, 1000); // Small initial delay
+        await randomDelay(1500, 1000); // Natural delay
+
+        console.log(`[LOG] 📤 Sending response to ${phone}: "${response.replace(/\n/g, ' ')}"`);
         await chat.sendMessage(response);
 
         // Save outgoing message

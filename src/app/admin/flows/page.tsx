@@ -39,11 +39,11 @@ export default function FlowsPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     name: newFlowName,
-                    description: '',
+                    description: 'Flujo creado automáticamente',
                     activationRules: {
                         sources: { meta_ads: false, organic: true },
                         whatsappStatus: { agendado: false, no_agendado: true },
-                        priority: 10
+                        priority: 5
                     },
                     draft: {
                         entryStepId: 'welcome',
@@ -51,8 +51,27 @@ export default function FlowsPage() {
                             welcome: {
                                 id: 'welcome',
                                 title: 'Bienvenida',
-                                message: 'Hola! ¿En qué puedo ayudarte?',
-                                options: []
+                                message: 'Hola 👋 Soy el asistente virtual. ¿En qué puedo ayudarte hoy?',
+                                options: [
+                                    { id: 'opt-1', key: 'A', label: 'Ver servicios', nextStepId: 'services' },
+                                    { id: 'opt-2', key: 'B', label: 'Horarios y Ubicación', nextStepId: 'location' }
+                                ]
+                            },
+                            services: {
+                                id: 'services',
+                                title: 'Servicios',
+                                message: 'Ofrecemos los siguientes tratamientos:\n\n1. Limpieza Dental\n2. Blanqueamiento\n3. Ortodoncia',
+                                options: [
+                                    { id: 'opt-3', key: 'A', label: 'Volver al inicio', nextStepId: 'welcome' }
+                                ]
+                            },
+                            location: {
+                                id: 'location',
+                                title: 'Ubicación',
+                                message: '📍 Estamos en Av. Siempre Viva 123.\n🕒 Lunes a Viernes de 9 a 18hs.',
+                                options: [
+                                    { id: 'opt-4', key: 'A', label: 'Volver al inicio', nextStepId: 'welcome' }
+                                ]
                             }
                         }
                     }
