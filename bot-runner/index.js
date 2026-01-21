@@ -183,6 +183,19 @@ async function startBot() {
         }, 45000);
     });
 
+    // Connected handler
+    client.on('authenticated', () => {
+        console.log('[INIT] Client authenticated');
+    });
+
+    client.on('auth_failure', msg => {
+        console.error('[INIT] AUTHENTICATION FAILURE', msg);
+    });
+
+    client.on('loading_screen', (percent, message) => {
+        console.log('[INIT] LOADING SCREEN', percent, message);
+    });
+
     // Ready handler
     client.on('ready', () => {
         console.log('✅ WhatsApp bot is ready!');
@@ -197,6 +210,11 @@ async function startBot() {
         botState = 'disconnected';
         currentQR = null;
     });
+
+    // Heartbeat log to confirm process is alive
+    setInterval(() => {
+        console.log(`[HEARTBEAT] Bot runner alive. State: ${botState}. Memory: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB`);
+    }, 60000);
 
     // Message handler
     client.on('message', async (msg) => {
