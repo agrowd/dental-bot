@@ -218,378 +218,217 @@ async function startBot() {
 
     // Message handler
     client.on('message', async (msg) => {
+        const sender = msg.from;
+        const body = msg.body;
+        console.log(`[TRACE] 📨 RAW MESSAGE from ${sender}: "${body}"`);
+
         try {
-            await handleIncomingMessage(msg);
-        } catch (error) {
-            console.error('Error handling message:', error);
-        }
-    });
+            if (msg.from === 'status@broadcast') return;
 
-    await client.initialize();
+            // Extract phone number
+            const phone = msg.from.replace('@c.us', '');
+            console.log(`[TRACE] Processing message for phone: ${phone}`);
 
-    // DEBUG: Inspect Database Content
-    console.log('[DEBUG-INIT] Inspecting "flows" collection...');
-    try {
-        const collections = await mongoose.connection.db.listCollections().toArray();
-        console.log('[DEBUG-INIT] Collections in DB:', collections.map(c => c.name));
-
-        const flowCount = await Flow.countDocuments({});
-        console.log(`[DEBUG-INIT] Total documents in 'Flow' model: ${flowCount}`);
-
-        if (flowCount > 0) {
-            const allFlows = await Flow.find({}, 'name isActive published draft activationRules').lean();
-            console.log('[DEBUG-INIT] Dump of all flows:', JSON.stringify(allFlows, null, 2));
-        } else {
-            console.log('[DEBUG-INIT] Collection appears empty via Mongoose.');
-            // Try raw driver
-            const rawCount = await mongoose.connection.db.collection('flows').countDocuments();
-            console.log(`[DEBUG-INIT] Raw 'flows' collection count: ${rawCount}`);
-        }
-    } catch (e) {
-        console.error('[DEBUG-INIT] Error inspecting DB:', e);
-    }
-}
-
-// Main message handler
-async function handleIncomingMessage(msg) {
-    // Ignore status updates, broadcasts, and linked device notifications
-    if (msg.from.includes('status') || msg.from.includes('broadcast') || msg.from.includes('@lid')) {
-        return;
-    }
-
-    // Ignore group messages
-    if (msg.from.includes('@g.us')) {
-        return;
-    }
-
-    const phone = msg.from.replace('@c.us', '');
-    console.log(`[DEBUG] Message from ${phone}: ${msg.body}`);
-
-    // DEBUG: Reset command
-    if (msg.body.trim().toUpperCase() === 'RESET') {
-        await Conversation.updateMany({ phone }, { state: 'closed' });
-        const chat = await msg.getChat();
-        await chat.sendMessage('🔄 Conversación reiniciada por comando RESET.');
-        console.log(`[DEBUG] Conversation reset for ${phone}`);
-        return;
-    }
-
-    // Save incoming message
-    await Message.create({
-        phone,
-        direction: 'in',
-        text: msg.body,
-        timestamp: new Date(),
-    });
-
-    // Get or create contact
-    let contact = await Contact.findOne({ phone });
-    if (!contact) {
-        console.log(`[DEBUG] Creating new contact for ${phone}`);
-        // New contact - detect source (TODO: integrate with Meta webhook)
-        contact = await Contact.create({
-            phone,
-            source: 'organic', // Default to organic
-            status: 'pendiente',
-            tags: [],
-            firstSeenAt: new Date(),
-            lastSeenAt: new Date(),
-        });
-    } else {
-        contact.lastSeenAt = new Date();
-        await contact.save();
-    }
-
-    // Check if contact is saved in WhatsApp contacts
-    const chatContact = await msg.getContact();
-    const isAgendado = chatContact.isMyContact;
-    console.log(`[DEBUG] Contact ${phone} - Is Agendado: ${isAgendado}, Source: ${contact.source}`);
-
-    // Get active conversation or create new
-    let conversation = await Conversation.findOne({ phone, state: { $ne: 'closed' } });
-
-    // Try to find a forcing flow first
-    const forcingFlow = await selectFlow({ isAgendado, source: contact.source, forceOnly: true });
-
-    if (forcingFlow && forcingFlow.activationRules.forceRestart) {
-        console.log(`[DEBUG] Force restart triggered by flow: ${forcingFlow.name}`);
-        if (conversation) {
-            conversation.state = 'closed';
-            await conversation.save();
-        }
-        conversation = null; // Force creation of new conversation
-    }
-
-    // NEW CONVERSATION LOGIC
-    if (!conversation) {
-        console.log('[DEBUG] No active conversation. Attempting to start new flow.');
-        // Select appropriate flow (if not already forced)
-        const flow = forcingFlow || await selectFlow({ isAgendado, source: contact.source });
-
-        if (!flow) {
-            console.log('[DEBUG] No matching flow found for contact rules.');
-            return;
-        }
-        console.log(`[DEBUG] Flow selected: ${flow.name} (v${flow.publishedVersion})`);
-
-        conversation = await Conversation.create({
-            phone,
-            flowVersion: flow.publishedVersion,
-            currentStepId: flow.published.entryStepId,
-            state: 'active',
-            tags: [],
-            loopDetection: {
-                currentStepId: flow.published.entryStepId,
-                messagesInCurrentStep: 0,
-                lastStepChangeAt: new Date(),
+            // Get or create contact
+            let contact = await Contact.findOne({ phone });
+            if (!contact) {
+                console.log(`[TRACE] Creating new contact for ${phone}`);
+                contact = await Contact.create({
+                    phone,
+                    status: 'pendiente',
+                    source: 'organic', // Default source
+                    firstSeenAt: new Date(),
+                    lastSeenAt: new Date(),
+                    tags: [],
+                    meta: {}
+                });
+            } else {
+                // Update last seen
+                contact.lastSeenAt = new Date();
+                await contact.save();
+                console.log(`[TRACE] Existing contact found: ${phone}. Status: ${contact.status}`);
             }
-        });
 
-        // Send entry step message
-        const steps = flow.published.steps;
-        // Handle steps being a Map or a plain Object
-        const currentStep = (typeof steps.get === 'function') ? steps.get(flow.published.entryStepId) : steps[flow.published.entryStepId];
+            // Find active conversation
+            let conversation = await Conversation.findOne({ phone, state: 'active' });
 
-        if (!currentStep) {
-            console.log(`[DEBUG] Entry step '${flow.published.entryStepId}' not found in flow '${flow.name}'! Keys: ${Object.keys(steps || {})}`);
-            return;
-        }
-
-        const response = formatMessage(currentStep);
-        const chat = await msg.getChat();
-
-        // Log incoming message content
-        console.log(`[LOG] 📩 Message received from ${phone}: "${msg.body}"`);
-
-        try {
-            await chat.sendSeen();
-        } catch (e) {
-            console.error('[WARN] Failed to send "Seen" status (ignoring to prevent crash):', e.message);
-        }
-
-        await sendTyping(chat);
-        await randomDelay(1500, 1000); // Natural delay
-
-        console.log(`[LOG] 📤 Sending response to ${phone}: "${response.replace(/\n/g, ' ')}"`);
-        await chat.sendMessage(response);
-
-        // Save outgoing message
-        await Message.create({
-            phone,
-            direction: 'out',
-            text: response,
-            timestamp: new Date(),
-        });
-
-    } else {
-        // EXISTING CONVERSATION LOGIC
-        console.log(`[DEBUG] Found existing active conversation in state: ${conversation.state}`);
-
-        // Check if conversation is paused (handoff mode)
-        if (conversation.state === 'paused') {
-            console.log('Conversation paused - handoff active');
-            return; // Do not respond
-        }
-
-        // Get current flow
-        const flow = await Flow.findOne({ publishedVersion: conversation.flowVersion });
-        if (!flow || !flow.published) {
-            console.log('Flow not found or not published');
-            return;
-        }
-
-        const steps = flow.published.steps;
-        const currentStep = steps.get(conversation.currentStepId);
-
-        if (!currentStep) {
-            console.log('Current step not found');
-            return;
-        }
-
-        // *** LOOP DETECTION ***
-        if (conversation.loopDetection.currentStepId === conversation.currentStepId) {
-            conversation.loopDetection.messagesInCurrentStep++;
-        } else {
-            conversation.loopDetection = {
-                currentStepId: conversation.currentStepId,
-                messagesInCurrentStep: 1,
-                lastStepChangeAt: new Date(),
-            };
-        }
-
-        // Auto-handoff after 6 messages without progress
-        if (conversation.loopDetection.messagesInCurrentStep >= 6) {
-            console.log('Loop detected - triggering auto-handoff');
-            await triggerAutoHandoff(conversation, contact, currentStep);
-            return;
-        }
-
-        await conversation.save();
-
-        // Get chat for sending messages
-        const chat = await msg.getChat();
-
-        // Show typing indicator
-        await sendTyping(chat);
-
-        // *** HUMAN-LIKE DELAY (10-15 seconds) ***
-        const messageLength = currentStep.message.length;
-        const baseDelay = 10000;
-        const extraDelay = messageLength > 100 ? 5000 : 0; // 15-20s for long messages
-        await randomDelay(baseDelay, 5000 + extraDelay);
-
-        // Parse user input
-        const userInput = msg.body.trim().toUpperCase();
-        const matchedOption = currentStep.options.find(opt => opt.key.toUpperCase() === userInput);
-
-        if (matchedOption) {
-            // Valid option - advance to next step
-            const nextStepId = matchedOption.nextStepId;
-            const nextStep = steps.get(nextStepId);
-
-            if (!nextStep) {
-                console.log('Next step not found:', nextStepId);
+            // Check for explicit "reset" command
+            if (msg.body.trim().toUpperCase() === 'RESET') {
+                if (conversation) {
+                    conversation.state = 'closed';
+                    await conversation.save();
+                }
+                const chat = await msg.getChat();
+                await chat.sendMessage('🔄 Conversación reiniciada.');
+                console.log(`[TRACE] RESET command received from ${phone}`);
                 return;
             }
 
-            // Execute actions
-            if (currentStep.actions) {
-                if (currentStep.actions.addTags) {
-                    conversation.tags.push(...currentStep.actions.addTags);
-                    contact.tags.push(...currentStep.actions.addTags);
-                    await contact.save();
+            // Decision Logic
+            if (!conversation) {
+                console.log(`[TRACE] No active conversation for ${phone}. Starting flow selection...`);
+                // Determine if 'agendado' (mock logic since we can't really know without syncing contacts)
+                const chatContact = await msg.getContact();
+                const isAgendado = chatContact.isMyContact;
+
+                console.log(`[TRACE] Selection Criteria -> Source: ${contact.source}, IsAgendado: ${isAgendado}`);
+
+                const selectedFlow = await selectFlow({ isAgendado, source: contact.source });
+
+                if (!selectedFlow) {
+                    console.log(`[TRACE] ❌ No suitable flow found for ${phone}. Ignoring message.`);
+                    return;
                 }
-                if (currentStep.actions.setLeadStatus) {
-                    contact.status = currentStep.actions.setLeadStatus;
-                    await contact.save();
-                }
-                if (currentStep.actions.pauseConversation) {
-                    conversation.state = 'paused';
+
+                console.log(`[TRACE] ✅ Flow SELECTED: "${selectedFlow.name}" (v${selectedFlow.publishedVersion})`);
+
+                // Start conversation
+                conversation = await Conversation.create({
+                    phone,
+                    flowVersion: selectedFlow.publishedVersion,
+                    currentStepId: selectedFlow.published.entryStepId,
+                    state: 'active',
+                    tags: [], // Initialize tags
+                    loopDetection: {
+                        currentStepId: selectedFlow.published.entryStepId,
+                        messagesInCurrentStep: 0,
+                        lastStepChangeAt: new Date(),
+                    }
+                });
+                console.log(`[TRACE] New conversation created: ${conversation._id} starting at step ${conversation.currentStepId}`);
+            } else {
+                console.log(`[TRACE] Active conversation found: ${conversation._id} at step ${conversation.currentStepId}`);
+
+                // Check for Force Restart Flows even if conversation exists
+                const chatContact = await msg.getContact();
+                const isAgendado = chatContact.isMyContact;
+                const forcingFlow = await selectFlow({ isAgendado, source: contact.source, forceOnly: true });
+
+                if (forcingFlow) {
+                    console.log(`[TRACE] ⚡ FORCE RESTART by flow: "${forcingFlow.name}"`);
+                    // Archive old conversation
+                    conversation.state = 'closed';
+                    await conversation.save();
+
+                    // Create new one
+                    conversation = await Conversation.create({
+                        phone,
+                        flowVersion: forcingFlow.publishedVersion,
+                        currentStepId: forcingFlow.published.entryStepId,
+                        state: 'active',
+                        tags: [],
+                        loopDetection: {
+                            currentStepId: forcingFlow.published.entryStepId,
+                            messagesInCurrentStep: 0,
+                            lastStepChangeAt: new Date(),
+                        }
+                    });
+                    console.log(`[TRACE] Force restarted conversation: ${conversation._id}`);
                 }
             }
 
-            // Update conversation
-            conversation.currentStepId = nextStepId;
-            conversation.loopDetection = {
-                currentStepId: nextStepId,
-                messagesInCurrentStep: 0,
-                lastStepChangeAt: new Date(),
-            };
-            await conversation.save();
+            // Re-fetch flow to ensure we have the steps
+            const flow = await Flow.findOne({ publishedVersion: conversation.flowVersion });
 
-            // Send next step
-            const response = formatMessage(nextStep);
-            await chat.sendMessage(response);
+            if (!flow) {
+                console.log(`[TRACE] ⚠️ Could not retrieve flow definition for existing conversation. Maybe flow was turned off?`);
+                return;
+            }
 
-            // Save outgoing message
-            await Message.create({
-                phone,
-                direction: 'out',
-                text: response,
-                timestamp: new Date(),
-            });
+            // Handle the message within the current step
+            await handleStepLogic(client, msg, conversation, flow, contact);
 
-        } else {
-            // Invalid option - fallback
-            const fallbackMsg = '⚠️ Para avanzar, elegí una de las opciones disponibles.\n\n' + formatMessage(currentStep);
-            await chat.sendMessage(fallbackMsg);
-
-            await Message.create({
-                phone,
-                direction: 'out',
-                text: fallbackMsg,
-                timestamp: new Date(),
-            });
+        } catch (e) {
+            console.error('[ERROR] Error processing message:', e);
         }
-    }
-}
-
-// Format message with options
-function formatMessage(step) {
-    let msg = step.message + '\n\n';
-    step.options.forEach(opt => {
-        msg += `${opt.key}) ${opt.label}\n`;
-    });
-    return msg.trim();
-}
-
-// Select flow based on rules
-async function selectFlow({ isAgendado, source, forceOnly = false }) {
-    console.log(`[DEBUG] Finding flow for: Source=${source}, Agendado=${isAgendado}, ForceOnly=${forceOnly}`);
-
-    // DEBUG: Dump ALL flows to see what we have
-    const allFlows = await Flow.find({});
-    console.log(`[DEBUG-CRITICAL] Total Documents in 'flows' collection: ${allFlows.length}`);
-    if (allFlows.length > 0) {
-        console.log('[DEBUG-CRITICAL] First flow in DB:', JSON.stringify(allFlows[0], null, 2));
-    }
-
-    const flows = await Flow.find({ isActive: true, published: { $ne: null } });
-    console.log(`[DEBUG] Found ${flows.length} ACTIVE & PUBLISHED flows.`);
-
-    // Filter by activation rules
-    const matchingFlows = flows.filter(flow => {
-        const rules = flow.activationRules;
-        if (!rules) {
-            console.log(`[DEBUG] Flow ${flow.name} skipped: No activation rules.`);
-            return false;
-        }
-
-        // Check source
-        const sourceMatch = (source === 'meta_ads' && rules.sources.meta_ads) ||
-            (source === 'organic' && rules.sources.organic);
-
-        // Check WhatsApp status
-        const statusMatch = (isAgendado && rules.whatsappStatus.agendado) ||
-            (!isAgendado && rules.whatsappStatus.no_agendado);
-
-        // Check forceRestart if forceOnly is requested
-        if (forceOnly && !rules.forceRestart) return false;
-
-        console.log(`[DEBUG] Checking Flow "${flow.name}": SourceMatch=${sourceMatch} (${source} vs ${JSON.stringify(rules.sources)}), StatusMatch=${statusMatch} (${isAgendado} vs ${JSON.stringify(rules.whatsappStatus)})`);
-
-        return sourceMatch && statusMatch;
     });
 
-    if (matchingFlows.length === 0) {
-        console.log('[DEBUG] No matching flows found after filtering.');
-        return null;
+    // Format message with options
+    function formatMessage(step) {
+        let msg = step.message + '\n\n';
+        step.options.forEach(opt => {
+            msg += `${opt.key}) ${opt.label}\n`;
+        });
+        return msg.trim();
     }
 
-    // Sort by priority (highest first)
-    matchingFlows.sort((a, b) => (b.activationRules?.priority || 0) - (a.activationRules?.priority || 0));
-    console.log(`[DEBUG] Selected flow: "${matchingFlows[0].name}" (Priority ${matchingFlows[0].activationRules?.priority})`);
+    // Select flow based on rules
+    async function selectFlow({ isAgendado, source, forceOnly = false }) {
+        console.log(`[DEBUG] Finding flow for: Source=${source}, Agendado=${isAgendado}, ForceOnly=${forceOnly}`);
 
-    return matchingFlows[0];
-}
+        // DEBUG: Dump ALL flows to see what we have
+        const allFlows = await Flow.find({});
+        console.log(`[DEBUG-CRITICAL] Total Documents in 'flows' collection: ${allFlows.length}`);
+        if (allFlows.length > 0) {
+            console.log('[DEBUG-CRITICAL] First flow in DB:', JSON.stringify(allFlows[0], null, 2));
+        }
 
-// Auto-handoff function
-async function triggerAutoHandoff(conversation, contact, currentStep) {
-    conversation.state = 'paused';
-    conversation.tags.push('auto-handoff');
-    await conversation.save();
+        const flows = await Flow.find({ isActive: true, published: { $ne: null } });
+        console.log(`[DEBUG] Found ${flows.length} ACTIVE & PUBLISHED flows.`);
 
-    // Send message to user
-    const chat = await client.getChatById(conversation.phone + '@c.us');
-    await chat.sendMessage('Un asesor te atenderá en breve. Gracias por tu paciencia. 👤');
+        // Filter by activation rules
+        const matchingFlows = flows.filter(flow => {
+            const rules = flow.activationRules;
+            if (!rules) {
+                console.log(`[DEBUG] Flow ${flow.name} skipped: No activation rules.`);
+                return false;
+            }
 
-    // Send notification to bot itself (admin will see it)
-    const botNumber = client.info.wid.user;
-    const notificationMsg = `🚨 DERIVACIÓN AUTOMÁTICA\n\nContacto: ${conversation.phone}\nNombre: ${contact.name || 'N/A'}\nRazón: Loop detectado (6+ mensajes sin avance)\nÚltimo paso: ${currentStep.title}\n\nRevisar conversación en el panel de admin.`;
+            // Check source
+            const sourceMatch = (source === 'meta_ads' && rules.sources.meta_ads) ||
+                (source === 'organic' && rules.sources.organic);
 
-    try {
-        await client.sendMessage(botNumber + '@c.us', notificationMsg);
-    } catch (e) {
-        console.error('Error sending self-notification:', e);
+            // Check WhatsApp status
+            const statusMatch = (isAgendado && rules.whatsappStatus.agendado) ||
+                (!isAgendado && rules.whatsappStatus.no_agendado);
+
+            // Check forceRestart if forceOnly is requested
+            if (forceOnly && !rules.forceRestart) return false;
+
+            console.log(`[DEBUG] Checking Flow "${flow.name}": SourceMatch=${sourceMatch} (${source} vs ${JSON.stringify(rules.sources)}), StatusMatch=${statusMatch} (${isAgendado} vs ${JSON.stringify(rules.whatsappStatus)})`);
+
+            return sourceMatch && statusMatch;
+        });
+
+        if (matchingFlows.length === 0) {
+            console.log('[DEBUG] No matching flows found after filtering.');
+            return null;
+        }
+
+        // Sort by priority (highest first)
+        matchingFlows.sort((a, b) => (b.activationRules?.priority || 0) - (a.activationRules?.priority || 0));
+        console.log(`[DEBUG] Selected flow: "${matchingFlows[0].name}" (Priority ${matchingFlows[0].activationRules?.priority})`);
+
+        return matchingFlows[0];
     }
 
-    console.log('Auto-handoff triggered for:', conversation.phone);
-}
+    // Auto-handoff function
+    async function triggerAutoHandoff(conversation, contact, currentStep) {
+        conversation.state = 'paused';
+        conversation.tags.push('auto-handoff');
+        await conversation.save();
 
-// Start Express server
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-    console.log(`Bot API running on port ${PORT}`);
-    console.log('Bot state:', botState);
-    console.log('To start bot, POST to /bot/start');
-});
+        // Send message to user
+        const chat = await client.getChatById(conversation.phone + '@c.us');
+        await chat.sendMessage('Un asesor te atenderá en breve. Gracias por tu paciencia. 👤');
+
+        // Send notification to bot itself (admin will see it)
+        const botNumber = client.info.wid.user;
+        const notificationMsg = `🚨 DERIVACIÓN AUTOMÁTICA\n\nContacto: ${conversation.phone}\nNombre: ${contact.name || 'N/A'}\nRazón: Loop detectado (6+ mensajes sin avance)\nÚltimo paso: ${currentStep.title}\n\nRevisar conversación en el panel de admin.`;
+
+        try {
+            await client.sendMessage(botNumber + '@c.us', notificationMsg);
+        } catch (e) {
+            console.error('Error sending self-notification:', e);
+        }
+
+        console.log('Auto-handoff triggered for:', conversation.phone);
+    }
+
+    // Start Express server
+    const PORT = process.env.PORT || 4000;
+    app.listen(PORT, () => {
+        console.log(`Bot API running on port ${PORT}`);
+        console.log('Bot state:', botState);
+        console.log('To start bot, POST to /bot/start');
+    });
