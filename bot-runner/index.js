@@ -302,7 +302,12 @@ async function startBot() {
                 // Check for Force Restart Flows even if conversation exists
                 const chatContact = await msg.getContact();
                 const isAgendado = chatContact.isMyContact;
-                const forcingFlow = await selectFlow({ isAgendado, source: contact.source, forceOnly: true });
+                const forcingFlow = await selectFlow({
+                    isAgendado,
+                    source: contact.source,
+                    forceOnly: true,
+                    body: msg.body
+                });
 
                 if (forcingFlow) {
                     console.log(`[TRACE] ⚡ FORCE RESTART by flow: "${forcingFlow.name}"`);
@@ -365,10 +370,15 @@ async function startBot() {
             const response = formatMessage(currentStep);
             const chat = await msg.getChat();
 
-            await sendTyping(chat);
-            await randomDelay(1000, 500);
-            console.log(`[TRACE] 📤 Sending: "${response.replace(/\n/g, ' ')}"`);
-            await chat.sendMessage(response);
+            try {
+                await sendTyping(chat);
+                await randomDelay(1000, 500);
+                console.log(`[TRACE] 📤 Sending: "${response.replace(/\n/g, ' ')}"`);
+                await chat.sendMessage(response);
+            } catch (error) {
+                console.error('[ERROR] Failed to send message:', error);
+                await chat.clearStateTyping();
+            }
 
             // Update state
             conversation.loopDetection.messagesInCurrentStep = 1;
@@ -402,7 +412,14 @@ async function startBot() {
         if (!nextStepId) {
             console.log(`[TRACE] ⚠️ No option matched for input "${input}".`);
             const chat = await msg.getChat();
-            await chat.sendMessage(`No entendí esa opción. Por favor elegí una de las opciones válidas (ej: A).`);
+            try {
+                await sendTyping(chat); // Optional: type before error
+                await randomDelay(500, 200);
+                await chat.sendMessage(`No entendí esa opción. Por favor elegí una de las opciones válidas (ej: A).`);
+            } catch (err) {
+                console.error('Error sending fallback:', err);
+                await chat.clearStateTyping();
+            }
             return;
         }
 
@@ -426,10 +443,16 @@ async function startBot() {
         // Send the message for the NEW step immediately
         const response = formatMessage(nextStep);
         const chat = await msg.getChat();
-        await sendTyping(chat);
-        await randomDelay(1000, 500);
-        console.log(`[TRACE] 📤 Sending: "${response.replace(/\n/g, ' ')}"`);
-        await chat.sendMessage(response);
+
+        try {
+            await sendTyping(chat);
+            await randomDelay(1000, 500);
+            console.log(`[TRACE] 📤 Sending: "${response.replace(/\n/g, ' ')}"`);
+            await chat.sendMessage(response);
+        } catch (e) {
+            console.error('[ERROR] Failed to send transition message:', e);
+            await chat.clearStateTyping();
+        }
 
         // Mark that we sent the message for this step
         conversation.loopDetection.messagesInCurrentStep = 1;
@@ -450,26 +473,23 @@ function formatMessage(step) {
 }
 
 // Select flow based on rules
-async function selectFlow({ isAgendado, source, forceOnly = false }) {
-    console.log(`[DEBUG] Finding flow for: Source=${source}, Agendado=${isAgendado}, ForceOnly=${forceOnly}`);
+async function selectFlow({ isAgendado, source, forceOnly = false, body = '' }) {
+    console.log(`[DEBUG] Finding flow for: Source=${source}, Agendado=${isAgendado}, ForceOnly=${forceOnly}, Body="${body}"`);
 
     // DEBUG: Dump ALL flows to see what we have
     const allFlows = await Flow.find({});
-    console.log(`[DEBUG-CRITICAL] Total Documents in 'flows' collection: ${allFlows.length}`);
-    if (allFlows.length > 0) {
-        console.log('[DEBUG-CRITICAL] First flow in DB:', JSON.stringify(allFlows[0], null, 2));
-    }
+    // console.log(`[DEBUG-CRITICAL] Total Documents in 'flows' collection: ${allFlows.length}`);
 
     const flows = await Flow.find({ isActive: true, published: { $ne: null } });
-    console.log(`[DEBUG] Found ${flows.length} ACTIVE & PUBLISHED flows.`);
+    // console.log(`[DEBUG] Found ${flows.length} ACTIVE & PUBLISHED flows.`);
+
+    // Activation keywords (hardcoded for now to prevent infinite loops)
+    const RESTART_KEYWORDS = ['hola', 'menu', 'inicio', 'empezar', 'reset'];
 
     // Filter by activation rules
     const matchingFlows = flows.filter(flow => {
         const rules = flow.activationRules;
-        if (!rules) {
-            console.log(`[DEBUG] Flow ${flow.name} skipped: No activation rules.`);
-            return false;
-        }
+        if (!rules) return false;
 
         // Check source
         const sourceMatch = (source === 'meta_ads' && rules.sources.meta_ads) ||
@@ -480,9 +500,19 @@ async function selectFlow({ isAgendado, source, forceOnly = false }) {
             (!isAgendado && rules.whatsappStatus.no_agendado);
 
         // Check forceRestart if forceOnly is requested
-        if (forceOnly && !rules.forceRestart) return false;
+        if (forceOnly) {
+            if (!rules.forceRestart) return false;
 
-        console.log(`[DEBUG] Checking Flow "${flow.name}": SourceMatch=${sourceMatch} (${source} vs ${JSON.stringify(rules.sources)}), StatusMatch=${statusMatch} (${isAgendado} vs ${JSON.stringify(rules.whatsappStatus)})`);
+            // CRITICAL FIX: Only allow force restart if message matches a keyword
+            // This prevents "Every message restarts the flow" loops.
+            const cleanBody = body.trim().toLowerCase();
+            const isKeyword = RESTART_KEYWORDS.some(k => cleanBody === k || cleanBody.startsWith(k + ' '));
+
+            if (!isKeyword) {
+                console.log(`[DEBUG] Force restart ignored for "${flow.name}" - message "${cleanBody}" is not a keyword.`);
+                return false;
+            }
+        }
 
         return sourceMatch && statusMatch;
     });
