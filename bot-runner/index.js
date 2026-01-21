@@ -485,8 +485,16 @@ function formatMessage(step) {
 // Select flow based on rules
 async function selectFlow({ isAgendado, source, forceOnly = false }) {
     console.log(`[DEBUG] Finding flow for: Source=${source}, Agendado=${isAgendado}, ForceOnly=${forceOnly}`);
+
+    // DEBUG: Dump ALL flows to see what we have
+    const allFlows = await Flow.find({});
+    console.log(`[DEBUG-CRITICAL] Total Documents in 'flows' collection: ${allFlows.length}`);
+    if (allFlows.length > 0) {
+        console.log('[DEBUG-CRITICAL] First flow in DB:', JSON.stringify(allFlows[0], null, 2));
+    }
+
     const flows = await Flow.find({ isActive: true, published: { $ne: null } });
-    console.log(`[DEBUG] Found ${flows.length} active published flows in DB.`);
+    console.log(`[DEBUG] Found ${flows.length} ACTIVE & PUBLISHED flows.`);
 
     // Filter by activation rules
     const matchingFlows = flows.filter(flow => {

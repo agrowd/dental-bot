@@ -25,16 +25,25 @@ const getNextKey = (options: StepOption[]): string => {
 export default function FlowEditorPage() {
     const params = useParams();
     const flowId = params.flowId as string;
-    const flowData = mockFlows.find(f => f.id === flowId) || mockFlows[0];
+
+    // State
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [publishing, setPublishing] = useState(false);
 
     const [activeTab, setActiveTab] = useState<TabType>('steps');
-    const [flowName, setFlowName] = useState(flowData.name);
-    const [flowDescription, setFlowDescription] = useState(flowData.description || '');
-    const [activationRules, setActivationRules] = useState<ActivationRules>(flowData.activationRules);
-    const [isActive, setIsActive] = useState(flowData.isActive);
-    const [steps, setSteps] = useState<Record<string, FlowStep>>(flowData.draft.steps);
-    const [selectedStepId, setSelectedStepId] = useState<string>(flowData.draft.entryStepId);
-    const [entryStepId, setEntryStepId] = useState<string>(flowData.draft.entryStepId);
+    const [flowName, setFlowName] = useState('');
+    const [flowDescription, setFlowDescription] = useState('');
+    const [activationRules, setActivationRules] = useState<ActivationRules>({
+        sources: { meta_ads: false, organic: true },
+        whatsappStatus: { agendado: false, no_agendado: true },
+        priority: 1,
+        forceRestart: false
+    });
+    const [isActive, setIsActive] = useState(true);
+    const [steps, setSteps] = useState<Record<string, FlowStep>>({});
+    const [selectedStepId, setSelectedStepId] = useState<string>('');
+    const [entryStepId, setEntryStepId] = useState<string>('');
     const [hasChanges, setHasChanges] = useState(false);
     const [showToast, setShowToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
     const [showNewStepModal, setShowNewStepModal] = useState(false);
@@ -42,6 +51,38 @@ export default function FlowEditorPage() {
 
     const selectedStep = steps[selectedStepId];
     const stepIds = Object.keys(steps);
+
+    // Initial Fetch
+    useEffect(() => {
+        fetchFlowData();
+    }, [flowId]);
+
+    const fetchFlowData = async () => {
+        try {
+            const res = await fetch(`/api/flows/${flowId}`);
+            if (!res.ok) throw new Error('Flow not found');
+            const data = await res.json();
+            const flow = data.flow;
+
+            setFlowName(flow.name);
+            setFlowDescription(flow.description || '');
+            setActivationRules(flow.activationRules || {
+                sources: { meta_ads: false, organic: true },
+                whatsappStatus: { agendado: false, no_agendado: true },
+                priority: 1,
+                forceRestart: false
+            });
+            setIsActive(flow.isActive);
+            setSteps(flow.draft.steps || {});
+            setEntryStepId(flow.draft.entryStepId || '');
+            setSelectedStepId(flow.draft.entryStepId || Object.keys(flow.draft.steps)[0] || '');
+        } catch (error) {
+            console.error('Error loading flow:', error);
+            setShowToast({ type: 'error', message: 'Error cargando el flujo' });
+        } finally {
+            setLoading(false);
+        }
+    };
 
     useEffect(() => {
         if (showToast) {
@@ -209,6 +250,10 @@ export default function FlowEditorPage() {
         return preview;
     };
 
+    if (loading) {
+        return <div className="p-8 text-center bg-slate-50 min-h-screen">Cargando flujo...</div>;
+    }
+
     return (
         <div className="animate-fadeIn h-[calc(100vh-64px)] flex flex-col">
             {/* Header */}
@@ -221,15 +266,19 @@ export default function FlowEditorPage() {
                     </Link>
                     <div>
                         <div className="flex items-center gap-3">
-                            <h1 className="text-xl font-bold text-slate-900">{flowName}</h1>
+                            <h1 className="text-xl font-bold text-slate-900">{flowName || 'Nuevo Flujo'}</h1>
                             {hasChanges && <span className="badge badge-warning">Sin guardar</span>}
                             {isActive ? <span className="badge badge-success">Activo</span> : <span className="badge badge-neutral">Inactivo</span>}
                         </div>
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
-                    <button onClick={handleSave} className="btn btn-secondary">Guardar</button>
-                    <button onClick={handlePublish} className="btn btn-success">Publicar</button>
+                    <button onClick={handleSave} disabled={saving} className="btn btn-secondary">
+                        {saving ? 'Guardando...' : 'Guardar'}
+                    </button>
+                    <button onClick={handlePublish} disabled={publishing} className="btn btn-success">
+                        {publishing ? 'Publicando...' : 'Publicar'}
+                    </button>
                 </div>
             </div>
 
