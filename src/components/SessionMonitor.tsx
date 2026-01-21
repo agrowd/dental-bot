@@ -7,6 +7,7 @@ export default function SessionMonitor() {
     const router = useRouter();
     const [timeLeft, setTimeLeft] = useState<number | null>(null);
     const [showWarning, setShowWarning] = useState(false);
+    const [warningDismissed, setWarningDismissed] = useState(false);
 
     useEffect(() => {
         const checkSession = () => {
@@ -31,9 +32,12 @@ export default function SessionMonitor() {
                 router.push('/login');
             } else if (diff < 120 * 1000) { // Less than 2 minutes
                 setTimeLeft(Math.floor(diff / 1000));
-                setShowWarning(true);
+                if (!warningDismissed) {
+                    setShowWarning(true);
+                }
             } else {
                 setShowWarning(false);
+                setWarningDismissed(false); // Reset if session extended/refreshed
             }
         };
 
@@ -42,7 +46,7 @@ export default function SessionMonitor() {
         checkSession(); // Initial check
 
         return () => clearInterval(timer);
-    }, [router]);
+    }, [router, warningDismissed]);
 
     if (!showWarning || timeLeft === null) return null;
 
@@ -62,7 +66,10 @@ export default function SessionMonitor() {
                             Guardá tus cambios.
                         </p>
                         <button
-                            onClick={() => setShowWarning(false)}
+                            onClick={() => {
+                                setShowWarning(false);
+                                setWarningDismissed(true);
+                            }}
                             className="w-full btn btn-secondary text-sm"
                         >
                             Entendido
