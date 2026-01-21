@@ -150,14 +150,54 @@ export default function FlowEditorPage() {
         updateStep('options', reKeyed);
     };
 
-    const handleSave = () => {
-        setHasChanges(false);
-        setShowToast({ type: 'success', message: 'Cambios guardados' });
+    const handleSave = async () => {
+        const payload = {
+            name: flowName,
+            description: flowDescription,
+            activationRules, // Check if this is correct
+            draft: { steps, entryStepId },
+            isActive
+        };
+        console.log('[DEBUG-FRONTEND] Saving flow payload:', JSON.stringify(payload, null, 2));
+
+        try {
+            const res = await fetch(`/api/flows/${flowId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            console.log('[DEBUG-FRONTEND] Save response:', data);
+
+            if (res.ok) {
+                setHasChanges(false);
+                setShowToast({ type: 'success', message: 'Cambios guardados' });
+            } else {
+                setShowToast({ type: 'error', message: 'Error al guardar' });
+            }
+        } catch (e) {
+            console.error('[DEBUG-FRONTEND] Save error:', e);
+            setShowToast({ type: 'error', message: 'Error de conexión' });
+        }
     };
 
-    const handlePublish = () => {
-        setHasChanges(false);
-        setShowToast({ type: 'success', message: '¡Flujo publicado!' });
+    const handlePublish = async () => {
+        console.log('[DEBUG-FRONTEND] Publishing flow:', flowId);
+        try {
+            const res = await fetch(`/api/flows/${flowId}/publish`, { method: 'POST' });
+            const data = await res.json();
+            console.log('[DEBUG-FRONTEND] Publish response:', data);
+
+            if (res.ok) {
+                setHasChanges(false);
+                setShowToast({ type: 'success', message: '¡Flujo publicado!' });
+            } else {
+                setShowToast({ type: 'error', message: 'Error al publicar' });
+            }
+        } catch (e) {
+            console.error('[DEBUG-FRONTEND] Publish error:', e);
+            setShowToast({ type: 'error', message: 'Error de conexión' });
+        }
     };
 
     // Generate preview text

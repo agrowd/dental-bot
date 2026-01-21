@@ -462,11 +462,17 @@ function formatMessage(step) {
 
 // Select flow based on rules
 async function selectFlow({ isAgendado, source, forceOnly = false }) {
+    console.log(`[DEBUG] Finding flow for: Source=${source}, Agendado=${isAgendado}, ForceOnly=${forceOnly}`);
     const flows = await Flow.find({ isActive: true, published: { $ne: null } });
+    console.log(`[DEBUG] Found ${flows.length} active published flows in DB.`);
 
     // Filter by activation rules
     const matchingFlows = flows.filter(flow => {
         const rules = flow.activationRules;
+        if (!rules) {
+            console.log(`[DEBUG] Flow ${flow.name} skipped: No activation rules.`);
+            return false;
+        }
 
         // Check source
         const sourceMatch = (source === 'meta_ads' && rules.sources.meta_ads) ||
@@ -479,13 +485,19 @@ async function selectFlow({ isAgendado, source, forceOnly = false }) {
         // Check forceRestart if forceOnly is requested
         if (forceOnly && !rules.forceRestart) return false;
 
+        console.log(`[DEBUG] Checking Flow "${flow.name}": SourceMatch=${sourceMatch} (${source} vs ${JSON.stringify(rules.sources)}), StatusMatch=${statusMatch} (${isAgendado} vs ${JSON.stringify(rules.whatsappStatus)})`);
+
         return sourceMatch && statusMatch;
     });
 
-    if (matchingFlows.length === 0) return null;
+    if (matchingFlows.length === 0) {
+        console.log('[DEBUG] No matching flows found after filtering.');
+        return null;
+    }
 
     // Sort by priority (highest first)
-    matchingFlows.sort((a, b) => b.activationRules.priority - a.activationRules.priority);
+    matchingFlows.sort((a, b) => (b.activationRules?.priority || 0) - (a.activationRules?.priority || 0));
+    console.log(`[DEBUG] Selected flow: "${matchingFlows[0].name}" (Priority ${matchingFlows[0].activationRules?.priority})`);
 
     return matchingFlows[0];
 }
