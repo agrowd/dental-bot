@@ -452,7 +452,9 @@ async function startBot() {
             messagesInCurrentStep: 0, // Reset for new step
             lastStepChangeAt: new Date()
         };
+        conversation.markModified('loopDetection');
         await conversation.save();
+        console.log(`[TRACE] ✅ Step UPDATED to ${nextStepId} for ${conversation._id}`);
 
         // Send the message for the NEW step immediately
         const response = formatMessage(nextStep);
@@ -474,7 +476,9 @@ async function startBot() {
 
         // Mark that we sent the message for this step
         conversation.loopDetection.messagesInCurrentStep = 1;
+        conversation.markModified('loopDetection');
         await conversation.save();
+        console.log(`[TRACE] ✅ State UPDATED: messagesInCurrentStep = 1 (after transition) for ${conversation._id}`);
     }
 
     await client.initialize();
