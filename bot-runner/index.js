@@ -528,4 +528,7 @@ app.listen(PORT, () => {
     console.log(`Bot API running on port ${PORT}`);
     console.log('Bot state:', botState);
     console.log('To start bot, POST to /bot/start');
+
+    // Auto-start bot on server launch
+    startBot();
 });
