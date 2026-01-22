@@ -24,11 +24,13 @@ const FlowSchema = new mongoose.Schema({}, { strict: false });
 const ContactSchema = new mongoose.Schema({}, { strict: false });
 const ConversationSchema = new mongoose.Schema({}, { strict: false });
 const MessageSchema = new mongoose.Schema({}, { strict: false });
+const SettingSchema = new mongoose.Schema({}, { strict: false });
 
 const Flow = mongoose.model('Flow', FlowSchema);
 const Contact = mongoose.model('Contact', ContactSchema);
 const Conversation = mongoose.model('Conversation', ConversationSchema);
 const Message = mongoose.model('Message', MessageSchema);
+const Setting = mongoose.model('Setting', SettingSchema);
 
 // Bot state
 let botState = 'disconnected'; // disconnected | connecting | connected | error
@@ -253,6 +255,42 @@ async function startBot() {
                 await contact.save();
                 console.log(`[TRACE] Existing contact found: ${phone}. Status: ${contact.status}`);
             }
+
+            // --- BUSINESS HOURS CHECK ---
+            const businessHours = await Setting.findOne({ key: 'business_hours' });
+            if (businessHours && businessHours.value.enabled) {
+                const isClosed = !isWithinBusinessHours(businessHours.value.schedule);
+                if (isClosed) {
+                    console.log(`[TRACE] 🌙 CLINIC CLOSED. Checking if we should send out-of-office message.`);
+
+                    // Only send if it's been more than 4 hours since last message or it's a new contact
+                    const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000);
+                    const lastMsg = await Message.findOne({ phone }).sort({ timestamp: -1 });
+
+                    if (!lastMsg || lastMsg.timestamp < fourHoursAgo) {
+                        const chat = await msg.getChat();
+                        await sendTyping(chat);
+                        await randomDelay(2000, 1000);
+                        await chat.sendMessage(businessHours.value.closedMessage || 'Estamos fuera de horario de atención.');
+                        console.log(`[TRACE] ✅ Out-of-office message sent to ${phone}`);
+
+                        // Save the outbound message
+                        await Message.create({
+                            phone,
+                            text: businessHours.value.closedMessage,
+                            direction: 'outbound',
+                            timestamp: new Date()
+                        });
+                    } else {
+                        console.log(`[TRACE] Skipping out-of-office message (already sent recently).`);
+                    }
+                    // We DON'T return here because we might still want to process the flow 
+                    // (e.g. if they want to leave a query), but usually we stop or let it continue.
+                    // The user said "registramos tu consulta y te contactaremos mañana", 
+                    // so it's better to let the flow proceed so they can leave data.
+                }
+            }
+            // ----------------------------
 
             // Find active conversation
             let conversation = await Conversation.findOne({ phone, state: 'active' });
@@ -561,6 +599,29 @@ async function selectFlow({ isAgendado, source, forceOnly = false, body = '' }) 
     console.log(`[DEBUG] Selected flow: "${matchingFlows[0].name}" (Priority ${matchingFlows[0].activationRules?.priority})`);
 
     return matchingFlows[0];
+}
+
+// Check if current time is within business hours
+function isWithinBusinessHours(schedule) {
+    if (!schedule) return true;
+
+    const now = new Date();
+    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const currentDay = days[now.getDay()];
+    const dayConfig = schedule[currentDay];
+
+    if (!dayConfig || !dayConfig.active) {
+        return false;
+    }
+
+    const [openH, openM] = dayConfig.open.split(':').map(Number);
+    const [closeH, closeM] = dayConfig.close.split(':').map(Number);
+
+    const currentTimeMinutes = now.getHours() * 60 + now.getMinutes();
+    const openTimeMinutes = openH * 60 + openM;
+    const closeTimeMinutes = closeH * 60 + closeM;
+
+    return currentTimeMinutes >= openTimeMinutes && currentTimeMinutes <= closeTimeMinutes;
 }
 
 // Auto-handoff function
