@@ -52,17 +52,17 @@ export default function ConversationsPage() {
     }
 
     const getStateBadge = (state: ConversationState) => {
-        const badges = {
-            active: 'badge-success',
-            paused: 'badge-warning',
-            closed: 'badge-neutral'
+        const badges: Record<ConversationState, string> = {
+            active: 'bg-green-600 text-white shadow-sm ring-1 ring-green-900/10',
+            paused: 'bg-orange-500 text-white shadow-sm ring-1 ring-orange-900/10',
+            closed: 'bg-slate-400 text-white shadow-sm'
         };
-        const labels = {
-            active: '🟢 Activo',
-            paused: '⏸️ Pausado',
-            closed: '⚫ Cerrado'
+        const labels: Record<ConversationState, string> = {
+            active: '🟢 BOT (Activo)',
+            paused: '👤 Derivado con Personal',
+            closed: 'Cerrado'
         };
-        return <span className={`badge ${badges[state]} whitespace-nowrap`}>{labels[state]}</span>;
+        return <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${badges[state]} whitespace-nowrap`}>{labels[state]}</span>;
     };
 
     if (loading) {

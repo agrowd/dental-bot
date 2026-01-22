@@ -709,15 +709,59 @@ function isWithinBusinessHours(schedule) {
     return currentTimeMinutes >= openTimeMinutes && currentTimeMinutes <= closeTimeMinutes;
 }
 
+// Helper to sync WhatsApp Business Labels
+async function syncWhatsAppLabel(chat, labelName) {
+    try {
+        if (!client.info || !client.info.isBusiness) {
+            // Only works on WhatsApp Business accounts
+            return;
+        }
+
+        const labels = await client.getLabels();
+        let targetLabel = labels.find(l => l.name === labelName);
+
+        if (!targetLabel) {
+            console.log(`[TRACE] 🏷️ Label "${labelName}" not found in WhatsApp Business.`);
+            // We can't create labels via the library easily yet, 
+            // but we can try to find one that is close or skip.
+            return;
+        }
+
+        // Get current labels of the chat
+        const chatLabels = await chat.getLabels();
+
+        // Remove other status labels to avoid clutter
+        const statusLabels = ['BOT', 'Derivado con Personal'];
+        for (const cl of chatLabels) {
+            if (statusLabels.includes(cl.name) && cl.name !== labelName) {
+                await chat.removeLabel(cl.id);
+            }
+        }
+
+        // Add target label if not already present
+        if (!chatLabels.find(cl => cl.id === targetLabel.id)) {
+            await chat.addLabel(targetLabel.id);
+            console.log(`[TRACE] 🏷️ Applied label "${labelName}" to chat ${chat.id.user}`);
+        }
+    } catch (err) {
+        console.error(`[ERROR] Failed to sync labels for ${chat.id.user}:`, err);
+    }
+}
+
 // Auto-handoff function
 async function triggerAutoHandoff(conversation, contact, currentStep) {
     conversation.state = 'paused';
-    conversation.tags.push('auto-handoff');
+    if (!conversation.tags.includes('auto-handoff')) {
+        conversation.tags.push('auto-handoff');
+    }
     await conversation.save();
 
     // Send message to user
     const chat = await client.getChatById(conversation.phone + '@c.us');
     await chat.sendMessage('Un asesor te atenderá en breve. Gracias por tu paciencia. 👤');
+
+    // WhatsApp Labels Sync
+    await syncWhatsAppLabel(chat, 'Derivado con Personal');
 
     // Send notification to bot itself (admin will see it)
     const botNumber = client.info.wid.user;
