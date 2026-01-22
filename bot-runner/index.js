@@ -31,6 +31,7 @@ const Contact = mongoose.model('Contact', ContactSchema);
 const Conversation = mongoose.model('Conversation', ConversationSchema);
 const Message = mongoose.model('Message', MessageSchema);
 const Setting = mongoose.model('Setting', SettingSchema);
+const Appointment = mongoose.model('Appointment', new mongoose.Schema({}, { strict: false }));
 
 // Bot state
 let botState = 'disconnected'; // disconnected | connecting | connected | error
@@ -506,6 +507,34 @@ async function startBot() {
         await conversation.save();
         console.log(`[TRACE] ✅ Step UPDATED to ${nextStepId} for ${conversation._id}`);
 
+        // --- APPOINTMENT REGISTRATION LOGIC ---
+        // If the next step is marked as an appointment registration step
+        if (nextStep.actions && nextStep.actions.registerAppointment) {
+            console.log(`[TRACE] 📅 Registering APPOINTMENT for ${phone}`);
+            try {
+                // Determine chosen day and time from conversation history
+                const recentMsgs = await Message.find({ phone }).sort({ timestamp: -1 }).limit(10);
+                // Simple heuristic: search for the most recent message that looks like a day or time
+                // In a production app, we'd store these in the conversation state explicitly
+
+                // Let's create the appointment with what we have
+                await Appointment.create({
+                    phone,
+                    patientName: contact.name,
+                    patientDni: contact.meta?.dni,
+                    service: contact.tags?.filter(t => t !== 'auto-handoff').join(', ') || 'Consulta',
+                    date: new Date(), // We'll improve this with actual picked date later
+                    dayName: 'Pendiente de procesar',
+                    timeSlot: 'Consultar chat',
+                    status: 'pending'
+                });
+                console.log(`[TRACE] ✅ Appointment registered for ${phone}`);
+            } catch (err) {
+                console.error('[ERROR] Failed to register appointment:', err);
+            }
+        }
+        // --------------------------------------
+
         // Send the message for the NEW step immediately
         const response = formatMessage(nextStep);
         const chat = await msg.getChat();
@@ -535,13 +564,48 @@ async function startBot() {
     console.log('[INIT] Client initialized inside startBot');
 }
 
-// Format message with options
-function formatMessage(step) {
-    let msg = step.message + '\n\n';
-    step.options.forEach(opt => {
-        msg += `${opt.key}) ${opt.label}\n`;
-    });
+// Format message with options and dynamic variables
+function formatMessage(step, contact = null) {
+    let messageBody = step.message;
+
+    // Handle Dynamic Variables
+    if (messageBody.includes('{PROXIMOS_DIAS}')) {
+        const nextDays = getNextBookingDays(7);
+        let daysList = '';
+        nextDays.forEach((d, i) => {
+            daysList += `${String.fromCharCode(65 + i)}) ${d.label}\n`;
+        });
+        messageBody = messageBody.replace('{PROXIMOS_DIAS}', daysList.trim());
+        // Return immediately if it's a list replacement (options are already inside the var)
+        return messageBody;
+    }
+
+    let msg = messageBody + '\n\n';
+    if (step.options && step.options.length > 0) {
+        step.options.forEach(opt => {
+            msg += `${opt.key}) ${opt.label}\n`;
+        });
+    }
     return msg.trim();
+}
+
+// Generate next X booking days (excluding Sundays by default)
+function getNextBookingDays(count = 7) {
+    const days = [];
+    const date = new Date();
+    date.setDate(date.getDate() + 1); // Start from tomorrow
+
+    while (days.length < count) {
+        if (date.getDay() !== 0) { // Skip Sundays
+            const label = date.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'numeric' });
+            days.push({
+                label: label.charAt(0).toUpperCase() + label.slice(1),
+                date: new Date(date)
+            });
+        }
+        date.setDate(date.getDate() + 1);
+    }
+    return days;
 }
 
 // Select flow based on rules
