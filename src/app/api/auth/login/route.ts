@@ -62,16 +62,16 @@ export async function POST(req: NextRequest) {
             httpOnly: true,
             secure: false, // Changed for HTTP VPS
             sameSite: 'lax',
-            maxAge: 30 * 60, // 30 minutes
+            maxAge: 86400, // 24 hours
             path: '/',
         });
 
         // Set client-readable expiry cookie
-        response.cookies.set('session-expiry', (Date.now() + 30 * 60 * 1000).toString(), {
+        response.cookies.set('session-expiry', (Date.now() + 86400 * 1000).toString(), {
             httpOnly: false, // Client can read
             secure: false, // Changed for HTTP VPS
             sameSite: 'lax',
-            maxAge: 30 * 60,
+            maxAge: 86400,
             path: '/',
         });
 

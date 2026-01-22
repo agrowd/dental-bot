@@ -91,6 +91,19 @@ export default function FlowEditorPage() {
         }
     }, [showToast]);
 
+    // Handle auto-save from session monitor or logout
+    useEffect(() => {
+        const handleAutoSave = () => {
+            if (hasChanges) {
+                console.log('[SESSION] Auto-saving flow due to external request...');
+                handleSave();
+            }
+        };
+
+        window.addEventListener('save-request', handleAutoSave);
+        return () => window.removeEventListener('save-request', handleAutoSave);
+    }, [hasChanges, flowName, steps, entryStepId, activationRules, isActive]); // Dependencies must cover handleSave needs
+
     // Create new step
     const handleCreateStep = () => {
         if (!newStepTitle.trim()) return;
