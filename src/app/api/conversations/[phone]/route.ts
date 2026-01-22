@@ -5,9 +5,9 @@ import Conversation from '@/lib/models/Conversation';
 import Message from '@/lib/models/Message';
 
 interface RouteParams {
-    params: {
+    params: Promise<{
         phone: string;
-    }
+    }>;
 }
 
 // GET /api/conversations/[phone] - Get details and messages
@@ -16,7 +16,8 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
         await requireAuth(req);
         await dbConnect();
 
-        const phone = decodeURIComponent(params.phone);
+        const { phone: rawPhone } = await params;
+        const phone = decodeURIComponent(rawPhone);
 
         // Find the most recent active or paused conversation, or just the latest one
         const conversation = await Conversation.findOne({ phone }).sort({ updatedAt: -1 });
@@ -62,7 +63,8 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
         await requireAuth(req);
         await dbConnect();
 
-        const phone = decodeURIComponent(params.phone);
+        const { phone: rawPhone } = await params;
+        const phone = decodeURIComponent(rawPhone);
         const body = await req.json();
         const { state } = body;
 
@@ -110,7 +112,8 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
         await requireAuth(req);
         await dbConnect();
 
-        const phone = decodeURIComponent(params.phone);
+        const { phone: rawPhone } = await params;
+        const phone = decodeURIComponent(rawPhone);
 
         // Option A: Hard delete
         // await Conversation.deleteMany({ phone });
