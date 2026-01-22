@@ -74,10 +74,13 @@ export default function FlowEditorPage() {
                 forceRestart: false
             });
             setIsActive(flow.isActive);
-            setFallbackMessage(flow.draft.fallbackMessage || 'No entendí esa opción. Por favor elegí una de las opciones válidas (ej: A).');
-            setSteps(flow.draft.steps || {});
-            setEntryStepId(flow.draft.entryStepId || '');
-            setSelectedStepId(flow.draft.entryStepId || Object.keys(flow.draft.steps)[0] || '');
+
+            // Use draft data if available, otherwise fallback to published or empty
+            const sourceData = flow.draft || flow.published || {};
+            setFallbackMessage(sourceData.fallbackMessage || 'No entendí esa opción. Por favor elegí una de las opciones válidas (ej: A).');
+            setSteps(sourceData.steps || {});
+            setEntryStepId(sourceData.entryStepId || '');
+            setSelectedStepId(sourceData.entryStepId || (sourceData.steps ? Object.keys(sourceData.steps)[0] : '') || '');
         } catch (error) {
             console.error('Error loading flow:', error);
             setShowToast({ type: 'error', message: 'Error cargando el flujo' });
