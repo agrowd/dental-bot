@@ -422,10 +422,22 @@ async function startBot() {
         if (!nextStepId) {
             console.log(`[TRACE] ⚠️ No option matched for input "${input}".`);
             const chat = await msg.getChat();
+
+            // Get custom fallback message from flow if available
+            let fallbackMsg = 'No entendí esa opción. Por favor elegí una de las opciones válidas (ej: A).';
             try {
-                await sendTyping(chat); // Optional: type before error
+                const flow = await Flow.findById(conversation.flowId || conversation.currentFlowId);
+                if (flow && flow.published && flow.published.fallbackMessage) {
+                    fallbackMsg = flow.published.fallbackMessage;
+                }
+            } catch (e) {
+                console.warn('[WARN] Could not fetch custom fallback message, using default.');
+            }
+
+            try {
+                await sendTyping(chat);
                 await randomDelay(500, 200);
-                await chat.sendMessage(`No entendí esa opción. Por favor elegí una de las opciones válidas (ej: A).`);
+                await chat.sendMessage(fallbackMsg);
             } catch (err) {
                 if (err.message && err.message.includes('markedUnread')) {
                     console.warn('[WARN] Ignored known "markedUnread" error on fallback.');

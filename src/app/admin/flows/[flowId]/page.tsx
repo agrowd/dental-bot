@@ -41,6 +41,7 @@ export default function FlowEditorPage() {
         forceRestart: false
     });
     const [isActive, setIsActive] = useState(true);
+    const [fallbackMessage, setFallbackMessage] = useState('');
     const [steps, setSteps] = useState<Record<string, FlowStep>>({});
     const [selectedStepId, setSelectedStepId] = useState<string>('');
     const [entryStepId, setEntryStepId] = useState<string>('');
@@ -73,6 +74,7 @@ export default function FlowEditorPage() {
                 forceRestart: false
             });
             setIsActive(flow.isActive);
+            setFallbackMessage(flow.draft.fallbackMessage || 'No entendí esa opción. Por favor elegí una de las opciones válidas (ej: A).');
             setSteps(flow.draft.steps || {});
             setEntryStepId(flow.draft.entryStepId || '');
             setSelectedStepId(flow.draft.entryStepId || Object.keys(flow.draft.steps)[0] || '');
@@ -209,7 +211,7 @@ export default function FlowEditorPage() {
             name: flowName,
             description: flowDescription,
             activationRules, // Check if this is correct
-            draft: { steps, entryStepId },
+            draft: { steps, entryStepId, fallbackMessage },
             isActive
         };
         console.log('[DEBUG-FRONTEND] Saving flow payload:', JSON.stringify(payload, null, 2));
@@ -408,6 +410,20 @@ export default function FlowEditorPage() {
                                     </p>
                                 </div>
                             </label>
+                        </div>
+
+                        {/* Fallback Message Setting */}
+                        <div className="card p-4">
+                            <h3 className="font-medium text-slate-900 mb-2">Mensaje de "Opción no válida"</h3>
+                            <p className="text-xs text-slate-500 mb-3">
+                                Este mensaje se enviará automáticamente si el usuario escribe algo que no coincide con las opciones del paso actual.
+                            </p>
+                            <textarea
+                                value={fallbackMessage}
+                                onChange={(e) => { setFallbackMessage(e.target.value); setHasChanges(true); }}
+                                className="input min-h-[100px] w-full text-sm"
+                                placeholder="Ej: No entendí esa opción. Por favor elegí una de las opciones válidas (ej: A)."
+                            />
                         </div>
                     </div>
                 </div>

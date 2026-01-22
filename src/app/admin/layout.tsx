@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { ReactNode } from 'react';
 import SessionMonitor from '@/components/SessionMonitor';
 
@@ -71,6 +71,7 @@ const navigation: NavItem[] = [
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
     const pathname = usePathname();
+    const router = useRouter();
 
     return (
         <div className="min-h-screen flex bg-[var(--background)]">

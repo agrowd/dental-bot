@@ -56,10 +56,12 @@ export interface FlowDocument {
   activationRules: ActivationRules;
   draft: {
     entryStepId: string;
+    fallbackMessage?: string;
     steps: Record<string, FlowStep>;
   };
   published: {
     entryStepId: string;
+    fallbackMessage?: string;
     steps: Record<string, FlowStep>;
   } | null;
   publishedVersion: number;

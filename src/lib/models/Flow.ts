@@ -40,6 +40,7 @@ const FlowStepSchema = new Schema<FlowStep>({
 
 const FlowContentSchema = new Schema({
     entryStepId: String,
+    fallbackMessage: { type: String, default: 'No entendí esa opción. Por favor elegí una de las opciones válidas (ej: A).' },
     steps: { type: Map, of: FlowStepSchema },
 }, { _id: false });
 
