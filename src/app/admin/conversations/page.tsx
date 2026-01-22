@@ -33,6 +33,24 @@ export default function ConversationsPage() {
         return matchesState && matchesSearch;
     });
 
+    async function handleDelete(phone: string) {
+        if (!confirm(`¿Estás seguro de eliminar la conversación de ${phone} y todo su historial?`)) return;
+
+        try {
+            const res = await fetch(`/api/conversations/${encodeURIComponent(phone)}`, {
+                method: 'DELETE'
+            });
+            if (res.ok) {
+                setConversations(prev => prev.filter(c => c.phone !== phone));
+            } else {
+                alert('Error al eliminar la conversación');
+            }
+        } catch (error) {
+            console.error('Error deleting conversation:', error);
+            alert('Error al conectar con el servidor');
+        }
+    }
+
     const getStateBadge = (state: ConversationState) => {
         const badges = {
             active: 'badge-success',
@@ -44,19 +62,19 @@ export default function ConversationsPage() {
             paused: '⏸️ Pausado',
             closed: '⚫ Cerrado'
         };
-        return <span className={`badge ${badges[state]}`}>{labels[state]}</span>;
+        return <span className={`badge ${badges[state]} whitespace-nowrap`}>{labels[state]}</span>;
     };
 
     if (loading) {
         return (
             <div className="flex items-center justify-center h-64">
-                <div className="text-slate-500">Cargando conversaciones...</div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
         );
     }
 
     return (
-        <div className="animate-fadeIn">
+        <div className="animate-fadeIn max-w-full overflow-hidden">
             {/* Header */}
             <div className="flex items-center justify-between mb-8">
                 <div>
@@ -92,8 +110,8 @@ export default function ConversationsPage() {
 
             {/* Search */}
             <div className="card mb-6">
-                <div className="p-4 flex items-center gap-4">
-                    <div className="flex-1">
+                <div className="p-4 flex flex-col sm:flex-row items-center gap-4">
+                    <div className="flex-1 w-full">
                         <div className="relative">
                             <svg className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -110,7 +128,7 @@ export default function ConversationsPage() {
                     <select
                         value={stateFilter}
                         onChange={(e) => setStateFilter(e.target.value as ConversationState | 'all')}
-                        className="input w-auto"
+                        className="input sm:w-auto"
                     >
                         <option value="all">Todos los estados</option>
                         <option value="active">Activas</option>
@@ -120,87 +138,90 @@ export default function ConversationsPage() {
                 </div>
             </div>
 
-            {/* Table */}
+            {/* Table wrapper for horizontal scroll */}
             <div className="card overflow-hidden">
-                <table className="table">
-                    <thead>
-                        <tr>
-                            <th>Teléfono</th>
-                            <th>Estado</th>
-                            <th>Paso Actual</th>
-                            <th>Tags</th>
-                            <th>Última actividad</th>
-                            <th>Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {filteredConversations.length === 0 ? (
+                <div className="overflow-x-auto">
+                    <table className="table min-w-[800px]">
+                        <thead>
                             <tr>
-                                <td colSpan={6} className="text-center py-12 text-slate-500">
-                                    No se encontraron conversaciones
-                                </td>
+                                <th>Teléfono</th>
+                                <th>Estado</th>
+                                <th>Paso Actual</th>
+                                <th className="max-w-[200px]">Tags</th>
+                                <th>Última actividad</th>
+                                <th className="text-right">Acciones</th>
                             </tr>
-                        ) : (
-                            filteredConversations.map((conv) => (
-                                <tr key={conv._id}>
-                                    <td>
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
-                                                <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                                                </svg>
-                                            </div>
-                                            <span className="font-medium">{conv.phone}</span>
-                                        </div>
-                                    </td>
-                                    <td>{getStateBadge(conv.state)}</td>
-                                    <td>
-                                        <span className="badge badge-info">{conv.currentStepId}</span>
-                                    </td>
-                                    <td>
-                                        <div className="flex flex-wrap gap-1">
-                                            {conv.tags.length === 0 ? (
-                                                <span className="text-slate-400 text-sm">—</span>
-                                            ) : (
-                                                conv.tags.map((tag: string, i: number) => (
-                                                    <span key={i} className="badge badge-neutral">{tag}</span>
-                                                ))
-                                            )}
-                                        </div>
-                                    </td>
-                                    <td className="text-slate-500">
-                                        {new Date(conv.updatedAt).toLocaleString('es-AR', {
-                                            day: '2-digit',
-                                            month: '2-digit',
-                                            hour: '2-digit',
-                                            minute: '2-digit'
-                                        })}
-                                    </td>
-                                    <td>
-                                        <div className="flex items-center gap-2">
-                                            <Link
-                                                href={`/admin/conversations/${encodeURIComponent(conv.phone)}`}
-                                                className="btn btn-secondary py-2 px-3 text-sm"
-                                            >
-                                                Ver chat
-                                            </Link>
-                                            {conv.state === 'active' ? (
-                                                <button className="btn btn-secondary py-2 px-3 text-sm text-yellow-600">
-                                                    Pausar
-                                                </button>
-                                            ) : conv.state === 'paused' ? (
-                                                <button className="btn btn-secondary py-2 px-3 text-sm text-green-600">
-                                                    Reanudar
-                                                </button>
-                                            ) : null}
-                                        </div>
+                        </thead>
+                        <tbody>
+                            {filteredConversations.length === 0 ? (
+                                <tr>
+                                    <td colSpan={6} className="text-center py-12 text-slate-500">
+                                        No se encontraron conversaciones
                                     </td>
                                 </tr>
-                            ))
-                        )}
-                    </tbody>
-                </table>
+                            ) : (
+                                filteredConversations.map((conv) => (
+                                    <tr key={conv.id}>
+                                        <td>
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
+                                                    <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                                    </svg>
+                                                </div>
+                                                <span className="font-medium whitespace-nowrap">{conv.phone}</span>
+                                            </div>
+                                        </td>
+                                        <td>{getStateBadge(conv.state)}</td>
+                                        <td>
+                                            <span className="badge badge-info truncate max-w-[120px]" title={conv.currentStepId}>
+                                                {conv.currentStepId}
+                                            </span>
+                                        </td>
+                                        <td className="max-w-[200px]">
+                                            <div className="flex flex-wrap gap-1 max-h-[48px] overflow-hidden">
+                                                {conv.tags.length === 0 ? (
+                                                    <span className="text-slate-400 text-sm">—</span>
+                                                ) : (
+                                                    conv.tags.map((tag: string, i: number) => (
+                                                        <span key={i} className="badge badge-neutral text-[10px] py-0.5 px-1.5">{tag}</span>
+                                                    ))
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="text-slate-500 whitespace-nowrap">
+                                            {new Date(conv.updatedAt).toLocaleString('es-AR', {
+                                                day: '2-digit',
+                                                month: '2-digit',
+                                                hour: '2-digit',
+                                                minute: '2-digit'
+                                            })}
+                                        </td>
+                                        <td>
+                                            <div className="flex items-center justify-end gap-2">
+                                                <Link
+                                                    href={`/admin/conversations/${encodeURIComponent(conv.phone)}`}
+                                                    className="btn btn-secondary py-1.5 px-3 text-xs"
+                                                >
+                                                    Detalles
+                                                </Link>
+                                                <button
+                                                    onClick={() => handleDelete(conv.phone)}
+                                                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                    title="Eliminar conversación"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
             </div>
-        </div>
-    );
+            );
 }
