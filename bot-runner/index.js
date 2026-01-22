@@ -179,14 +179,14 @@ async function startBot() {
         // Clear existing timeout
         if (qrTimeout) clearTimeout(qrTimeout);
 
-        // Set 45-second timeout for QR
+        // Set 60-second timeout for QR
         qrTimeout = setTimeout(() => {
             if (botState === 'connecting') {
-                botState = 'error';
+                botState = 'disconnected';
                 currentQR = null;
-                console.log('QR timeout - no scan detected');
+                console.log('QR timeout - no scan detected. Bot stopped.');
             }
-        }, 45000);
+        }, 60000);
     });
 
     // Connected handler
@@ -297,8 +297,11 @@ async function startBot() {
             let conversation = await Conversation.findOne({ phone, state: 'active' });
 
             if (conversation) {
-                const chat = await msg.getChat();
-                await syncWhatsAppLabel(chat, 'BOT');
+                console.log(`[TRACE] Found ACTIVE conversation ${conversation._id} for ${phone} at step ${conversation.currentStepId}`);
+                if (client && client.info) {
+                    const chat = await msg.getChat();
+                    await syncWhatsAppLabel(chat, 'BOT');
+                }
             }
 
             // Check for explicit "reset" command
@@ -451,11 +454,11 @@ async function startBot() {
 
         // Check options
         for (const opt of options) {
-            const key = opt.key.toLowerCase();
-            const label = opt.label.toLowerCase();
+            const key = (opt.key || '').toLowerCase();
+            const label = (opt.label || '').toLowerCase();
 
-            // Match Key (A, B, C) or Label (exact match roughly)
-            if (input === key || input === label || input.includes(label)) {
+            // Match Key (A, B, C) or Label OR specific 'volver' check for 'm'
+            if (input === key || input === label || (key === 'm' && input.includes('volve'))) {
                 console.log(`[TRACE] ✅ Match found: Option "${opt.key}" (${opt.label}) -> Go to ${opt.nextStepId}`);
                 nextStepId = opt.nextStepId;
                 break;
@@ -465,14 +468,33 @@ async function startBot() {
         // Default / Fallback logic
         if (!nextStepId) {
             console.log(`[TRACE] ⚠️ No option matched for input "${input}".`);
-            const chat = await msg.getChat();
 
+            // Safety: Manual handoff keywords
+            const HUMAN_KEYWORDS = ['humano', 'asesor', 'persona', 'ayuda', 'atencion', 'atención'];
+            if (HUMAN_KEYWORDS.some(k => input.includes(k))) {
+                console.log(`[TRACE] 👤 Human request detected. Triggering handoff.`);
+                await triggerAutoHandoff(conversation, contact, currentStep);
+                return;
+            }
+
+            // Increment error counter
+            conversation.loopDetection.messagesInCurrentStep++;
+            conversation.markModified('loopDetection');
+            await conversation.save();
+
+            if (conversation.loopDetection.messagesInCurrentStep > 3) {
+                console.log(`[TRACE] 🔄 Loop detected (3+ errors). Triggering auto-handoff.`);
+                await triggerAutoHandoff(conversation, contact, currentStep);
+                return;
+            }
+
+            const chat = await msg.getChat();
             // Get custom fallback message from flow if available
             let fallbackMsg = 'No entendí esa opción. Por favor elegí una de las opciones válidas (ej: A).';
             try {
-                const flow = await Flow.findById(conversation.flowId || conversation.currentFlowId);
-                if (flow && flow.published && flow.published.fallbackMessage) {
-                    fallbackMsg = flow.published.fallbackMessage;
+                const flowDef = await Flow.findOne({ publishedVersion: conversation.flowVersion });
+                if (flowDef && flowDef.published && flowDef.published.fallbackMessage) {
+                    fallbackMsg = flowDef.published.fallbackMessage;
                 }
             } catch (e) {
                 console.warn('[WARN] Could not fetch custom fallback message, using default.');
@@ -486,9 +508,8 @@ async function startBot() {
                 if (err.message && err.message.includes('markedUnread')) {
                     console.warn('[WARN] Ignored known "markedUnread" error on fallback.');
                 } else {
-                    console.error('Error sending fallback:', err);
+                    console.error('Error sending fallback:', err.message);
                 }
-                try { await chat.clearState(); } catch (e) { }
             }
             return;
         }
@@ -780,6 +801,6 @@ app.listen(PORT, () => {
     console.log('Bot state:', botState);
     console.log('To start bot, POST to /bot/start');
 
-    // Auto-start bot on server launch
-    startBot();
+    // Auto-start bot on server launch disabled to save resources
+    // startBot();
 });
