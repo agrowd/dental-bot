@@ -529,6 +529,27 @@ async function startBot() {
                     status: 'pending'
                 });
                 console.log(`[TRACE] ✅ Appointment registered for ${phone}`);
+
+                // --- PAYMENT LINK LOGIC ---
+                const paymentConfig = await Setting.findOne({ key: 'payment_config' });
+                if (paymentConfig && paymentConfig.value.enabled && paymentConfig.value.link) {
+                    const chat = await msg.getChat();
+                    const paymentMsg = paymentConfig.value.message.replace('{LINK}', paymentConfig.value.link);
+
+                    console.log(`[TRACE] 💳 Sending payment link to ${phone}`);
+                    await sendTyping(chat);
+                    await randomDelay(2500, 1000);
+                    await chat.sendMessage(paymentMsg);
+
+                    // Save outbound message
+                    await Message.create({
+                        phone,
+                        text: paymentMsg,
+                        direction: 'outbound',
+                        timestamp: new Date()
+                    });
+                }
+                // --------------------------
             } catch (err) {
                 console.error('[ERROR] Failed to register appointment:', err);
             }

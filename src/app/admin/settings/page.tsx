@@ -23,6 +23,9 @@ export default function SettingsPage() {
     const [enabled, setEnabled] = useState(false);
     const [schedule, setSchedule] = useState<any>(DEFAULT_SCHEDULE);
     const [closedMessage, setClosedMessage] = useState('¡Hola! 👋 Gracias por escribirnos. En este momento la clínica está cerrada. Nuestro horario de atención es de Lunes a Viernes de 9 a 20hs y Sábados de 9 a 13hs. Te contactaremos apenas estemos de regreso.');
+    const [paymentEnabled, setPaymentEnabled] = useState(false);
+    const [paymentLink, setPaymentLink] = useState('');
+    const [paymentMessage, setPaymentMessage] = useState('💳 Para confirmar tu turno, por favor realizá el pago de la consulta en el siguiente link:\n{LINK}');
     const [showToast, setShowToast] = useState(false);
 
     useEffect(() => {
@@ -31,12 +34,22 @@ export default function SettingsPage() {
 
     const fetchSettings = async () => {
         try {
-            const res = await fetch('/api/settings?key=business_hours');
-            const data = await res.json();
-            if (data.setting) {
-                setEnabled(data.setting.enabled);
-                setSchedule(data.setting.schedule || DEFAULT_SCHEDULE);
-                setClosedMessage(data.setting.closedMessage);
+            // Fetch Business Hours
+            const bhRes = await fetch('/api/settings?key=business_hours');
+            const bhData = await bhRes.json();
+            if (bhData.setting) {
+                setEnabled(bhData.setting.enabled);
+                setSchedule(bhData.setting.schedule || DEFAULT_SCHEDULE);
+                setClosedMessage(bhData.setting.closedMessage);
+            }
+
+            // Fetch Payment Config
+            const pRes = await fetch('/api/settings?key=payment_config');
+            const pData = await pRes.json();
+            if (pData.setting) {
+                setPaymentEnabled(pData.setting.enabled);
+                setPaymentLink(pData.setting.link || '');
+                setPaymentMessage(pData.setting.message || paymentMessage);
             }
         } catch (error) {
             console.error('Error fetching settings:', error);
@@ -48,7 +61,8 @@ export default function SettingsPage() {
     const handleSave = async () => {
         setSaving(true);
         try {
-            const res = await fetch('/api/settings', {
+            // Save Business Hours
+            await fetch('/api/settings', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -56,6 +70,17 @@ export default function SettingsPage() {
                     value: { enabled, schedule, closedMessage }
                 })
             });
+
+            // Save Payment Config
+            const res = await fetch('/api/settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    key: 'payment_config',
+                    value: { enabled: paymentEnabled, link: paymentLink, message: paymentMessage }
+                })
+            });
+
             if (res.ok) {
                 setShowToast(true);
                 setTimeout(() => setShowToast(false), 3000);
@@ -157,6 +182,55 @@ export default function SettingsPage() {
                                     )}
                                 </div>
                             ))}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Payment Configuration */}
+                <div className="card border-none shadow-sm bg-white overflow-hidden">
+                    <div className="p-6 border-b border-slate-50 flex items-center justify-between bg-slate-50/30">
+                        <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-lg ${paymentEnabled ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-400'} transition-colors`}>
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h2 className="font-semibold text-slate-800">Link de Pago</h2>
+                                <p className="text-xs text-slate-500">Enviar link de pago automáticamente al agendar un turno.</p>
+                            </div>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                                type="checkbox"
+                                className="sr-only peer"
+                                checked={paymentEnabled}
+                                onChange={(e) => setPaymentEnabled(e.target.checked)}
+                            />
+                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                        </label>
+                    </div>
+
+                    <div className={`p-6 space-y-4 transition-all duration-300 ${!paymentEnabled ? 'opacity-40 grayscale pointer-events-none blur-[1px]' : ''}`}>
+                        <div>
+                            <label className="label">Link de Mercado Pago / Pago</label>
+                            <input
+                                type="text"
+                                value={paymentLink}
+                                onChange={(e) => setPaymentLink(e.target.value)}
+                                className="input"
+                                placeholder="https://mpago.la/..."
+                            />
+                        </div>
+                        <div>
+                            <label className="label">Mensaje de Pago</label>
+                            <textarea
+                                value={paymentMessage}
+                                onChange={(e) => setPaymentMessage(e.target.value)}
+                                className="input min-h-[100px]"
+                                placeholder="Escribe el mensaje que acompaña al link..."
+                            />
+                            <p className="text-[10px] text-slate-400 mt-1">Usa <span className="font-mono">{'{LINK}'}</span> donde quieras que aparezca el enlace.</p>
                         </div>
                     </div>
                 </div>
