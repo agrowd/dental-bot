@@ -223,5 +223,6 @@ export default function ConversationsPage() {
                     </table>
                 </div>
             </div>
-            );
+        </div>
+    );
 }
