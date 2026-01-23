@@ -522,208 +522,118 @@ async function startBot() {
     // Helper: Logic to handle a step
     async function handleStepLogic(client, msg, conversation, flow, contact) {
         const steps = flow.published.steps;
-        // Handle POJO vs Map
         const getStep = (id) => (typeof steps.get === 'function') ? steps.get(id) : steps[id];
 
-        const currentStep = getStep(conversation.currentStepId);
+        let loopSafety = 0;
+        const input = (msg.body || '').trim().toLowerCase();
 
-        if (!currentStep) {
-            console.error(`[TRACE] ❌ Step definition missing for ID: ${conversation.currentStepId}`);
-            return;
-        }
-
-        console.log(`[TRACE] Current Step: "${currentStep.title}" (${conversation.currentStepId})`);
-
-        // Case A: New Conversation or Step Entry
-        if (conversation.loopDetection.messagesInCurrentStep === 0) {
-            console.log(`[TRACE] 🆕 sending INITIAL message for step ${currentStep.id}`);
-            const response = formatMessage(currentStep);
-            const chat = await msg.getChat();
-
-            try {
-                await sendTyping(chat);
-                await randomDelay(1000, 500);
-                console.log(`[TRACE] 📤 Sending: "${response.replace(/\n/g, ' ')}"`);
-                await chat.sendMessage(response);
-            } catch (error) {
-                if (error.message && error.message.includes('markedUnread')) {
-                    console.warn('[WARN] Ignored known "markedUnread" error during send.');
-                } else {
-                    console.error('[ERROR] Failed to send message:', error);
-                }
-                try { await chat.clearState(); } catch (e) { }
-            }
-
-            // Update state with explicit verification
-            conversation.loopDetection.messagesInCurrentStep = 1;
-            conversation.markModified('loopDetection'); // Ensure nested change is tracked
+        // 1. UNIVERSAL COMMANDS (V/M)
+        if (input === 'm' || input === 'menu' || input.includes('menu principal')) {
+            console.log(`[TRACE] 🏠 Universal Menu requested by ${contact.phone}`);
+            conversation.currentStepId = flow.published.entryStepId;
+            conversation.history = [];
+            conversation.loopDetection = { currentStepId: flow.published.entryStepId, messagesInCurrentStep: 0, lastStepChangeAt: new Date() };
+            conversation.markModified('loopDetection');
+            conversation.markModified('history');
             await conversation.save();
-            console.log(`[TRACE] ✅ State UPDATED: messagesInCurrentStep = 1 for ${conversation._id}`);
-            return;
+        }
+        else if (input === 'v' || input === 'atras' || input.includes('volver')) {
+            console.log(`[TRACE] ⬅️ Universal Back requested by ${contact.phone}`);
+            if (conversation.history && conversation.history.length > 0) {
+                const prevId = conversation.history.pop();
+                conversation.currentStepId = prevId;
+                conversation.loopDetection = { currentStepId: prevId, messagesInCurrentStep: 0, lastStepChangeAt: new Date() };
+            } else {
+                conversation.currentStepId = flow.published.entryStepId;
+                conversation.loopDetection = { currentStepId: flow.published.entryStepId, messagesInCurrentStep: 0, lastStepChangeAt: new Date() };
+            }
+            conversation.markModified('loopDetection');
+            conversation.markModified('history');
+            await conversation.save();
         }
 
-        // Case B: Existing Conversation.
-        console.log(`[TRACE] 🔍 Processing user input: "${msg.body}" against options.`);
+        // 2. STATE MACHINE LOOP
+        while (loopSafety < 5) {
+            loopSafety++;
+            const currentStep = getStep(conversation.currentStepId);
 
-        const options = currentStep.options || [];
-        let nextStepId = null;
-
-        // normalization
-        const input = msg.body.trim().toLowerCase();
-
-        // Check options
-        for (const opt of options) {
-            const key = (opt.key || '').toLowerCase();
-            const label = (opt.label || '').toLowerCase();
-
-            // Match Key (A, B, C) or Label OR specific 'volver' check for 'm'
-            if (input === key || input === label || (key === 'm' && input.includes('volve'))) {
-                console.log(`[TRACE] ✅ Match found: Option "${opt.key}" (${opt.label}) -> Go to ${opt.nextStepId}`);
-                nextStepId = opt.nextStepId;
+            if (!currentStep) {
+                console.error(`[TRACE] ❌ Step definition missing for ID: ${conversation.currentStepId}`);
                 break;
             }
-        }
 
-        // Default / Fallback logic
-        if (!nextStepId) {
-            console.log(`[TRACE] ⚠️ No option matched for input "${input}".`);
+            // Entry Point (Send Message)
+            if (conversation.loopDetection.messagesInCurrentStep === 0) {
+                const response = formatMessage(currentStep, flow);
+                const chat = await msg.getChat();
 
-            // Safety: Manual handoff keywords
-            const HUMAN_KEYWORDS = ['humano', 'asesor', 'persona', 'ayuda', 'atencion', 'atención'];
-            if (HUMAN_KEYWORDS.some(k => input.includes(k))) {
-                console.log(`[TRACE] 👤 Human request detected. Triggering handoff.`);
-                await triggerAutoHandoff(conversation, contact, currentStep);
-                return;
-            }
-
-            // Increment error counter
-            conversation.loopDetection.messagesInCurrentStep++;
-            conversation.markModified('loopDetection');
-            await conversation.save();
-
-            if (conversation.loopDetection.messagesInCurrentStep > 3) {
-                console.log(`[TRACE] 🔄 Loop detected (3+ errors). Triggering auto-handoff.`);
-                await triggerAutoHandoff(conversation, contact, currentStep);
-                return;
-            }
-
-            const chat = await msg.getChat();
-            // Get custom fallback message from flow if available
-            let fallbackMsg = 'No entendí esa opción. Por favor elegí una de las opciones válidas (ej: A).';
-            try {
-                const flowDef = await Flow.findOne({ publishedVersion: conversation.flowVersion });
-                if (flowDef && flowDef.published && flowDef.published.fallbackMessage) {
-                    fallbackMsg = flowDef.published.fallbackMessage;
-                }
-            } catch (e) {
-                console.warn('[WARN] Could not fetch custom fallback message, using default.');
-            }
-
-            try {
-                await sendTyping(chat);
-                await randomDelay(500, 200);
-                await chat.sendMessage(fallbackMsg);
-            } catch (err) {
-                if (err.message && err.message.includes('markedUnread')) {
-                    console.warn('[WARN] Ignored known "markedUnread" error on fallback.');
-                } else {
-                    console.error('Error sending fallback:', err.message);
-                }
-            }
-            return;
-        }
-
-        // Transition
-        const nextStep = getStep(nextStepId);
-        if (!nextStep) {
-            console.error(`[TRACE] ❌ Target step "${nextStepId}" not found.`);
-            return;
-        }
-
-        console.log(`[TRACE] 🔄 Transitioning to step: ${nextStep.title} (${nextStepId})`);
-
-        conversation.currentStepId = nextStepId;
-        conversation.loopDetection = {
-            currentStepId: nextStepId,
-            messagesInCurrentStep: 0, // Reset for new step
-            lastStepChangeAt: new Date()
-        };
-        conversation.markModified('loopDetection');
-        await conversation.save();
-        console.log(`[TRACE] ✅ Step UPDATED to ${nextStepId} for ${conversation._id}`);
-
-        // --- APPOINTMENT REGISTRATION LOGIC ---
-        // If the next step is marked as an appointment registration step
-        if (nextStep.actions && nextStep.actions.registerAppointment) {
-            console.log(`[TRACE] 📅 Registering APPOINTMENT for ${phone}`);
-            try {
-                // Determine chosen day and time from conversation history
-                const recentMsgs = await Message.find({ phone }).sort({ timestamp: -1 }).limit(10);
-                // Simple heuristic: search for the most recent message that looks like a day or time
-                // In a production app, we'd store these in the conversation state explicitly
-
-                // Let's create the appointment with what we have
-                await Appointment.create({
-                    phone,
-                    patientName: contact.name,
-                    patientDni: contact.meta?.dni,
-                    service: contact.tags?.filter(t => t !== 'auto-handoff').join(', ') || 'Consulta',
-                    date: new Date(), // We'll improve this with actual picked date later
-                    dayName: 'Pendiente de procesar',
-                    timeSlot: 'Consultar chat',
-                    status: 'pending'
-                });
-                console.log(`[TRACE] ✅ Appointment registered for ${phone}`);
-
-                // --- PAYMENT LINK LOGIC ---
-                const paymentConfig = await Setting.findOne({ key: 'payment_config' });
-                if (paymentConfig && paymentConfig.value.enabled && paymentConfig.value.link) {
-                    const chat = await msg.getChat();
-                    const paymentMsg = paymentConfig.value.message.replace('{LINK}', paymentConfig.value.link);
-
-                    console.log(`[TRACE] 💳 Sending payment link to ${phone}`);
+                try {
                     await sendTyping(chat);
-                    await randomDelay(2500, 1000);
-                    await chat.sendMessage(paymentMsg);
-
-                    // Save outbound message
-                    await Message.create({
-                        phone,
-                        text: paymentMsg,
-                        direction: 'outbound',
-                        timestamp: new Date()
-                    });
+                    await randomDelay(1000, 500);
+                    console.log(`[TRACE] 📤 Sending[${currentStep.id}]: "${response.replace(/\n/g, ' ')}"`);
+                    await chat.sendMessage(response);
+                } catch (error) {
+                    console.error('[ERROR] Failed to send message:', error);
                 }
-                // --------------------------
-            } catch (err) {
-                console.error('[ERROR] Failed to register appointment:', err);
+
+                conversation.loopDetection.messagesInCurrentStep = 1;
+                conversation.markModified('loopDetection');
+                await conversation.save();
+                break;
             }
-        }
-        // --------------------------------------
 
-        // Send the message for the NEW step immediately
-        const response = formatMessage(nextStep);
-        const chat = await msg.getChat();
+            // Evaluation (Process Input)
+            const options = currentStep.options || [];
+            let nextStepId = null;
 
-        try {
-            await sendTyping(chat);
-            await randomDelay(1000, 500);
-            console.log(`[TRACE] 📤 Sending: "${response.replace(/\n/g, ' ')}"`);
-            await chat.sendMessage(response);
-        } catch (e) {
-            if (e.message && e.message.includes('markedUnread')) {
-                console.warn('[WARN] Ignored known "markedUnread" error on transition.');
-            } else {
-                console.error('[ERROR] Failed to send transition message:', e);
+            for (const opt of options) {
+                const key = (opt.key || '').toLowerCase();
+                const label = (opt.label || '').toLowerCase();
+                if (input === key || input === label || (input.length > 3 && label.includes(input))) {
+                    nextStepId = opt.nextStepId;
+                    break;
+                }
             }
-            try { await chat.clearState(); } catch (err) { }
-        }
 
-        // Mark that we sent the message for this step
-        conversation.loopDetection.messagesInCurrentStep = 1;
-        conversation.markModified('loopDetection');
-        await conversation.save();
-        console.log(`[TRACE] ✅ State UPDATED: messagesInCurrentStep = 1 (after transition) for ${conversation._id}`);
+            if (!nextStepId) {
+                const HUMAN_KEYWORDS = ['humano', 'asesor', 'persona', 'ayuda', 'atencion', 'atención'];
+                if (HUMAN_KEYWORDS.some(k => input.includes(k))) {
+                    await triggerAutoHandoff(conversation, contact, currentStep);
+                    break;
+                }
+
+                conversation.loopDetection.messagesInCurrentStep++;
+                conversation.markModified('loopDetection');
+                await conversation.save();
+
+                if (conversation.loopDetection.messagesInCurrentStep > 3) {
+                    await triggerAutoHandoff(conversation, contact, currentStep);
+                    break;
+                }
+
+                const chat = await msg.getChat();
+                let fallbackMsg = flow.published.fallbackMessage || 'No entendí esa opción. Por favor elegí una de las opciones válidas o escribí M para volver al inicio.';
+                await chat.sendMessage(fallbackMsg);
+                break;
+            }
+
+            // Transition (Apply Change)
+            const nextStep = getStep(nextStepId);
+            if (!nextStep) break;
+
+            if (!conversation.history) conversation.history = [];
+            if (conversation.currentStepId !== nextStepId) {
+                conversation.history.push(conversation.currentStepId);
+                if (conversation.history.length > 15) conversation.history.shift();
+            }
+
+            conversation.currentStepId = nextStepId;
+            conversation.loopDetection = { currentStepId: nextStepId, messagesInCurrentStep: 0, lastStepChangeAt: new Date() };
+            conversation.markModified('loopDetection');
+            conversation.markModified('history');
+            await conversation.save();
+            // Loop continues
+        }
     }
 
     await client.initialize();
@@ -731,27 +641,27 @@ async function startBot() {
 }
 
 // Format message with options and dynamic variables
-function formatMessage(step, contact = null) {
+function formatMessage(step, flow) {
     let messageBody = step.message;
 
-    // Handle Dynamic Variables
     if (messageBody.includes('{PROXIMOS_DIAS}')) {
         const nextDays = getNextBookingDays(7);
         let daysList = '';
-        nextDays.forEach((d, i) => {
-            daysList += `${String.fromCharCode(65 + i)}) ${d.label}\n`;
-        });
+        nextDays.forEach((d, i) => { daysList += `${String.fromCharCode(65 + i)}) ${d.label}\n`; });
         messageBody = messageBody.replace('{PROXIMOS_DIAS}', daysList.trim());
-        // Return immediately if it's a list replacement (options are already inside the var)
         return messageBody;
     }
 
     let msg = messageBody + '\n\n';
     if (step.options && step.options.length > 0) {
-        step.options.forEach(opt => {
-            msg += `${opt.key}) ${opt.label}\n`;
-        });
+        step.options.forEach(opt => { msg += `${opt.key}) ${opt.label}\n`; });
     }
+
+    // Navigation Labels (V/M)
+    if (flow && flow.published && step.id !== flow.published.entryStepId) {
+        msg += `\n\nV) Volver atrás\nM) Menu principal`;
+    }
+
     return msg.trim();
 }
 

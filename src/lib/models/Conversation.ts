@@ -8,6 +8,7 @@ interface IConversationDoc extends Omit<IConversation, 'id'>, Document {
         messagesInCurrentStep: number;
         lastStepChangeAt: Date;
     };
+    history: string[]; // Stack of step IDs visited
 }
 
 const ConversationSchema = new Schema<IConversationDoc>({
@@ -29,6 +30,7 @@ const ConversationSchema = new Schema<IConversationDoc>({
         messagesInCurrentStep: { type: Number, default: 0 },
         lastStepChangeAt: { type: Date, default: Date.now as any },
     },
+    history: { type: [String], default: [] },
     createdAt: { type: Date, default: Date.now as any },
     updatedAt: { type: Date, default: Date.now as any },
 });
