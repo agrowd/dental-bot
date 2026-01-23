@@ -35,11 +35,12 @@ export async function GET(
     }
 
     try {
+        console.log(`[PROXY GET] Fetching: ${targetUrl}`);
         const res = await fetch(targetUrl);
         const data = await res.json();
         return NextResponse.json(data, { status: res.status });
     } catch (error) {
-        console.error(`Proxy Error (GET):`, error);
+        console.error(`[PROXY GET ERROR] Failed to fetch ${targetUrl}:`, error);
         return NextResponse.json(
             { error: 'Error connecting to bot service' },
             { status: 502 }

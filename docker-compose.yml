@@ -16,7 +16,7 @@ services:
       - ADMIN_EMAIL=${ADMIN_EMAIL}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - NODE_ENV=production
-      - BOT_HOST=bot-runner
+      - BOT_HOST=dental-bot-runner
     depends_on:
       - bot-runner
 
