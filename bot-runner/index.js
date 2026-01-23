@@ -40,6 +40,7 @@ let qrTimeout = null;
 let client = null;
 let retryCount = 0;
 let lastRetryTime = 0;
+let sessionStartTime = null;
 
 // Express API for bot control
 const app = express();
@@ -211,6 +212,7 @@ async function startBot() {
         console.log('✅ WhatsApp bot is ready!');
         botState = 'connected';
         currentQR = null;
+        sessionStartTime = new Date(); // Record activation time
         if (qrTimeout) clearTimeout(qrTimeout);
     });
 
@@ -321,9 +323,19 @@ async function startBot() {
     client.on('message', async (msg) => {
         const sender = msg.from;
         const body = msg.body;
-        console.log(`[TRACE] 📨 RAW MESSAGE from ${sender}: "${body}"`);
 
         try {
+            // SILENT FILTERS
+            if (msg.from === 'status@broadcast') return;
+            if (msg.from.endsWith('@g.us')) return; // Ignore groups
+
+            // TIME FILTER (Ignore old messages)
+            const msgDate = new Date(msg.timestamp * 1000);
+            if (sessionStartTime && msgDate < sessionStartTime) {
+                return;
+            }
+
+            console.log(`[TRACE] 📨 RAW MESSAGE from ${sender}: "${body}"`);
             if (msg.from === 'status@broadcast') return;
 
             // Extract phone number
