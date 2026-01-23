@@ -47,6 +47,8 @@ export interface ActivationRules {
   priority: number;
   // Always trigger: force restart even if conversation exists
   forceRestart?: boolean;
+  // Activation grace period: how many minutes back to look for messages
+  activationOffset?: number;
 }
 
 export interface FlowDocument {
