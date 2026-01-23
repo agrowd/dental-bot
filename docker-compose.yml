@@ -14,8 +14,10 @@ services:
       - MONGODB_URI=${MONGODB_URI}
       - JWT_SECRET=${JWT_SECRET}
       - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - NODE_ENV=production
+      - BOT_HOST=bot-runner
     depends_on:
       - bot-runner
 
