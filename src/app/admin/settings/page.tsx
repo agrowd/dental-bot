@@ -137,7 +137,7 @@ export default function SettingsPage() {
             </div>
 
             <div className="space-y-6">
-                {/* Business Hours Toggle */}
+                {/* Business Hours Settings */}
                 <div className="card overflow-hidden border-none shadow-sm bg-white">
                     <div className="p-6 border-b border-slate-50 flex items-center justify-between bg-slate-50/30">
                         <div className="flex items-center gap-3">
@@ -204,6 +204,50 @@ export default function SettingsPage() {
                     </div>
                 </div>
 
+                {/* Safety Configuration */}
+                <div className="card border-none shadow-sm bg-white overflow-hidden">
+                    <div className="p-6 border-b border-slate-50 flex items-center gap-3 bg-slate-50/30">
+                        <div className="p-2 rounded-lg bg-orange-100 text-orange-600">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h2 className="font-semibold text-slate-800">Seguridad de Activación</h2>
+                            <p className="text-xs text-slate-500">Define qué mensajes del pasado debe procesar el bot al encenderse.</p>
+                        </div>
+                    </div>
+                    <div className="p-6 space-y-4">
+                        <div>
+                            <label className="label flex justify-between items-center">
+                                <span>Ventana de Gracia (Minutos)</span>
+                                <span className="bg-orange-50 text-orange-600 px-2 py-0.5 rounded text-xs font-bold">{activationOffset} min</span>
+                            </label>
+                            <input
+                                type="range"
+                                min="0"
+                                max="60"
+                                step="1"
+                                value={activationOffset}
+                                onChange={(e) => setActivationOffset(parseInt(e.target.value))}
+                                className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-orange-600"
+                            />
+                            <div className="mt-2 flex justify-between text-[10px] text-slate-400">
+                                <span>0 min (Solo lanzados desde activación)</span>
+                                <span>60 min</span>
+                            </div>
+                        </div>
+                        <div className="bg-orange-50/50 border border-orange-100 rounded-xl p-4 flex gap-3 text-xs text-orange-800">
+                            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <p>
+                                Si activas el bot ahora, procesará mensajes que hayan llegado hace <strong>{activationOffset}</strong> minutos o menos.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
                 {/* Payment Configuration */}
                 <div className="card border-none shadow-sm bg-white overflow-hidden">
                     <div className="p-6 border-b border-slate-50 flex items-center justify-between bg-slate-50/30">
@@ -253,53 +297,7 @@ export default function SettingsPage() {
                     </div>
                 </div>
 
-                {/* Safety Configuration */}
-                <div className="card border-none shadow-sm bg-white overflow-hidden">
-                    <div className="p-6 border-b border-slate-50 flex items-center gap-3 bg-slate-50/30">
-                        <div className="p-2 rounded-lg bg-orange-100 text-orange-600">
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                            </svg>
-                        </div>
-                        <div>
-                            <h2 className="font-semibold text-slate-800">Seguridad de Activación</h2>
-                            <p className="text-xs text-slate-500">Define qué mensajes del pasado debe procesar el bot al encenderse.</p>
-                        </div>
-                    </div>
-                    <div className="p-6 space-y-4">
-                        <div>
-                            <label className="label flex justify-between items-center">
-                                <span>Ventana de Gracia (Minutos)</span>
-                                <span className="bg-orange-50 text-orange-600 px-2 py-0.5 rounded text-xs font-bold">{activationOffset} min</span>
-                            </label>
-                            <input
-                                type="range"
-                                min="0"
-                                max="60"
-                                step="1"
-                                value={activationOffset}
-                                onChange={(e) => setActivationOffset(parseInt(e.target.value))}
-                                className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-orange-600"
-                            />
-                            <div className="mt-2 flex justify-between text-[10px] text-slate-400">
-                                <span>0 min (Solo mensajes nuevos)</span>
-                                <span>60 min</span>
-                            </div>
-                        </div>
-                        <div className="bg-orange-50/50 border border-orange-100 rounded-xl p-4 flex gap-3 text-xs text-orange-800">
-                            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            <p>
-                                Si lo activas a las 10:00 y configuras <strong>{activationOffset} min</strong>, el bot responderá a cualquier mensaje que haya llegado desde las {
-                                    new Date(Date.now() - (activationOffset * 60 * 1000)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                                } en adelante.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Closed Message */}
+                {/* Absence Message */}
                 <div className="card border-none shadow-sm bg-white overflow-hidden">
                     <div className="p-6 border-b border-slate-50 flex items-center gap-3 bg-slate-50/30">
                         <div className="p-2 rounded-lg bg-purple-100 text-purple-600">
