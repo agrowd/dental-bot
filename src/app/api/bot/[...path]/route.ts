@@ -8,27 +8,38 @@ export async function GET(
 ) {
     const { path } = await params;
 
-    // Path structure: /api/bot/[instanceId]/[...endpoint]
-    // Example: /api/bot/bot-123/status
-    if (path.length < 2) {
+    // Path structure: /api/bot/[instanceId]/[...endpoint] OR /api/bot/[endpoint] (legacy)
+
+    let targetUrl = '';
+
+    if (path.length === 1) {
+        // Legacy mode: default to local bot-runner
+        const endpoint = path[0];
+        targetUrl = `http://localhost:4000/bot/${endpoint}`;
+    } else if (path.length >= 2) {
+        // Instance mode
+        const instanceId = path[0];
+        const endpoint = path.slice(1).join('/');
+
+        try {
+            const instance = await BotInstance.findOne({ id: instanceId });
+            if (!instance) {
+                return NextResponse.json({ error: 'Instance not found' }, { status: 404 });
+            }
+            targetUrl = `http://localhost:${instance.port}/bot/${endpoint}`;
+        } catch (e) {
+            return NextResponse.json({ error: 'DB Error' }, { status: 500 });
+        }
+    } else {
         return NextResponse.json({ error: 'Invalid path' }, { status: 400 });
     }
 
-    const instanceId = path[0];
-    const endpoint = path.slice(1).join('/');
-
     try {
-        const instance = await BotInstance.findOne({ id: instanceId });
-        if (!instance) {
-            return NextResponse.json({ error: 'Instance not found' }, { status: 404 });
-        }
-
-        const targetUrl = `http://localhost:${instance.port}/bot/${endpoint}`;
         const res = await fetch(targetUrl);
         const data = await res.json();
         return NextResponse.json(data, { status: res.status });
     } catch (error) {
-        console.error(`Proxy Error (GET) for ${instanceId}:`, error);
+        console.error(`Proxy Error (GET):`, error);
         return NextResponse.json(
             { error: 'Error connecting to bot service' },
             { status: 502 }
@@ -42,20 +53,30 @@ export async function POST(
 ) {
     const { path } = await params;
 
-    if (path.length < 2) {
+    let targetUrl = '';
+
+    if (path.length === 1) {
+        // Legacy mode
+        const endpoint = path[0];
+        targetUrl = `http://localhost:4000/bot/${endpoint}`;
+    } else if (path.length >= 2) {
+        const instanceId = path[0];
+        const endpoint = path.slice(1).join('/');
+
+        try {
+            const instance = await BotInstance.findOne({ id: instanceId });
+            if (!instance) {
+                return NextResponse.json({ error: 'Instance not found' }, { status: 404 });
+            }
+            targetUrl = `http://localhost:${instance.port}/bot/${endpoint}`;
+        } catch (e) {
+            return NextResponse.json({ error: 'DB Error' }, { status: 500 });
+        }
+    } else {
         return NextResponse.json({ error: 'Invalid path' }, { status: 400 });
     }
 
-    const instanceId = path[0];
-    const endpoint = path.slice(1).join('/');
-
     try {
-        const instance = await BotInstance.findOne({ id: instanceId });
-        if (!instance) {
-            return NextResponse.json({ error: 'Instance not found' }, { status: 404 });
-        }
-
-        const targetUrl = `http://localhost:${instance.port}/bot/${endpoint}`;
         const body = await request.json().catch(() => ({}));
         const res = await fetch(targetUrl, {
             method: 'POST',
