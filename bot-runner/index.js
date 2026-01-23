@@ -329,9 +329,23 @@ async function startBot() {
             if (msg.from === 'status@broadcast') return;
             if (msg.from.endsWith('@g.us')) return; // Ignore groups
 
-            // TIME FILTER (Ignore old messages)
+            // 2. SESSION TIME FILTER (Ignore old unread messages)
             const msgDate = new Date(msg.timestamp * 1000);
-            if (sessionStartTime && msgDate < sessionStartTime) {
+
+            // Dynamic lookback check
+            let safetyThreshold = sessionStartTime;
+            try {
+                const safetySetting = await Setting.findOne({ key: 'bot_safety' });
+                if (safetySetting && safetySetting.value && safetySetting.value.activationOffset) {
+                    const offsetMs = safetySetting.value.activationOffset * 60 * 1000;
+                    safetyThreshold = new Date(sessionStartTime.getTime() - offsetMs);
+                }
+            } catch (e) {
+                console.error('[ERROR] Could not fetch safety settings, using strict start time.');
+            }
+
+            if (sessionStartTime && msgDate < safetyThreshold) {
+                // Silently skip old messages
                 return;
             }
 
