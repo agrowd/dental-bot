@@ -26,6 +26,7 @@ export default function SettingsPage() {
     const [paymentEnabled, setPaymentEnabled] = useState(false);
     const [paymentLink, setPaymentLink] = useState('');
     const [paymentMessage, setPaymentMessage] = useState('💳 Para confirmar tu turno, por favor realizá el pago de la consulta en el siguiente link:\n{LINK}');
+    const [activationOffset, setActivationOffset] = useState(0);
     const [showToast, setShowToast] = useState(false);
 
     useEffect(() => {
@@ -51,6 +52,13 @@ export default function SettingsPage() {
                 setPaymentLink(pData.setting.link || '');
                 setPaymentMessage(pData.setting.message || paymentMessage);
             }
+
+            // Fetch Safety Config
+            const sRes = await fetch('/api/settings?key=bot_safety');
+            const sData = await sRes.json();
+            if (sData.setting) {
+                setActivationOffset(sData.setting.activationOffset || 0);
+            }
         } catch (error) {
             console.error('Error fetching settings:', error);
         } finally {
@@ -72,12 +80,22 @@ export default function SettingsPage() {
             });
 
             // Save Payment Config
-            const res = await fetch('/api/settings', {
+            await fetch('/api/settings', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     key: 'payment_config',
                     value: { enabled: paymentEnabled, link: paymentLink, message: paymentMessage }
+                })
+            });
+
+            // Save Safety Config
+            const res = await fetch('/api/settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    key: 'bot_safety',
+                    value: { activationOffset }
                 })
             });
 
