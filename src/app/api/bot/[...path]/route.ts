@@ -54,13 +54,14 @@ export async function POST(
     const { path } = await params;
 
     let targetUrl = '';
+    let instanceId = 'legacy';
 
     if (path.length === 1) {
         // Legacy mode
         const endpoint = path[0];
         targetUrl = `http://localhost:4000/bot/${endpoint}`;
     } else if (path.length >= 2) {
-        const instanceId = path[0];
+        instanceId = path[0];
         const endpoint = path.slice(1).join('/');
 
         try {
