@@ -35,6 +35,7 @@ export async function PUT(req: NextRequest) {
         await dbConnect();
 
         const { key, value } = await req.json();
+        console.log(`[SETTINGS] Updating key: "${key}" with values:`, JSON.stringify(value));
 
         if (!key) {
             return NextResponse.json({ error: 'Key is required' }, { status: 400 });
