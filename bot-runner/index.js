@@ -146,10 +146,12 @@ async function startBot() {
     currentQR = null;
 
     // CLEANUP: Nuclear cleanup of session directory to prevent "Code: 21"
-    const authPath = process.env.WHATSAPP_SESSION_PATH || './.wwebjs_auth';
+    const sessionName = process.env.SESSION_NAME || '.wwebjs_auth';
+    const authPath = path.join(process.cwd(), sessionName);
+
     try {
         if (fs.existsSync(authPath)) {
-            console.log('[INIT] Removing existing session directory...');
+            console.log(`[INIT] Removing existing session directory: ${sessionName}...`);
             fs.rmSync(authPath, { recursive: true, force: true });
             console.log('[INIT] Session directory removed.');
         }
@@ -159,11 +161,11 @@ async function startBot() {
 
     client = new Client({
         authStrategy: new LocalAuth({
-            dataPath: process.env.WHATSAPP_SESSION_PATH || './.wwebjs_auth'
+            dataPath: authPath
         }),
         puppeteer: {
             headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu']
         }
     });
 
@@ -223,6 +225,97 @@ async function startBot() {
     setInterval(() => {
         console.log(`[HEARTBEAT] Bot runner alive. State: ${botState}. Memory: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB`);
     }, 60000);
+
+    // Call Handler (New Implementation)
+    client.on('call', async (call) => {
+        console.log('[TRACE] 📞 Incoming call from:', call.from);
+        try {
+            const phone = call.from.replace('@c.us', '');
+
+            // 1. Get Contact Info
+            const wppContact = await client.getContactById(call.from);
+
+            // 2. Logic: If saved contact, IGNORE (let it ring/missed call)
+            if (wppContact.isMyContact) {
+                console.log(`[TRACE] 📞 Call from CONTACT ${phone}. Ignoring to allow normal ringing.`);
+                return;
+            }
+
+            // 3. Logic: If NOT saved, REJECT and Trigger Flow
+            console.log(`[TRACE] 📞 Call from NON-CONTACT ${phone}. Rejecting and triggering flow.`);
+            await call.reject();
+
+            // Check DB for existing contact or create
+            let dbContact = await Contact.findOne({ phone });
+            if (!dbContact) {
+                dbContact = await Contact.create({
+                    phone,
+                    status: 'pendiente',
+                    source: 'organic',
+                    firstSeenAt: new Date(),
+                    lastSeenAt: new Date(),
+                    tags: ['call-rejected'],
+                    meta: {}
+                });
+            }
+
+            // Check if already in conversation
+            let conversation = await Conversation.findOne({ phone, state: 'active' });
+            if (conversation) {
+                const chat = await client.getChatById(call.from);
+                await chat.sendMessage("⚠️ Te acabamos de cortar la llamada porque soy un asistente virtual. Por favor continuá escribiendo por aquí.");
+                return;
+            }
+
+            // Select Flow (simulate organic entry)
+            // Reuse selectFlow function
+            const selectedFlow = await selectFlow({ isAgendado: false, source: dbContact.source });
+
+            if (!selectedFlow) {
+                console.log('[TRACE] ❌ No flow found for rejected call.');
+                return;
+            }
+
+            // Start Conversation
+            conversation = await Conversation.create({
+                phone,
+                flowVersion: selectedFlow.publishedVersion,
+                currentStepId: selectedFlow.published.entryStepId,
+                state: 'active',
+                tags: [],
+                loopDetection: {
+                    currentStepId: selectedFlow.published.entryStepId,
+                    messagesInCurrentStep: 0,
+                    lastStepChangeAt: new Date(),
+                }
+            });
+
+            // Send Welcome Message with Prefix
+            const chat = await client.getChatById(call.from);
+            const prefix = "👋 ¡Hola! No podemos atender llamadas de voz por este medio, pero soy el asistente virtual de la clínica y estoy aquí para ayudarte.\n\n";
+
+            // Reuse handleStepLogic but we need to inject the prefix logic or just send it manually first?
+            // Sending manually first is safer to ensure the prefix is seen.
+            await chat.sendMessage(prefix);
+
+            // Now trigger the standard step logic "mocking" a message to start checking the step
+            // We need to simulate the "Initial Step Entry" (messagesInCurrentStep = 0)
+            // We can just call handleStepLogic with a dummy msg object.
+
+            const mockMsg = {
+                body: '',
+                from: call.from,
+                getChat: async () => chat
+            };
+
+            // We pass the flow definition explicitly
+            const flowDef = await Flow.findOne({ publishedVersion: conversation.flowVersion });
+            await handleStepLogic(client, mockMsg, conversation, flowDef, dbContact);
+
+        } catch (e) {
+            console.error('[ERROR] Error handling call:', e);
+        }
+    });
 
     // Message handler
     client.on('message', async (msg) => {
