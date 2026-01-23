@@ -8,14 +8,20 @@ export async function GET(
 ) {
     const { path } = await params;
 
-    // Path structure: /api/bot/[instanceId]/[...endpoint] OR /api/bot/[endpoint] (legacy)
+    // Determine host: explicit env > production hardcoded > localhost
+    let BOT_HOST = process.env.BOT_HOST;
+    if (!BOT_HOST && process.env.NODE_ENV === 'production') {
+        BOT_HOST = 'dental-bot-runner';
+    }
+    BOT_HOST = BOT_HOST || 'localhost';
 
+    // Path structure: /api/bot/[instanceId]/[...endpoint] OR /api/bot/[endpoint] (legacy)
     let targetUrl = '';
 
     if (path.length === 1) {
         // Legacy mode: default to local bot-runner
         const endpoint = path[0];
-        targetUrl = `http://localhost:4000/bot/${endpoint}`;
+        targetUrl = `http://${BOT_HOST}:4000/bot/${endpoint}`;
     } else if (path.length >= 2) {
         // Instance mode
         const instanceId = path[0];
@@ -26,7 +32,7 @@ export async function GET(
             if (!instance) {
                 return NextResponse.json({ error: 'Instance not found' }, { status: 404 });
             }
-            targetUrl = `http://localhost:${instance.port}/bot/${endpoint}`;
+            targetUrl = `http://${BOT_HOST}:${instance.port}/bot/${endpoint}`;
         } catch (e) {
             return NextResponse.json({ error: 'DB Error' }, { status: 500 });
         }
@@ -39,8 +45,8 @@ export async function GET(
         const res = await fetch(targetUrl);
         const data = await res.json();
         return NextResponse.json(data, { status: res.status });
-    } catch (error) {
-        console.error(`[PROXY GET ERROR] Failed to fetch ${targetUrl}:`, error);
+    } catch (error: any) {
+        console.error(`[PROXY GET ERROR] Failed to fetch ${targetUrl}:`, error.message || error);
         return NextResponse.json(
             { error: 'Error connecting to bot service' },
             { status: 502 }
@@ -54,13 +60,20 @@ export async function POST(
 ) {
     const { path } = await params;
 
+    // Determine host: explicit env > production hardcoded > localhost
+    let BOT_HOST = process.env.BOT_HOST;
+    if (!BOT_HOST && process.env.NODE_ENV === 'production') {
+        BOT_HOST = 'dental-bot-runner';
+    }
+    BOT_HOST = BOT_HOST || 'localhost';
+
     let targetUrl = '';
     let instanceId = 'legacy';
 
     if (path.length === 1) {
         // Legacy mode
         const endpoint = path[0];
-        targetUrl = `http://localhost:4000/bot/${endpoint}`;
+        targetUrl = `http://${BOT_HOST}:4000/bot/${endpoint}`;
     } else if (path.length >= 2) {
         instanceId = path[0];
         const endpoint = path.slice(1).join('/');
@@ -70,7 +83,7 @@ export async function POST(
             if (!instance) {
                 return NextResponse.json({ error: 'Instance not found' }, { status: 404 });
             }
-            targetUrl = `http://localhost:${instance.port}/bot/${endpoint}`;
+            targetUrl = `http://${BOT_HOST}:${instance.port}/bot/${endpoint}`;
         } catch (e) {
             return NextResponse.json({ error: 'DB Error' }, { status: 500 });
         }
@@ -79,6 +92,7 @@ export async function POST(
     }
 
     try {
+        console.log(`[PROXY POST] Sending to: ${targetUrl}`);
         const body = await request.json().catch(() => ({}));
         const res = await fetch(targetUrl, {
             method: 'POST',
@@ -94,8 +108,8 @@ export async function POST(
 
         return new NextResponse(null, { status: res.status });
 
-    } catch (error) {
-        console.error(`Proxy Error (POST) for ${instanceId}:`, error);
+    } catch (error: any) {
+        console.error(`[PROXY POST ERROR] Failed to send to ${targetUrl}:`, error.message || error);
         return NextResponse.json(
             { error: 'Error connecting to bot service' },
             { status: 502 }
