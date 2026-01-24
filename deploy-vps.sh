@@ -10,12 +10,14 @@ export DOCKER_BUILDKIT=0
 export COMPOSE_DOCKER_CLI_BUILD=0
 echo "✅ Modo compatibilidad activado"
 
-# 2. Limpieza Profunda (Nuclear Mode)
-echo "🧹 Limpiando CUALQUIER rastro de contenedores antiguos..."
+# 2. Limpieza Específica (Safe Mode)
+echo "🧹 Limpiando contenedores y versiones viejas de ESTE proyecto..."
 docker-compose down --remove-orphans || true
-docker system prune -a --volumes -f || true
 
-# Kill any process using port 4000 (just in case PM2 or Node is running outside Docker)
+# Elimina solo imágenes huérfanas (dangling) para no tocar otros proyectos
+docker image prune -f || true
+
+# Kill any process using port 4000 (just in case)
 echo "🗡️  Liberando puerto 4000..."
 fuser -k 4000/tcp || true
 
