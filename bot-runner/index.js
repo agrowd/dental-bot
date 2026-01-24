@@ -352,14 +352,15 @@ async function startBot() {
         try {
             // ATOMIC CROSS-INSTANCE LOCK
             const lockKey = `lock_${messageId}`;
-            const isFirst = await Setting.findOneAndUpdate(
-                { key: lockKey },
-                { $setOnInsert: { key: lockKey, instance: INSTANCE_ID, at: new Date() } },
-                { upsert: true, new: true, rawResult: true }
-            );
+            try {
+                await Setting.create({ key: lockKey, instance: INSTANCE_ID, at: new Date() });
+            } catch (err) {
+                if (err.code === 11000) return; // Already locked
+                throw err;
+            }
 
-            // If it's NOT an upload (new insert), it means someone else is processing it.
-            if (isFirst.lastErrorObject.updatedExisting) return;
+            // Auto-cleanup lock after 30s
+            setTimeout(() => { Setting.deleteOne({ key: lockKey }).catch(() => { }); }, 30000);
 
             // Log with Instance ID
             const sender = msg.from;
