@@ -606,6 +606,8 @@ async function startBot() {
             return; // Stop processing for this message
         }
 
+        let targetOption = null;
+
         // 2. STATE MACHINE LOOP
         while (loopSafety < 5) {
             loopSafety++;
@@ -638,101 +640,104 @@ async function startBot() {
 
             // Evaluation (Process Input)
             const options = currentStep.options || [];
-            let nextStepId = null;
 
             for (const opt of options) {
                 const key = (opt.key || '').toLowerCase();
                 const label = (opt.label || '').toLowerCase();
                 if (input === key || input === label || (input.length > 3 && label.includes(input))) {
-                    nextStepId = opt.nextStepId;
+                    targetOption = opt;
                     break;
                 }
             }
 
-            if (!nextStepId) {
-                const HUMAN_KEYWORDS = ['humano', 'asesor', 'persona', 'ayuda', 'atencion', 'atención'];
-                if (HUMAN_KEYWORDS.some(k => input.includes(k))) {
-                    await triggerAutoHandoff(conversation, contact, currentStep);
-                    break;
-                }
-
-                conversation.loopDetection.messagesInCurrentStep++;
-                conversation.markModified('loopDetection');
-                await conversation.save();
-
-                if (conversation.loopDetection.messagesInCurrentStep > 3) {
-                    await triggerAutoHandoff(conversation, contact, currentStep);
-                    break;
-                }
-
-                const chat = await msg.getChat();
-                let fallbackMsg = flow.published.fallbackMessage || 'No entendí esa opción. Por favor elegí una de las opciones válidas o escribí M para volver al inicio.';
-                await chat.sendMessage(fallbackMsg);
+            // If match found, break loop to handle transition below
+            if (targetOption) {
                 break;
             }
 
-            // Transition (Apply Change)
-            const nextStep = getStep(nextStepId);
-            targetOption = opt;
-            break;
+            // If NO match found, handle fallback inside the loop or break
+            // We need to break to let the fallback logic AFTER the loop run?
+            // Actually, the structure assumes we handle logic *inside* or *after*?
+            // Existing logic had fallback inside.
+
+            // Let's rely on the code AFTER the while loop to handle the transition if targetOption is set.
+            // If targetOption is NOT set, we do fallback here.
+
+            // --- SMART FALLBACK ---
+            const isLongText = input.split(/\s+/).length > 3;
+            const isHandoffKeyword = ['ayuda', 'humano', 'asesor', 'persona', 'comprobante', 'consulta'].some(k => input.includes(k));
+
+            if (isLongText || isHandoffKeyword) {
+                console.log(`[TRACE] 🧠 Smart Fallback: Input "${input}" treated as general query/handoff.`);
+                conversation.state = 'paused';
+                if (!conversation.tags.includes('intervencion-humana')) {
+                    conversation.tags.push('intervencion-humana');
+                }
+                await conversation.save();
+                const chat = await msg.getChat();
+                await chat.sendMessage("👍 Recibido. Un asesor humano revisará tu mensaje y te responderá a la brevedad.");
+                return;
+            }
+
+            // Standard Fallback logic 
+            console.log(`[TRACE] ⚠️ Invalid Option: ${input}`);
+            conversation.loopDetection.messagesInCurrentStep++;
+            conversation.markModified('loopDetection');
+            await conversation.save();
+
+            if (conversation.loopDetection.messagesInCurrentStep > 3) {
+                await triggerAutoHandoff(conversation, contact, currentStep);
+                return;
+            }
+
+            const chat = await msg.getChat();
+            let fallbackMsg = flow.published.fallbackMessage || 'No entendí esa opción.';
+            await chat.sendMessage(fallbackMsg);
+            return;
+        }
+
+        // 3. MATCH OR FALLBACK
+        if (targetOption) {
+            console.log(`[TRACE] ✅ Option Matched: ${targetOption.label} -> ${targetOption.nextStepId}`);
+            conversation.currentStepId = targetOption.nextStepId;
+            conversation.loopDetection.messagesInCurrentStep = 0;
+            conversation.loopDetection.lastStepChangeAt = new Date(); // Reset loop detection
+
+            // Execute actions if any
+            if (targetOption.actions) {
+                // actions...
+            }
+
+            await conversation.save();
+            await handleStepLogic(client, msg, conversation, flow, contact); // Recursive next step
+            return;
         }
     }
-
-    // 3. MATCH OR FALLBACK
-    if (targetOption) {
-        console.log(`[TRACE] ✅ Option Matched: ${targetOption.label} -> ${targetOption.nextStepId}`);
-        conversation.currentStepId = targetOption.nextStepId;
-        conversation.loopDetection.messagesInCurrentStep = 0;
-        conversation.loopDetection.lastStepChangeAt = new Date();
-
-        // Execute actions if any
-        if (targetOption.actions) {
-            // handle actions here if we had them in options
-        }
-
-        await conversation.save();
-        await handleStepLogic(client, msg, conversation, flow, contact); // Recursive next step
-        return;
-    }
-
-    // --- SMART FALLBACK ---
-    // If input is long (> 3 words) or contains keywords, treat as Open Input/Handoff
-    const isLongText = input.split(/\s+/).length > 3;
-    const isHandoffKeyword = ['ayuda', 'humano', 'asesor', 'persona', 'comprobante', 'consulta'].some(k => input.includes(k));
-
-    if (isLongText || isHandoffKeyword) {
-        console.log(`[TRACE] 🧠 Smart Fallback: Input "${input}" treated as general query/handoff.`);
-
-        // Mark conversation as needing human attention
-        conversation.state = 'paused';
-        if (!conversation.tags.includes('intervencion-humana')) {
-            conversation.tags.push('intervencion-humana');
-        }
-        await conversation.save();
-
-        // Notify user
-        const chat = await msg.getChat();
-        await chat.sendMessage("👍 Recibido. Un asesor humano revisará tu mensaje y te responderá a la brevedad.");
-        return;
-    }
-
-    // Standard Fallback
-    console.log(`[TRACE] ⚠️ Invalid Option: ${input}`);
-
-    conversation.loopDetection.messagesInCurrentStep++;
-    conversation.markModified('loopDetection');
     await conversation.save();
 
-    if (conversation.loopDetection.messagesInCurrentStep > 3) {
-        await triggerAutoHandoff(conversation, contact, currentStep);
-        return;
-    }
-
+    // Notify user
     const chat = await msg.getChat();
-    let fallbackMsg = flow.published.fallbackMessage || 'No entendí esa opción. Por favor elegí una de las opciones válidas o escribí M para volver al inicio.';
-    await chat.sendMessage(fallbackMsg);
+    await chat.sendMessage("👍 Recibido. Un asesor humano revisará tu mensaje y te responderá a la brevedad.");
     return;
 }
+
+// Standard Fallback
+console.log(`[TRACE] ⚠️ Invalid Option: ${input}`);
+
+conversation.loopDetection.messagesInCurrentStep++;
+conversation.markModified('loopDetection');
+await conversation.save();
+
+if (conversation.loopDetection.messagesInCurrentStep > 3) {
+    await triggerAutoHandoff(conversation, contact, currentStep);
+    return;
+}
+
+const chat = await msg.getChat();
+let fallbackMsg = flow.published.fallbackMessage || 'No entendí esa opción. Por favor elegí una de las opciones válidas o escribí M para volver al inicio.';
+await chat.sendMessage(fallbackMsg);
+return;
+    }
 
 
 await client.initialize();
