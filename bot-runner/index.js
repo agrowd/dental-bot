@@ -552,6 +552,24 @@ async function startBot() {
             await conversation.save();
         }
 
+        // 1.5 MEDIA DETECTION (Receipts)
+        if (msg.hasMedia) {
+            console.log(`[TRACE] 📸 Media detected from ${contact.phone}. Assuming receipt/document.`);
+            conversation.state = 'paused';
+            if (!conversation.tags.includes('pago-enviado')) {
+                conversation.tags.push('pago-enviado');
+            }
+            await conversation.save();
+
+            const chat = await msg.getChat();
+            await sendTyping(chat);
+            await randomDelay(1000, 500);
+            await chat.sendMessage('✅ ¡Recibimos tu archivo! Un administrador lo revisará en breve para confirmar tu pago y turno. ¡Gracias! 👤');
+
+            await syncWhatsAppLabel(chat, 'Derivado con Personal');
+            return; // Stop processing for this message
+        }
+
         // 2. STATE MACHINE LOOP
         while (loopSafety < 5) {
             loopSafety++;
