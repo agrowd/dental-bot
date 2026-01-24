@@ -713,35 +713,11 @@ async function startBot() {
             return;
         }
     }
-    await conversation.save();
-
-    // Notify user
-    const chat = await msg.getChat();
-    await chat.sendMessage("👍 Recibido. Un asesor humano revisará tu mensaje y te responderá a la brevedad.");
-    return;
-}
-
-// Standard Fallback
-console.log(`[TRACE] ⚠️ Invalid Option: ${input}`);
-
-conversation.loopDetection.messagesInCurrentStep++;
-conversation.markModified('loopDetection');
-await conversation.save();
-
-if (conversation.loopDetection.messagesInCurrentStep > 3) {
-    await triggerAutoHandoff(conversation, contact, currentStep);
-    return;
-}
-
-const chat = await msg.getChat();
-let fallbackMsg = flow.published.fallbackMessage || 'No entendí esa opción. Por favor elegí una de las opciones válidas o escribí M para volver al inicio.';
-await chat.sendMessage(fallbackMsg);
-return;
-    }
 
 
-await client.initialize();
-console.log('[INIT] Client initialized inside startBot');
+
+    await client.initialize();
+    console.log('[INIT] Client initialized inside startBot');
 }
 
 // Format message with options and dynamic variables
