@@ -666,17 +666,13 @@ async function startBot() {
 
             // --- SMART FALLBACK ---
             const text = input.toLowerCase();
-            const isLongText = text.split(/\s+/).length > 3;
-            // Expanded keyword list for conversational fillers/handoffs
-            const HANDOFF_KEYWORDS = ['ayuda', 'humano', 'asesor', 'persona', 'comprobante', 'consulta', 'turno', 'ahora', 'buen dia', 'hola', 'gracias'];
-            const isConversational = HANDOFF_KEYWORDS.some(k => text.includes(k));
 
-            if (isLongText || isConversational) {
-                console.log(`[TRACE] 🧠 Smart Fallback: Input "${input}" treated as general query/handoff.`);
+            // Strict handoff: Only explicit calls for help
+            const HANDOFF_KEYWORDS = ['ayuda', 'humano', 'asesor', 'persona'];
+            const isHandoffRequest = HANDOFF_KEYWORDS.some(k => text.includes(k));
 
-                // If it's just a greeting or short ack, maybe just continue flow or do nothing?
-                // For now, let's treat it as a handoff request to be safe as per user request "volvelo loco"
-
+            if (isHandoffRequest) {
+                console.log(`[TRACE] 👤 Handoff Requested: Input "${input}" contains help keyword.`);
                 conversation.state = 'paused';
                 if (!conversation.tags.includes('intervencion-humana')) {
                     conversation.tags.push('intervencion-humana');
@@ -687,7 +683,7 @@ async function startBot() {
                 return;
             }
 
-            // Standard Fallback logic for truly unknown inputs
+            // Standard Fallback logic for everything else (Keep in Flow)
             console.log(`[TRACE] ⚠️ Invalid Option: ${input}`);
 
             // Only increment loop detection if it's NOT a conversational filler
