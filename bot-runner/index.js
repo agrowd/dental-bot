@@ -733,7 +733,7 @@ async function startBot() {
     await chat.sendMessage(fallbackMsg);
     return;
 }
-    }
+
 
 await client.initialize();
 console.log('[INIT] Client initialized inside startBot');
