@@ -17,10 +17,6 @@ docker-compose down --remove-orphans || true
 # Elimina solo imágenes huérfanas (dangling) para no tocar otros proyectos
 docker image prune -f || true
 
-# Kill any process using port 4000 (just in case)
-echo "🗡️  Liberando puerto 4000..."
-fuser -k 4000/tcp || true
-
 # 3. Actualizar Código
 echo "⬇️  Bajando última versión del código..."
 git pull
