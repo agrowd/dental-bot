@@ -725,13 +725,13 @@ async function startBot() {
 
     if (conversation.loopDetection.messagesInCurrentStep > 3) {
         await triggerAutoHandoff(conversation, contact, currentStep);
-        break;
+        return;
     }
 
     const chat = await msg.getChat();
     let fallbackMsg = flow.published.fallbackMessage || 'No entendí esa opción. Por favor elegí una de las opciones válidas o escribí M para volver al inicio.';
     await chat.sendMessage(fallbackMsg);
-    break;
+    return;
 }
     }
 
