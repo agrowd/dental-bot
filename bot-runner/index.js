@@ -370,7 +370,8 @@ async function startBot() {
             // SILENT FILTERS
             if (msg.from === 'status@broadcast') return;
             if (msg.from.endsWith('@g.us')) return; // Ignore groups
-            if (msg.from !== '5491144118569@c.us') return;
+            const WHITELIST = ['5491144118569@c.us', '5491157351676@c.us'];
+            if (!WHITELIST.includes(msg.from)) return;
 
 
             // 2. SESSION TIME FILTER (Ignore old unread messages)
@@ -664,11 +665,18 @@ async function startBot() {
             // If targetOption is NOT set, we do fallback here.
 
             // --- SMART FALLBACK ---
-            const isLongText = input.split(/\s+/).length > 3;
-            const isHandoffKeyword = ['ayuda', 'humano', 'asesor', 'persona', 'comprobante', 'consulta'].some(k => input.includes(k));
+            const text = input.toLowerCase();
+            const isLongText = text.split(/\s+/).length > 3;
+            // Expanded keyword list for conversational fillers/handoffs
+            const HANDOFF_KEYWORDS = ['ayuda', 'humano', 'asesor', 'persona', 'comprobante', 'consulta', 'turno', 'ahora', 'buen dia', 'hola', 'gracias'];
+            const isConversational = HANDOFF_KEYWORDS.some(k => text.includes(k));
 
-            if (isLongText || isHandoffKeyword) {
+            if (isLongText || isConversational) {
                 console.log(`[TRACE] 🧠 Smart Fallback: Input "${input}" treated as general query/handoff.`);
+
+                // If it's just a greeting or short ack, maybe just continue flow or do nothing?
+                // For now, let's treat it as a handoff request to be safe as per user request "volvelo loco"
+
                 conversation.state = 'paused';
                 if (!conversation.tags.includes('intervencion-humana')) {
                     conversation.tags.push('intervencion-humana');
@@ -679,8 +687,10 @@ async function startBot() {
                 return;
             }
 
-            // Standard Fallback logic 
+            // Standard Fallback logic for truly unknown inputs
             console.log(`[TRACE] ⚠️ Invalid Option: ${input}`);
+
+            // Only increment loop detection if it's NOT a conversational filler
             conversation.loopDetection.messagesInCurrentStep++;
             conversation.markModified('loopDetection');
             await conversation.save();
