@@ -883,6 +883,6 @@ app.listen(PORT, () => {
     console.log('Bot state:', botState);
     console.log('To start bot, POST to /bot/start');
 
-    // Auto-start bot on server launch disabled to save resources
-    // startBot();
+    // Auto-start bot on server launch
+    startBot();
 });
