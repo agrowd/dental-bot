@@ -54,113 +54,115 @@ async function nuclearFix() {
                     { id: "opt-confirm", key: "A", label: "Ya lo pagué (Enviar comprobante)", nextStepId: "instruccion_comprobante" }
                 ]
             },
-            title: "Instruccion Comprobante",
-            message: "¡Perfecto! Por favor, **adjuntá la foto o PDF de tu comprobante** ahora mismo.\n\nAl recibirlo, un humano revisará tu pago para confirmarte el turno. 👇",
-            options: [],
-            actions: { pauseConversation: true, addTags: ["esperando-comprobante"] }
-        },
-        "info_general": {
-            id: "info_general",
+            "instruccion_comprobante": {
+                id: "instruccion_comprobante",
+                title: "Instruccion Comprobante",
+                message: "¡Perfecto! Por favor, **adjuntá la foto o PDF de tu comprobante** ahora mismo.\n\nAl recibirlo, un humano revisará tu pago para confirmarte el turno. 👇",
+                options: [],
+                actions: { pauseConversation: true, addTags: ["esperando-comprobante"] }
+            },
+            "info_general": {
+                id: "info_general",
                 title: "Menú de Tratamientos",
-                    message: "Contamos con tecnología de punta para tu salud dental. Seleccioná el tratamiento de tu interés para ver info y costos:",
-                        options: [
-                            { id: "t-1", key: "A", label: "Implantes Dentales", nextStepId: "info_implantes" },
-                            { id: "t-2", key: "B", label: "Prótesis (Dientes Provisorios)", nextStepId: "info_protesis" },
-                            { id: "t-3", key: "C", label: "Estética y Blanqueamiento", nextStepId: "info_estetica" },
-                            { id: "t-4", key: "D", label: "Limpieza y Prevención", nextStepId: "info_limpieza" },
-                            { id: "p-treat", key: "P", label: "Realizar un Pago", nextStepId: "pago_info_general" }
-                        ]
-        },
-        "info_implantes": {
-            id: "info_implantes",
+                message: "Contamos con tecnología de punta para tu salud dental. Seleccioná el tratamiento de tu interés para ver info y costos:",
+                options: [
+                    { id: "t-1", key: "A", label: "Implantes Dentales", nextStepId: "info_implantes" },
+                    { id: "t-2", key: "B", label: "Prótesis (Dientes Provisorios)", nextStepId: "info_protesis" },
+                    { id: "t-3", key: "C", label: "Estética y Blanqueamiento", nextStepId: "info_estetica" },
+                    { id: "t-4", key: "D", label: "Limpieza y Prevención", nextStepId: "info_limpieza" },
+                    { id: "p-treat", key: "P", label: "Realizar un Pago", nextStepId: "pago_info_general" }
+                ]
+            },
+            "info_implantes": {
+                id: "info_implantes",
                 title: "Info Implantes",
-                    message: "🦷 **Implantes RAD**\n\nAcá tenés la información detallada: Entrá a este link para saber sobre nuestros tipos de implantes y materiales: https://rad.jaef.com/implantes\n\nPara realizar el pago del pre-presupuesto y reservar tu turno, usá este link: https://mpago.la/implantes-rad",
-                        options: [{ id: "opt-next-1", key: "A", label: "Quiero este tratamiento", nextStepId: "captura_nombre" }]
-        },
-        "info_protesis": {
-            id: "info_protesis",
+                message: "🦷 **Implantes RAD**\n\nAcá tenés la información detallada: Entrá a este link para saber sobre nuestros tipos de implantes y materiales: https://rad.jaef.com/implantes\n\nPara realizar el pago del pre-presupuesto y reservar tu turno, usá este link: https://mpago.la/implantes-rad",
+                options: [{ id: "opt-next-1", key: "A", label: "Quiero este tratamiento", nextStepId: "captura_nombre" }]
+            },
+            "info_protesis": {
+                id: "info_protesis",
                 title: "Info Prótesis",
-                    message: "🦷 **Prótesis RAD**\n\nAcá tenés la información: Entrá a este link para saber sobre prótesis fijas y removibles: https://rad.jaef.com/protesis\n\nPodés realizar el pago de la seña aquí: https://mpago.la/protesis-rad",
-                        options: [{ id: "opt-next-2", key: "A", label: "Quiero este tratamiento", nextStepId: "captura_nombre" }]
-        },
-        "info_estetica": {
-            id: "info_estetica",
+                message: "🦷 **Prótesis RAD**\n\nAcá tenés la información: Entrá a este link para saber sobre prótesis fijas y removibles: https://rad.jaef.com/protesis\n\nPodés realizar el pago de la seña aquí: https://mpago.la/protesis-rad",
+                options: [{ id: "opt-next-2", key: "A", label: "Quiero este tratamiento", nextStepId: "captura_nombre" }]
+            },
+            "info_estetica": {
+                id: "info_estetica",
                 title: "Info Estética",
-                    message: "✨ **Estética Dental RAD**\n\nAcá tenés la información: Entrá a este link para conocer nuestros diseños de sonrisa: https://rad.jaef.com/estetica\n\nRealizá el pago de tu sesión aquí: https://mpago.la/estetica-rad",
-                        options: [{ id: "opt-next-3", key: "A", label: "Quiero este tratamiento", nextStepId: "captura_nombre" }]
-        },
-        "info_limpieza": {
-            id: "info_limpieza",
+                message: "✨ **Estética Dental RAD**\n\nAcá tenés la información: Entrá a este link para conocer nuestros diseños de sonrisa: https://rad.jaef.com/estetica\n\nRealizá el pago de tu sesión aquí: https://mpago.la/estetica-rad",
+                options: [{ id: "opt-next-3", key: "A", label: "Quiero este tratamiento", nextStepId: "captura_nombre" }]
+            },
+            "info_limpieza": {
+                id: "info_limpieza",
                 title: "Info Limpieza",
-                    message: "🧼 **Limpieza RAD**\n\nAcá tenés la información: Entrá a este link para saber sobre nuestro sistema de limpieza profunda: https://rad.jaef.com/limpieza\n\nAboná tu turno de limpieza aquí: https://mpago.la/limpieza-rad",
-                        options: [{ id: "opt-next-4", key: "A", label: "Quiero este tratamiento", nextStepId: "captura_nombre" }]
-        },
-        "captura_nombre": {
-            id: "captura_nombre",
+                message: "🧼 **Limpieza RAD**\n\nAcá tenés la información: Entrá a este link para saber sobre nuestro sistema de limpieza profunda: https://rad.jaef.com/limpieza\n\nAboná tu turno de limpieza aquí: https://mpago.la/limpieza-rad",
+                options: [{ id: "opt-next-4", key: "A", label: "Quiero este tratamiento", nextStepId: "captura_nombre" }]
+            },
+            "captura_nombre": {
+                id: "captura_nombre",
                 title: "Captura de Nombre",
-                    message: "¡Genial! Por favor, ingresá tu Nombre y Apellido para agendarte:",
-                        options: [],
-                            nextStepId: "captura_dni"
-        },
-        "captura_dni": {
-            id: "captura_dni",
+                message: "¡Genial! Por favor, ingresá tu Nombre y Apellido para agendarte:",
+                options: [],
+                nextStepId: "captura_dni"
+            },
+            "captura_dni": {
+                id: "captura_dni",
                 title: "Captura de DNI",
-                    message: "Gracias. Ahora ingresá tu DNI (solo números):",
-                        options: [],
-                            nextStepId: "cierre_final"
-        },
-        "cierre_final": {
-            id: "cierre_final",
+                message: "Gracias. Ahora ingresá tu DNI (solo números):",
+                options: [],
+                nextStepId: "cierre_final"
+            },
+            "cierre_final": {
+                id: "cierre_final",
                 title: "Cierre",
-                    message: "¡Listo! Ya registramos tus datos. Un asesor revisará tu pedido y se contactará con vos en breve para confirmar el turno. ¡Gracias por confiar en RAD!",
-                        options: [],
-                            actions: { pauseConversation: true }
-        },
-        "derivacion_paciente": {
-            id: "derivacion_paciente",
+                message: "¡Listo! Ya registramos tus datos. Un asesor revisará tu pedido y se contactará con vos en breve para confirmar el turno. ¡Gracias por confiar en RAD!",
+                options: [],
+                actions: { pauseConversation: true }
+            },
+            "derivacion_paciente": {
+                id: "derivacion_paciente",
                 title: "Atencion del Paciente",
-                    message: "¡Hola de nuevo! Como ya sos paciente de la casa, te derivamos directamente con un asistente humano para ayudarte con lo que necesites. Aguardanos un momento... 👤",
-                        options: [],
-                            actions: { pauseConversation: true, addTags: ["atencion-paciente"] }
-        },
-        "derivacion_profesional": {
-            id: "derivacion_profesional",
+                message: "¡Hola de nuevo! Como ya sos paciente de la casa, te derivamos directamente con un asistente humano para ayudarte con lo que necesites. Aguardanos un momento... 👤",
+                options: [],
+                actions: { pauseConversation: true, addTags: ["atencion-paciente"] }
+            },
+            "derivacion_profesional": {
+                id: "derivacion_profesional",
                 title: "Derivación Profesional",
-                    message: "¡Bienvenido! Podés conocer nuestra propuesta en: 🌐 https://rad.jaef.com/profesionales\n\nO dejanos tu mensaje aquí y te contactaremos. 👇",
-                        options: [],
-                            actions: { pauseConversation: true, addTags: ["perfil-profesional"] }
-        }
-    };
+                message: "¡Bienvenido! Podés conocer nuestra propuesta en: 🌐 https://rad.jaef.com/profesionales\n\nO dejanos tu mensaje aquí y te contactaremos. 👇",
+                options: [],
+                actions: { pauseConversation: true, addTags: ["perfil-profesional"] }
+            }
+        };
 
-    const flow = await Flow.create({
-        name: flowName,
-        description: "Flujo RAD - Versión NUCLEAR V100",
-        isActive: true,
-        activationRules: {
-            sources: { meta_ads: true, organic: true },
-            whatsappStatus: { agendado: true, no_agendado: true },
-            priority: 1000, // Top priority
-            forceRestart: true,
-            activationOffset: 2
-        },
-        draft: { entryStepId: "welcome", steps: steps },
-        published: {
-            entryStepId: "welcome",
-            steps: steps,
-            fallbackMessage: "No entiendo esa opción. Por favor elegí una válida o escribí M para volver al inicio."
-        },
-        publishedVersion: 100,
-        createdAt: new Date(),
-        updatedAt: new Date()
-    });
+        const flow = await Flow.create({
+            name: flowName,
+            description: "Flujo RAD - Versión NUCLEAR V100",
+            isActive: true,
+            activationRules: {
+                sources: { meta_ads: true, organic: true },
+                whatsappStatus: { agendado: true, no_agendado: true },
+                priority: 1000, // Top priority
+                forceRestart: true,
+                activationOffset: 2
+            },
+            draft: { entryStepId: "welcome", steps: steps },
+            published: {
+                entryStepId: "welcome",
+                steps: steps,
+                fallbackMessage: "No entiendo esa opción. Por favor elegí una válida o escribí M para volver al inicio."
+            },
+            publishedVersion: 100,
+            createdAt: new Date(),
+            updatedAt: new Date()
+        });
 
-    console.log(`✅ NUCLEAR FIX COMPLETE. New Flow "${flowName}" seeded at Version 100.`);
-    process.exit(0);
+        console.log(`✅ NUCLEAR FIX COMPLETE. New Flow "${flowName}" seeded at Version 100.`);
+        process.exit(0);
 
-} catch (e) {
-    console.error("❌ NUCLEAR ERROR:", e);
-    process.exit(1);
-}
+    } catch (e) {
+        console.error("❌ NUCLEAR ERROR:", e);
+        process.exit(1);
+    }
 }
 
 nuclearFix();
