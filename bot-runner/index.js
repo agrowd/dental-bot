@@ -633,9 +633,15 @@ async function startBot() {
                     console.error('[ERROR] Failed to send message:', error);
                 }
 
+                // Atomic Update instead of save()
+                await Conversation.updateOne(
+                    { _id: conversation._id },
+                    {
+                        $set: { "loopDetection.messagesInCurrentStep": 1 },
+                        $inc: { __v: 1 }
+                    }
+                );
                 conversation.loopDetection.messagesInCurrentStep = 1;
-                conversation.markModified('loopDetection');
-                await conversation.save();
                 break;
             }
 
@@ -705,16 +711,22 @@ async function startBot() {
         // 3. MATCH OR FALLBACK
         if (targetOption) {
             console.log(`[TRACE] ✅ Option Matched: ${targetOption.label} -> ${targetOption.nextStepId}`);
+            // Atomic state update for transition
+            await Conversation.updateOne(
+                { _id: conversation._id },
+                {
+                    $set: {
+                        currentStepId: targetOption.nextStepId,
+                        "loopDetection.messagesInCurrentStep": 0,
+                        "loopDetection.lastStepChangeAt": new Date()
+                    },
+                    $inc: { __v: 1 }
+                }
+            );
+
+            // Update local object for recursion
             conversation.currentStepId = targetOption.nextStepId;
             conversation.loopDetection.messagesInCurrentStep = 0;
-            conversation.loopDetection.lastStepChangeAt = new Date(); // Reset loop detection
-
-            // Execute actions if any
-            if (targetOption.actions) {
-                // actions...
-            }
-
-            await conversation.save();
             await handleStepLogic(client, msg, conversation, flow, contact); // Recursive next step
             return;
         }
