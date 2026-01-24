@@ -160,6 +160,17 @@ async function startBot() {
         console.warn('[INIT] Warning during cleanup:', e.message);
     }
 
+    // CLEANUP: Destroy old client if it exists
+    if (client) {
+        console.log('[INIT] Destroying previous client instance...');
+        try {
+            await client.destroy();
+        } catch (e) {
+            console.warn('[INIT] Error destroying old client:', e.message);
+        }
+        client = null;
+    }
+
     client = new Client({
         authStrategy: new LocalAuth({
             dataPath: authPath
@@ -382,28 +393,33 @@ async function startBot() {
                 const isClosed = !isWithinBusinessHours(businessHours.value.schedule);
                 if (isClosed) {
                     const now = new Date();
-                    const lastOoO = contact.meta?.lastOOOSentAt ? new Date(contact.meta.lastOOOSentAt) : null;
-                    const hoursSinceLast = lastOoO ? (now - lastOoO) / (1000 * 60 * 60) : 999;
+                    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
 
-                    if (hoursSinceLast >= 1) { // Only once per hour
+                    // ATOMIC UPDATE: Only send if lastOOOSentAt is old or missing
+                    const updatedContact = await Contact.findOneAndUpdate(
+                        {
+                            _id: contact._id,
+                            $or: [
+                                { "meta.lastOOOSentAt": { $exists: false } },
+                                { "meta.lastOOOSentAt": { $lt: oneHourAgo.toISOString() } },
+                                { "meta.lastOOOSentAt": null }
+                            ]
+                        },
+                        { $set: { "meta.lastOOOSentAt": now.toISOString() } },
+                        { new: true }
+                    );
+
+                    if (updatedContact) {
                         console.log(`[TRACE] 🌙 CLINIC CLOSED. Sending out-of-office message to ${phone}`);
                         const chat = await msg.getChat();
                         await sendTyping(chat);
                         await randomDelay(1000, 500);
                         const msgText = businessHours.value.closedMessage || 'Estamos fuera de horario de atención.';
                         await chat.sendMessage(msgText);
-
-                        if (!contact.meta) contact.meta = {};
-                        contact.meta.lastOOOSentAt = now.toISOString();
-                        contact.markModified('meta');
-                        await contact.save();
+                        contact = updatedContact; // Refresh local contact
                     } else {
                         console.log(`[TRACE] 🌙 CLINIC CLOSED. Skipping out-of-office spam.`);
                     }
-                    // We DON'T return here because we might still want to process the flow
-                    // (e.g. if they want to leave a query), but usually we stop or let it continue.
-                    // The user said "registramos tu consulta y te contactaremos mañana",
-                    // so it's better to let the flow proceed so they can leave data.
                 }
             }
             // ----------------------------
@@ -411,19 +427,10 @@ async function startBot() {
             // Find active conversation
             let conversation = await Conversation.findOne({ phone, state: 'active' });
 
-            if (conversation) {
-                console.log(`[TRACE] Found ACTIVE conversation ${conversation._id} for ${phone} at step ${conversation.currentStepId}`);
-                if (client && client.info) {
-                    const chat = await msg.getChat();
-                    await syncWhatsAppLabel(chat, 'BOT');
-                }
-            }
-
             // Check for explicit "reset" command
             if (msg.body.trim().toUpperCase() === 'RESET') {
                 if (conversation) {
-                    conversation.state = 'closed';
-                    await conversation.save();
+                    await Conversation.updateOne({ _id: conversation._id }, { state: 'closed' });
                 }
                 const chat = await msg.getChat();
                 await chat.sendMessage('🔄 Conversación reiniciada.');
