@@ -673,25 +673,70 @@ async function startBot() {
 
             // Transition (Apply Change)
             const nextStep = getStep(nextStepId);
-            if (!nextStep) break;
-
-            if (!conversation.history) conversation.history = [];
-            if (conversation.currentStepId !== nextStepId) {
-                conversation.history.push(conversation.currentStepId);
-                if (conversation.history.length > 15) conversation.history.shift();
-            }
-
-            conversation.currentStepId = nextStepId;
-            conversation.loopDetection = { currentStepId: nextStepId, messagesInCurrentStep: 0, lastStepChangeAt: new Date() };
-            conversation.markModified('loopDetection');
-            conversation.markModified('history');
-            await conversation.save();
-            // Loop continues
+            targetOption = opt;
+            break;
         }
     }
 
-    await client.initialize();
-    console.log('[INIT] Client initialized inside startBot');
+    // 3. MATCH OR FALLBACK
+    if (targetOption) {
+        console.log(`[TRACE] ✅ Option Matched: ${targetOption.label} -> ${targetOption.nextStepId}`);
+        conversation.currentStepId = targetOption.nextStepId;
+        conversation.loopDetection.messagesInCurrentStep = 0;
+        conversation.loopDetection.lastStepChangeAt = new Date();
+
+        // Execute actions if any
+        if (targetOption.actions) {
+            // handle actions here if we had them in options
+        }
+
+        await conversation.save();
+        await handleStepLogic(client, msg, conversation, flow, contact); // Recursive next step
+        return;
+    }
+
+    // --- SMART FALLBACK ---
+    // If input is long (> 3 words) or contains keywords, treat as Open Input/Handoff
+    const isLongText = input.split(/\s+/).length > 3;
+    const isHandoffKeyword = ['ayuda', 'humano', 'asesor', 'persona', 'comprobante', 'consulta'].some(k => input.includes(k));
+
+    if (isLongText || isHandoffKeyword) {
+        console.log(`[TRACE] 🧠 Smart Fallback: Input "${input}" treated as general query/handoff.`);
+
+        // Mark conversation as needing human attention
+        conversation.state = 'paused';
+        if (!conversation.tags.includes('intervencion-humana')) {
+            conversation.tags.push('intervencion-humana');
+        }
+        await conversation.save();
+
+        // Notify user
+        const chat = await msg.getChat();
+        await chat.sendMessage("👍 Recibido. Un asesor humano revisará tu mensaje y te responderá a la brevedad.");
+        return;
+    }
+
+    // Standard Fallback
+    console.log(`[TRACE] ⚠️ Invalid Option: ${input}`);
+
+    conversation.loopDetection.messagesInCurrentStep++;
+    conversation.markModified('loopDetection');
+    await conversation.save();
+
+    if (conversation.loopDetection.messagesInCurrentStep > 3) {
+        await triggerAutoHandoff(conversation, contact, currentStep);
+        break;
+    }
+
+    const chat = await msg.getChat();
+    let fallbackMsg = flow.published.fallbackMessage || 'No entendí esa opción. Por favor elegí una de las opciones válidas o escribí M para volver al inicio.';
+    await chat.sendMessage(fallbackMsg);
+    break;
+}
+    }
+
+await client.initialize();
+console.log('[INIT] Client initialized inside startBot');
 }
 
 // Format message with options and dynamic variables
