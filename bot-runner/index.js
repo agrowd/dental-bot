@@ -381,32 +381,28 @@ async function startBot() {
             if (businessHours && businessHours.value.enabled) {
                 const isClosed = !isWithinBusinessHours(businessHours.value.schedule);
                 if (isClosed) {
-                    console.log(`[TRACE] 🌙 CLINIC CLOSED. Checking if we should send out-of-office message.`);
+                    const now = new Date();
+                    const lastOoO = contact.meta?.lastOOOSentAt ? new Date(contact.meta.lastOOOSentAt) : null;
+                    const hoursSinceLast = lastOoO ? (now - lastOoO) / (1000 * 60 * 60) : 999;
 
-                    // Only send if it's been more than 4 hours since last message or it's a new contact
-                    const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000);
-                    const lastMsg = await Message.findOne({ phone }).sort({ timestamp: -1 });
-
-                    if (!lastMsg || lastMsg.timestamp < fourHoursAgo) {
+                    if (hoursSinceLast >= 1) { // Only once per hour
+                        console.log(`[TRACE] 🌙 CLINIC CLOSED. Sending out-of-office message to ${phone}`);
                         const chat = await msg.getChat();
                         await sendTyping(chat);
-                        await randomDelay(2000, 1000);
-                        await chat.sendMessage(businessHours.value.closedMessage || 'Estamos fuera de horario de atención.');
-                        console.log(`[TRACE] ✅ Out-of-office message sent to ${phone}`);
+                        await randomDelay(1000, 500);
+                        const msgText = businessHours.value.closedMessage || 'Estamos fuera de horario de atención.';
+                        await chat.sendMessage(msgText);
 
-                        // Save the outbound message
-                        await Message.create({
-                            phone,
-                            text: businessHours.value.closedMessage,
-                            direction: 'outbound',
-                            timestamp: new Date()
-                        });
+                        if (!contact.meta) contact.meta = {};
+                        contact.meta.lastOOOSentAt = now.toISOString();
+                        contact.markModified('meta');
+                        await contact.save();
                     } else {
-                        console.log(`[TRACE] Skipping out-of-office message (already sent recently).`);
+                        console.log(`[TRACE] 🌙 CLINIC CLOSED. Skipping out-of-office spam.`);
                     }
-                    // We DON'T return here because we might still want to process the flow 
+                    // We DON'T return here because we might still want to process the flow
                     // (e.g. if they want to leave a query), but usually we stop or let it continue.
-                    // The user said "registramos tu consulta y te contactaremos mañana", 
+                    // The user said "registramos tu consulta y te contactaremos mañana",
                     // so it's better to let the flow proceed so they can leave data.
                 }
             }
@@ -677,7 +673,7 @@ function formatMessage(step, flow) {
 
     // Navigation Labels (V/M)
     if (flow && flow.published && step.id !== flow.published.entryStepId) {
-        msg += `\n\nV) Volver atrás\nM) Menu principal`;
+        msg += `\n\n🔹 *V:* Volver atrás\n🔹 *M:* Menú principal`;
     }
 
     return msg.trim();
