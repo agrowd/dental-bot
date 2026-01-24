@@ -77,25 +77,37 @@ async function nuclearFix() {
                 id: "info_implantes",
                 title: "Info Implantes",
                 message: "🦷 **Implantes RAD**\n\nAcá tenés la información detallada: Entrá a este link para saber sobre nuestros tipos de implantes y materiales: https://rad.jaef.com/implantes\n\nPara realizar el pago del pre-presupuesto y reservar tu turno, usá este link: https://mpago.la/implantes-rad",
-                options: [{ id: "opt-next-1", key: "A", label: "Quiero este tratamiento", nextStepId: "captura_nombre" }]
+                options: [
+                    { id: "opt-next-1", key: "A", label: "Quiero este tratamiento", nextStepId: "captura_nombre" },
+                    { id: "p-imp", key: "P", label: "Realizar un Pago", nextStepId: "pago_info_general" }
+                ]
             },
             "info_protesis": {
                 id: "info_protesis",
                 title: "Info Prótesis",
                 message: "🦷 **Prótesis RAD**\n\nAcá tenés la información: Entrá a este link para saber sobre prótesis fijas y removibles: https://rad.jaef.com/protesis\n\nPodés realizar el pago de la seña aquí: https://mpago.la/protesis-rad",
-                options: [{ id: "opt-next-2", key: "A", label: "Quiero este tratamiento", nextStepId: "captura_nombre" }]
+                options: [
+                    { id: "opt-next-2", key: "A", label: "Quiero este tratamiento", nextStepId: "captura_nombre" },
+                    { id: "p-prot", key: "P", label: "Realizar un Pago", nextStepId: "pago_info_general" }
+                ]
             },
             "info_estetica": {
                 id: "info_estetica",
                 title: "Info Estética",
                 message: "✨ **Estética Dental RAD**\n\nAcá tenés la información: Entrá a este link para conocer nuestros diseños de sonrisa: https://rad.jaef.com/estetica\n\nRealizá el pago de tu sesión aquí: https://mpago.la/estetica-rad",
-                options: [{ id: "opt-next-3", key: "A", label: "Quiero este tratamiento", nextStepId: "captura_nombre" }]
+                options: [
+                    { id: "opt-next-3", key: "A", label: "Quiero este tratamiento", nextStepId: "captura_nombre" },
+                    { id: "p-est", key: "P", label: "Realizar un Pago", nextStepId: "pago_info_general" }
+                ]
             },
             "info_limpieza": {
                 id: "info_limpieza",
                 title: "Info Limpieza",
                 message: "🧼 **Limpieza RAD**\n\nAcá tenés la información: Entrá a este link para saber sobre nuestro sistema de limpieza profunda: https://rad.jaef.com/limpieza\n\nAboná tu turno de limpieza aquí: https://mpago.la/limpieza-rad",
-                options: [{ id: "opt-next-4", key: "A", label: "Quiero este tratamiento", nextStepId: "captura_nombre" }]
+                options: [
+                    { id: "opt-next-4", key: "A", label: "Quiero este tratamiento", nextStepId: "captura_nombre" },
+                    { id: "p-limp", key: "P", label: "Realizar un Pago", nextStepId: "pago_info_general" }
+                ]
             },
             "captura_nombre": {
                 id: "captura_nombre",

@@ -715,6 +715,7 @@ async function startBot() {
             await Conversation.updateOne(
                 { _id: conversation._id },
                 {
+                    $push: { history: conversation.currentStepId }, // SAVE CURRENT STEP TO HISTORY
                     $set: {
                         currentStepId: targetOption.nextStepId,
                         "loopDetection.messagesInCurrentStep": 0,
