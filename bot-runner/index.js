@@ -567,36 +567,62 @@ async function startBot() {
         // 1. UNIVERSAL COMMANDS (V/M)
         if (input === 'm' || input === 'menu' || input.includes('menu principal')) {
             console.log(`[TRACE] 🏠 Universal Menu requested by ${contact.phone}`);
-            conversation.currentStepId = flow.published.entryStepId;
+            const newStepId = flow.published.entryStepId;
+            await Conversation.updateOne(
+                { _id: conversation._id },
+                {
+                    $set: {
+                        currentStepId: newStepId,
+                        history: [],
+                        "loopDetection.currentStepId": newStepId,
+                        "loopDetection.messagesInCurrentStep": 0,
+                        "loopDetection.lastStepChangeAt": new Date()
+                    }
+                }
+            );
+            conversation.currentStepId = newStepId;
             conversation.history = [];
-            conversation.loopDetection = { currentStepId: flow.published.entryStepId, messagesInCurrentStep: 0, lastStepChangeAt: new Date() };
-            conversation.markModified('loopDetection');
-            conversation.markModified('history');
-            await conversation.save();
+            conversation.loopDetection.messagesInCurrentStep = 0;
+            return; // EXIT and wait for next message
         }
         else if (input === 'v' || input === 'atras' || input.includes('volver')) {
             console.log(`[TRACE] ⬅️ Universal Back requested by ${contact.phone}`);
-            if (conversation.history && conversation.history.length > 0) {
-                const prevId = conversation.history.pop();
-                conversation.currentStepId = prevId;
-                conversation.loopDetection = { currentStepId: prevId, messagesInCurrentStep: 0, lastStepChangeAt: new Date() };
-            } else {
-                conversation.currentStepId = flow.published.entryStepId;
-                conversation.loopDetection = { currentStepId: flow.published.entryStepId, messagesInCurrentStep: 0, lastStepChangeAt: new Date() };
+            let newStepId = flow.published.entryStepId;
+            let newHistory = [...(conversation.history || [])];
+
+            if (newHistory.length > 0) {
+                newStepId = newHistory.pop();
             }
-            conversation.markModified('loopDetection');
-            conversation.markModified('history');
-            await conversation.save();
+
+            await Conversation.updateOne(
+                { _id: conversation._id },
+                {
+                    $set: {
+                        currentStepId: newStepId,
+                        history: newHistory,
+                        "loopDetection.currentStepId": newStepId,
+                        "loopDetection.messagesInCurrentStep": 0,
+                        "loopDetection.lastStepChangeAt": new Date()
+                    }
+                }
+            );
+            conversation.currentStepId = newStepId;
+            conversation.history = newHistory;
+            conversation.loopDetection.messagesInCurrentStep = 0;
+            return; // EXIT and wait for next message
         }
 
         // 1.5 MEDIA DETECTION (Receipts)
         if (msg.hasMedia) {
             console.log(`[TRACE] 📸 Media detected from ${contact.phone}. Assuming receipt/document.`);
+            await Conversation.updateOne(
+                { _id: conversation._id },
+                {
+                    $set: { state: 'paused' },
+                    $addToSet: { tags: 'pago-enviado' }
+                }
+            );
             conversation.state = 'paused';
-            if (!conversation.tags.includes('pago-enviado')) {
-                conversation.tags.push('pago-enviado');
-            }
-            await conversation.save();
 
             const chat = await msg.getChat();
             await sendTyping(chat);
@@ -679,11 +705,14 @@ async function startBot() {
 
             if (isHandoffRequest) {
                 console.log(`[TRACE] 👤 Handoff Requested: Input "${input}" contains help keyword.`);
+                await Conversation.updateOne(
+                    { _id: conversation._id },
+                    {
+                        $set: { state: 'paused' },
+                        $addToSet: { tags: 'intervencion-humana' }
+                    }
+                );
                 conversation.state = 'paused';
-                if (!conversation.tags.includes('intervencion-humana')) {
-                    conversation.tags.push('intervencion-humana');
-                }
-                await conversation.save();
                 const chat = await msg.getChat();
                 await chat.sendMessage("👍 Recibido. Un asesor humano revisará tu mensaje y te responderá a la brevedad.");
                 return;
@@ -693,9 +722,14 @@ async function startBot() {
             console.log(`[TRACE] ⚠️ Invalid Option: ${input}`);
 
             // Only increment loop detection if it's NOT a conversational filler
-            conversation.loopDetection.messagesInCurrentStep++;
-            conversation.markModified('loopDetection');
-            await conversation.save();
+            const newCount = (conversation.loopDetection.messagesInCurrentStep || 0) + 1;
+            await Conversation.updateOne(
+                { _id: conversation._id },
+                {
+                    $set: { "loopDetection.messagesInCurrentStep": newCount }
+                }
+            );
+            conversation.loopDetection.messagesInCurrentStep = newCount;
 
             if (conversation.loopDetection.messagesInCurrentStep > 3) {
                 await triggerAutoHandoff(conversation, contact, currentStep);
