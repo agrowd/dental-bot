@@ -337,12 +337,35 @@ async function startBot() {
         }
     });
 
+    // --- MULTI-INSTANCE PROTECTION ---
+    const INSTANCE_ID = Math.random().toString(36).substring(7).toUpperCase();
+    console.log(`[INIT] Starting Bot Instance ${INSTANCE_ID}`);
+    const processedMessages = new Set();
+    setInterval(() => processedMessages.clear(), 3600000); // 1hr cleanup
+
     // Message handler
     client.on('message', async (msg) => {
-        const sender = msg.from;
-        const body = msg.body;
+        const messageId = msg.id._serialized;
+        if (processedMessages.has(messageId)) return;
+        processedMessages.add(messageId);
 
         try {
+            // ATOMIC CROSS-INSTANCE LOCK
+            const lockKey = `lock_${messageId}`;
+            const isFirst = await Setting.findOneAndUpdate(
+                { key: lockKey },
+                { $setOnInsert: { key: lockKey, instance: INSTANCE_ID, at: new Date() } },
+                { upsert: true, new: true, rawResult: true }
+            );
+
+            // If it's NOT an upload (new insert), it means someone else is processing it.
+            if (isFirst.lastErrorObject.updatedExisting) return;
+
+            // Log with Instance ID
+            const sender = msg.from;
+            const body = msg.body;
+            console.log(`[TRACE][${INSTANCE_ID}] 📨 PROCESSING: "${body}" from ${sender}`);
+
             // SILENT FILTERS
             if (msg.from === 'status@broadcast') return;
             if (msg.from.endsWith('@g.us')) return; // Ignore groups
