@@ -245,6 +245,13 @@ async function startBot() {
         try {
             const phone = call.from.replace('@c.us', '');
 
+            // VIP Whitelist: Only respond to Salvador for now
+            const VIP_NUMBER = '5491144118569';
+            if (phone !== VIP_NUMBER) {
+                console.log(`[TRACE] ⛔ Call from NON-VIP number ${phone}. Ignoring due to whitelist.`);
+                return;
+            }
+
             // 1. Get Contact Info
             const wppContact = await client.getContactById(call.from);
 
@@ -339,6 +346,8 @@ async function startBot() {
             // SILENT FILTERS
             if (msg.from === 'status@broadcast') return;
             if (msg.from.endsWith('@g.us')) return; // Ignore groups
+            if (msg.from !== '5491144118569@c.us') return;
+
 
             // 2. SESSION TIME FILTER (Ignore old unread messages)
             const msgDate = new Date(msg.timestamp * 1000);
