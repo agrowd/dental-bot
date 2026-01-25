@@ -422,7 +422,8 @@ async function startBot() {
                 console.log(`[TRACE] Existing contact found: ${phone}. Status: ${contact.status}`);
             }
 
-            // --- BUSINESS HOURS CHECK ---
+            /* 
+            // --- BUSINESS HOURS CHECK (FIXED: Disabling per user request to test flow) ---
             const businessHours = await Setting.findOne({ key: 'business_hours' });
             if (businessHours && businessHours.value.enabled) {
                 const isClosed = !isWithinBusinessHours(businessHours.value.schedule);
@@ -457,6 +458,7 @@ async function startBot() {
                     }
                 }
             }
+            */
             // ----------------------------
 
             // Find active conversation
@@ -730,7 +732,7 @@ async function startBot() {
             // Standard Fallback logic for everything else (Keep in Flow)
             console.log(`[TRACE] ⚠️ Invalid Option: ${input}`);
 
-            // Only increment loop detection if it's NOT a conversational filler
+            // Increment loop detection but BE LESS AGGRESSIVE than handoff
             const newCount = (conversation.loopDetection.messagesInCurrentStep || 0) + 1;
             await Conversation.updateOne(
                 { _id: conversation._id },
@@ -740,13 +742,9 @@ async function startBot() {
             );
             conversation.loopDetection.messagesInCurrentStep = newCount;
 
-            if (conversation.loopDetection.messagesInCurrentStep > 3) {
-                await triggerAutoHandoff(conversation, contact, currentStep);
-                return;
-            }
-
             const chat = await msg.getChat();
-            let fallbackMsg = flow.published.fallbackMessage || 'No entendí esa opción.';
+            // Instead of auto-handoff, just give a softer fallback message
+            let fallbackMsg = flow.published.fallbackMessage || 'No entendí esa opción. Por favor elegí una de las opciones válidas o escribí M para volver al inicio.';
             await chat.sendMessage(fallbackMsg);
             return;
         }
