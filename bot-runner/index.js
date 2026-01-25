@@ -362,14 +362,15 @@ async function startBot() {
             // Auto-cleanup lock after 30s
             setTimeout(() => { Setting.deleteOne({ key: lockKey }).catch(() => { }); }, 30000);
 
-            // Log with Instance ID
+            // SILENT FILTERS
+            if (msg.from === 'status@broadcast') return;
+            if (msg.from.endsWith('@g.us')) return; // Ignore groups
+
+            // Log with Instance ID AFTER initial filters
             const sender = msg.from;
             const body = msg.body;
             console.log(`[TRACE][${INSTANCE_ID}] 📨 PROCESSING: "${body}" from ${sender}`);
 
-            // SILENT FILTERS
-            if (msg.from === 'status@broadcast') return;
-            if (msg.from.endsWith('@g.us')) return; // Ignore groups
             const WHITELIST = ['5491144118569@c.us', '5491157351676@c.us'];
             if (!WHITELIST.includes(msg.from)) return;
 
@@ -520,8 +521,7 @@ async function startBot() {
                 if (forcingFlow) {
                     console.log(`[TRACE] ⚡ FORCE RESTART by flow: "${forcingFlow.name}"`);
                     // Archive old conversation
-                    conversation.state = 'closed';
-                    await conversation.save();
+                    await Conversation.updateOne({ _id: conversation._id }, { $set: { state: 'closed' } });
 
                     // Create new one
                     conversation = await Conversation.create({
@@ -548,8 +548,17 @@ async function startBot() {
                 return;
             }
 
+            // SILENCE CHECK: Stop bot if human attention is required
+            if (conversation.state === 'paused') {
+                console.log(`[TRACE] 🤫 Bot is PAUSED for ${phone}. Skipping automation.`);
+                return;
+            }
+
             // Handle the message within the current step
             await handleStepLogic(client, msg, conversation, flow, contact);
+
+            // ATOMIC UPDATE: Sync last contact seen time one more time after processing 
+            await Contact.updateOne({ _id: contact._id }, { $set: { lastSeenAt: new Date() } });
 
         } catch (e) {
             console.error('[ERROR] Error processing message:', e);
@@ -930,11 +939,17 @@ async function syncWhatsAppLabel(chat, labelName) {
 
 // Auto-handoff function
 async function triggerAutoHandoff(conversation, contact, currentStep) {
+    if (conversation.state === 'paused') return; // Don't trigger twice
+
+    console.log(`[TRACE] 👤 AUTO-HANDOFF triggered for ${conversation.phone}`);
+    await Conversation.updateOne(
+        { _id: conversation._id },
+        {
+            $set: { state: 'paused' },
+            $addToSet: { tags: 'auto-handoff' }
+        }
+    );
     conversation.state = 'paused';
-    if (!conversation.tags.includes('auto-handoff')) {
-        conversation.tags.push('auto-handoff');
-    }
-    await conversation.save();
 
     // Send message to user
     const chat = await client.getChatById(conversation.phone + '@c.us');
