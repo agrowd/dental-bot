@@ -349,36 +349,40 @@ async function startBot() {
         if (processedMessages.has(messageId)) return;
         processedMessages.add(messageId);
 
+        const phone = msg.from.replace('@c.us', '');
+        const lockKey = `lock_phone_${phone}`;
+        const releaseLock = async () => {
+            await Setting.deleteOne({ key: lockKey }).catch(() => { });
+        };
+        let lockTimeout;
+
         try {
-            // ATOMIC CROSS-INSTANCE LOCK
-            const lockKey = `lock_${messageId}`;
+            // 1. ATOMIC CROSS-INSTANCE LOCK BY PHONE
             try {
                 await Setting.create({ key: lockKey, instance: INSTANCE_ID, at: new Date() });
             } catch (err) {
-                if (err.code === 11000) return; // Already locked
+                if (err.code === 11000) {
+                    console.log(`[TRACE][${INSTANCE_ID}] 🔒 Phone ${phone} is BUSY. Skipping parallel processing.`);
+                    return;
+                }
                 throw err;
             }
 
-            // Auto-cleanup lock after 30s
-            setTimeout(() => { Setting.deleteOne({ key: lockKey }).catch(() => { }); }, 30000);
+            lockTimeout = setTimeout(releaseLock, 30000);
 
             // SILENT FILTERS
-            if (msg.from === 'status@broadcast') return;
-            if (msg.from.endsWith('@g.us')) return; // Ignore groups
+            if (msg.from === 'status@broadcast') { await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout); return; }
+            if (msg.from.endsWith('@g.us')) { await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout); return; }
 
-            // Log with Instance ID AFTER initial filters
             const sender = msg.from;
             const body = msg.body;
             console.log(`[TRACE][${INSTANCE_ID}] 📨 PROCESSING: "${body}" from ${sender}`);
 
             const WHITELIST = ['5491144118569@c.us', '5491157351676@c.us'];
-            if (!WHITELIST.includes(msg.from)) return;
+            if (!WHITELIST.includes(msg.from)) { await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout); return; }
 
-
-            // 2. SESSION TIME FILTER (Ignore old unread messages)
+            // 2. SESSION TIME FILTER
             const msgDate = new Date(msg.timestamp * 1000);
-
-            // Dynamic lookback check
             let safetyThreshold = sessionStartTime;
             try {
                 const safetySetting = await Setting.findOne({ key: 'bot_safety' });
@@ -387,190 +391,93 @@ async function startBot() {
                     safetyThreshold = new Date(sessionStartTime.getTime() - offsetMs);
                 }
             } catch (e) {
-                console.error('[ERROR] Could not fetch safety settings, using strict start time.');
+                console.error('[ERROR] Could not fetch safety settings.');
             }
 
             if (sessionStartTime && msgDate < safetyThreshold) {
-                // Silently skip old messages
+                await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout);
                 return;
             }
 
             console.log(`[TRACE] 📨 RAW MESSAGE from ${sender}: "${body}"`);
-            if (msg.from === 'status@broadcast') return;
 
-            // Extract phone number
-            const phone = msg.from.replace('@c.us', '');
-            console.log(`[TRACE] Processing message for phone: ${phone}`);
-
-            // Get or create contact
+            // 3. CONTACT & CONVERSATION
             let contact = await Contact.findOne({ phone });
             if (!contact) {
-                console.log(`[TRACE] Creating new contact for ${phone}`);
                 contact = await Contact.create({
-                    phone,
-                    status: 'pendiente',
-                    source: 'organic', // Default source
-                    firstSeenAt: new Date(),
-                    lastSeenAt: new Date(),
-                    tags: [],
-                    meta: {}
+                    phone, status: 'pendiente', source: 'organic',
+                    firstSeenAt: new Date(), lastSeenAt: new Date(), tags: [], meta: {}
                 });
             } else {
-                // Update last seen
-                contact.lastSeenAt = new Date();
-                await contact.save();
-                console.log(`[TRACE] Existing contact found: ${phone}. Status: ${contact.status}`);
+                await Contact.updateOne({ _id: contact._id }, { $set: { lastSeenAt: new Date() } });
             }
 
-            /* 
-            // --- BUSINESS HOURS CHECK (FIXED: Disabling per user request to test flow) ---
-            const businessHours = await Setting.findOne({ key: 'business_hours' });
-            if (businessHours && businessHours.value.enabled) {
-                const isClosed = !isWithinBusinessHours(businessHours.value.schedule);
-                if (isClosed) {
-                    const now = new Date();
-                    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-
-                    // ATOMIC UPDATE: Only send if lastOOOSentAt is old or missing
-                    const updatedContact = await Contact.findOneAndUpdate(
-                        {
-                            _id: contact._id,
-                            $or: [
-                                { "meta.lastOOOSentAt": { $exists: false } },
-                                { "meta.lastOOOSentAt": { $lt: oneHourAgo.toISOString() } },
-                                { "meta.lastOOOSentAt": null }
-                            ]
-                        },
-                        { $set: { "meta.lastOOOSentAt": now.toISOString() } },
-                        { new: true }
-                    );
-
-                    if (updatedContact) {
-                        console.log(`[TRACE] 🌙 CLINIC CLOSED. Sending out-of-office message to ${phone}`);
-                        const chat = await msg.getChat();
-                        await sendTyping(chat);
-                        await randomDelay(1000, 500);
-                        const msgText = businessHours.value.closedMessage || 'Estamos fuera de horario de atención.';
-                        await chat.sendMessage(msgText);
-                        contact = updatedContact; // Refresh local contact
-                    } else {
-                        console.log(`[TRACE] 🌙 CLINIC CLOSED. Skipping out-of-office spam.`);
-                    }
-                }
-            }
-            */
-            // ----------------------------
-
-            // Find active conversation
-            let activeConversations = await Conversation.find({ phone, state: 'active' });
+            // Find active conversation - SORT BY UPDATED AT
+            let activeConversations = await Conversation.find({ phone, state: 'active' }).sort({ updatedAt: -1 });
             if (activeConversations.length > 1) {
-                console.log(`[WARNING] ⚠️ Multiple active conversations found for ${phone}. Closing all except the most recent.`);
-                const kept = activeConversations.pop();
+                console.log(`[WARNING] ⚠️ Multiple active conversations found for ${phone}. Closing duplicates.`);
+                const kept = activeConversations.shift();
                 await Conversation.updateMany({ phone, state: 'active', _id: { $ne: kept._id } }, { $set: { state: 'closed' } });
                 activeConversations = [kept];
             }
             let conversation = activeConversations[0];
 
-            // Check for explicit "reset" command
             if (msg.body.trim().toUpperCase() === 'RESET') {
                 if (activeConversations.length > 0) {
                     await Conversation.updateMany({ phone, state: 'active' }, { $set: { state: 'closed' } });
                 }
                 const chat = await msg.getChat();
                 await chat.sendMessage('🔄 Conversación reiniciada.');
-                console.log(`[TRACE] RESET command received from ${phone}`);
+                await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout);
                 return;
             }
 
-            // Decision Logic
             if (!conversation) {
-                console.log(`[TRACE] No active conversation for ${phone}. Starting flow selection...`);
-                // Determine if 'agendado' (mock logic since we can't really know without syncing contacts)
                 const chatContact = await msg.getContact();
-                const isAgendado = chatContact.isMyContact;
+                const selectedFlow = await selectFlow({ isAgendado: chatContact.isMyContact, source: contact.source });
+                if (!selectedFlow) { await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout); return; }
 
-                console.log(`[TRACE] Selection Criteria -> Source: ${contact.source}, IsAgendado: ${isAgendado}`);
-
-                const selectedFlow = await selectFlow({ isAgendado, source: contact.source });
-
-                if (!selectedFlow) {
-                    console.log(`[TRACE] ❌ No suitable flow found for ${phone}. Ignoring message.`);
-                    return;
-                }
-
-                console.log(`[TRACE] ✅ Flow SELECTED: "${selectedFlow.name}" (v${selectedFlow.publishedVersion})`);
-
-                // Start conversation
                 conversation = await Conversation.create({
-                    phone,
-                    flowVersion: selectedFlow.publishedVersion,
+                    phone, flowVersion: selectedFlow.publishedVersion,
                     currentStepId: selectedFlow.published.entryStepId,
-                    state: 'active',
-                    tags: [], // Initialize tags
-                    loopDetection: {
-                        currentStepId: selectedFlow.published.entryStepId,
-                        messagesInCurrentStep: 0,
-                        lastStepChangeAt: new Date(),
-                    }
+                    state: 'active', tags: [],
+                    loopDetection: { currentStepId: selectedFlow.published.entryStepId, messagesInCurrentStep: 0, lastStepChangeAt: new Date() }
                 });
-                console.log(`[TRACE] New conversation created: ${conversation._id} starting at step ${conversation.currentStepId}`);
+                console.log(`[TRACE] New conversation: ${conversation._id}`);
             } else {
-                console.log(`[TRACE] Active conversation found: ${conversation._id} at step ${conversation.currentStepId}`);
-
-                // Check for Force Restart Flows even if conversation exists
+                console.log(`[TRACE] Active conversation: ${conversation._id} at ${conversation.currentStepId}`);
                 const chatContact = await msg.getContact();
-                const isAgendado = chatContact.isMyContact;
-                const forcingFlow = await selectFlow({
-                    isAgendado,
-                    source: contact.source,
-                    forceOnly: true,
-                    body: msg.body
-                });
+                const forcingFlow = await selectFlow({ isAgendado: chatContact.isMyContact, source: contact.source, forceOnly: true, body: msg.body });
 
                 if (forcingFlow) {
-                    console.log(`[TRACE] ⚡ FORCE RESTART by flow: "${forcingFlow.name}"`);
-                    // Archive ALL existing active conversations
+                    console.log(`[TRACE] ⚡ FORCE RESTART: "${forcingFlow.name}"`);
                     await Conversation.updateMany({ phone, state: 'active' }, { $set: { state: 'closed' } });
-
-                    // Create new one
                     conversation = await Conversation.create({
-                        phone,
-                        flowVersion: forcingFlow.publishedVersion,
+                        phone, flowVersion: forcingFlow.publishedVersion,
                         currentStepId: forcingFlow.published.entryStepId,
-                        state: 'active',
-                        tags: [],
-                        loopDetection: {
-                            currentStepId: forcingFlow.published.entryStepId,
-                            messagesInCurrentStep: 0,
-                            lastStepChangeAt: new Date(),
-                        }
+                        state: 'active', tags: [],
+                        loopDetection: { currentStepId: forcingFlow.published.entryStepId, messagesInCurrentStep: 0, lastStepChangeAt: new Date() }
                     });
-                    console.log(`[TRACE] Force restarted conversation: ${conversation._id}`);
                 }
             }
 
-            // Re-fetch flow to ensure we have the steps
             const flow = await Flow.findOne({ publishedVersion: conversation.flowVersion });
-
-            if (!flow) {
-                console.log(`[TRACE] ⚠️ Could not retrieve flow definition for existing conversation. Maybe flow was turned off?`);
+            if (!flow || conversation.state === 'paused') {
+                console.log(`[TRACE] Flow missing or Bot PAUSED for ${phone}.`);
+                await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout);
                 return;
             }
 
-            // SILENCE CHECK: Stop bot if human attention is required
-            if (conversation.state === 'paused') {
-                console.log(`[TRACE] 🤫 Bot is PAUSED for ${phone}. Skipping automation.`);
-                return;
-            }
-
-            // Handle the message within the current step
             await handleStepLogic(client, msg, conversation, flow, contact);
 
-            // ATOMIC UPDATE: Sync last contact seen time one more time after processing 
-            await Contact.updateOne({ _id: contact._id }, { $set: { lastSeenAt: new Date() } });
+            // FINAL CLEANUP
+            if (lockTimeout) clearTimeout(lockTimeout);
+            await releaseLock();
 
         } catch (e) {
-            console.error('[ERROR] Error processing message:', e);
+            console.error('[ERROR] Fatal Error in message handler:', e);
+            if (lockTimeout) clearTimeout(lockTimeout);
+            await releaseLock();
         }
     });
 
@@ -686,6 +593,16 @@ async function startBot() {
 
             // Entry Point (Send Message)
             if (conversation.loopDetection.messagesInCurrentStep === 0) {
+                // 1. Proactive State Sync: Mark as 'sending' to prevent parallel triggers
+                await Conversation.updateOne(
+                    { _id: conversation._id },
+                    {
+                        $set: { "loopDetection.messagesInCurrentStep": 1 },
+                        $inc: { __v: 1 }
+                    }
+                );
+                conversation.loopDetection.messagesInCurrentStep = 1;
+
                 const response = formatMessage(currentStep, flow);
                 const chat = await msg.getChat();
 
@@ -696,17 +613,9 @@ async function startBot() {
                     await chat.sendMessage(response);
                 } catch (error) {
                     console.error('[ERROR] Failed to send message:', error);
+                    // Rollback state if sending failed so it can retry
+                    await Conversation.updateOne({ _id: conversation._id }, { $set: { "loopDetection.messagesInCurrentStep": 0 } });
                 }
-
-                // Atomic Update instead of save()
-                await Conversation.updateOne(
-                    { _id: conversation._id },
-                    {
-                        $set: { "loopDetection.messagesInCurrentStep": 1 },
-                        $inc: { __v: 1 }
-                    }
-                );
-                conversation.loopDetection.messagesInCurrentStep = 1;
                 break;
             }
 
