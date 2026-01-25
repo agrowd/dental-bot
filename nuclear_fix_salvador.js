@@ -147,14 +147,15 @@ async function nuclearFix() {
             "derivacion_paciente": {
                 id: "derivacion_paciente",
                 title: "Atencion del Paciente",
-                message: "¡Hola de nuevo! Por favor, decinos qué necesitás y te derivamos directamente con un asistente humano.",
+                message: "¡Hola! Por favor, decinos qué necesitás y un asistente humano te responderá directamente. 👇",
                 options: [],
-                nextStepId: "manual_handoff"
+                nextStepId: "manual_handoff",
+                actions: { addTags: ["atencion-paciente"] }
             },
             "derivacion_profesional": {
                 id: "derivacion_profesional",
                 title: "Derivación Profesional",
-                message: "¡Bienvenido! Podés conocer nuestra propuesta en: 🌐 https://rad.jaef.com/profesionales\n\nO dejanos tu mensaje aquí y te contactaremos. 👇",
+                message: "¡Bienvenido! Podés ver nuestra propuesta en: 🌐 https://rad.jaef.com/profesionales\n\nO dejanos tu mensaje o propuesta aquí debajo para contactarte. 👇",
                 options: [],
                 nextStepId: "manual_handoff",
                 actions: { addTags: ["perfil-profesional"] }
