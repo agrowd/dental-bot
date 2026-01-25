@@ -155,7 +155,7 @@ async function nuclearFix() {
             "derivacion_profesional": {
                 id: "derivacion_profesional",
                 title: "Derivación Profesional",
-                message: "¡Bienvenido! Podés ver nuestra propuesta en: 🌐 https://rad.jaef.com/profesionales\n\nO dejanos tu mensaje o propuesta aquí debajo para contactarte. 👇",
+                message: "¡Bienvenido! Podés ver nuestra propuesta profesional en: 🌐 https://rad.jaef.com/profesionales\n\nO dejanos tu mensaje o propuesta aquí debajo para contactarte. 👇",
                 options: [],
                 nextStepId: "manual_handoff",
                 actions: { addTags: ["perfil-profesional"] }
