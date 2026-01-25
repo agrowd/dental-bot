@@ -42,8 +42,7 @@ async function nuclearFix() {
                 options: [
                     { id: "opt-1", key: "A", label: "Soy paciente de la clínica", nextStepId: "derivacion_paciente" },
                     { id: "opt-2", key: "B", label: "Soy Profesional / Proveedor", nextStepId: "derivacion_profesional" },
-                    { id: "opt-3", key: "C", label: "Quiero info de tratamientos", nextStepId: "info_general" },
-                    { id: "p-main", key: "P", label: "Realizar un Pago", nextStepId: "pago_info_general" }
+                    { id: "opt-3", key: "C", label: "Quiero info de tratamientos", nextStepId: "info_general" }
                 ]
             },
             "pago_info_general": {
@@ -70,7 +69,6 @@ async function nuclearFix() {
                     { id: "t-2", key: "B", label: "Prótesis (Dientes Provisorios)", nextStepId: "info_protesis" },
                     { id: "t-3", key: "C", label: "Estética y Blanqueamiento", nextStepId: "info_estetica" },
                     { id: "t-4", key: "D", label: "Limpieza y Prevención", nextStepId: "info_limpieza" },
-                    { id: "p-treat", key: "P", label: "Realizar un Pago", nextStepId: "pago_info_general" },
                     { id: "h-info", key: "H", label: "Hablar con un asesor", nextStepId: "manual_handoff" }
                 ]
             },
@@ -80,7 +78,6 @@ async function nuclearFix() {
                 message: "🦷 **Implantes RAD**\n\nAcá tenés la información detallada: Entrá a este link para saber sobre nuestros tipos de implantes y materiales: https://rad.jaef.com/implantes\n\nPara realizar el pago del pre-presupuesto y reservar tu turno, usá este link: https://mpago.la/implantes-rad",
                 options: [
                     { id: "opt-next-1", key: "A", label: "Quiero este tratamiento", nextStepId: "esperando_pago_reserva" },
-                    { id: "p-imp", key: "P", label: "Realizar un Pago", nextStepId: "pago_info_general" },
                     { id: "h-imp", key: "H", label: "Hablar con un asesor", nextStepId: "manual_handoff" }
                 ]
             },
@@ -90,7 +87,6 @@ async function nuclearFix() {
                 message: "🦷 **Prótesis RAD**\n\nAcá tenés la información: Entrá a este link para saber sobre prótesis fijas y removibles: https://rad.jaef.com/protesis\n\nPodés realizar el pago de la seña aquí: https://mpago.la/protesis-rad",
                 options: [
                     { id: "opt-next-2", key: "A", label: "Quiero este tratamiento", nextStepId: "esperando_pago_reserva" },
-                    { id: "p-prot", key: "P", label: "Realizar un Pago", nextStepId: "pago_info_general" },
                     { id: "h-prot", key: "H", label: "Hablar con un asesor", nextStepId: "manual_handoff" }
                 ]
             },
@@ -100,7 +96,6 @@ async function nuclearFix() {
                 message: "✨ **Estética Dental RAD**\n\nAcá tenés la información: Entrá a este link para conocer nuestros diseños de sonrisa: https://rad.jaef.com/estetica\n\nRealizá el pago de tu sesión aquí: https://mpago.la/estetica-rad",
                 options: [
                     { id: "opt-next-3", key: "A", label: "Quiero este tratamiento", nextStepId: "esperando_pago_reserva" },
-                    { id: "p-est", key: "P", label: "Realizar un Pago", nextStepId: "pago_info_general" },
                     { id: "h-est", key: "H", label: "Hablar con un asesor", nextStepId: "manual_handoff" }
                 ]
             },
@@ -110,7 +105,6 @@ async function nuclearFix() {
                 message: "🧼 **Limpieza RAD**\n\nAcá tenés la información: Entrá a este link para saber sobre nuestro sistema de limpieza profunda: https://rad.jaef.com/limpieza\n\nAboná tu turno de limpieza aquí: https://mpago.la/limpieza-rad",
                 options: [
                     { id: "opt-next-4", key: "A", label: "Quiero este tratamiento", nextStepId: "esperando_pago_reserva" },
-                    { id: "p-limp", key: "P", label: "Realizar un Pago", nextStepId: "pago_info_general" },
                     { id: "h-limp", key: "H", label: "Hablar con un asesor", nextStepId: "manual_handoff" }
                 ]
             },
@@ -153,16 +147,17 @@ async function nuclearFix() {
             "derivacion_paciente": {
                 id: "derivacion_paciente",
                 title: "Atencion del Paciente",
-                message: "¡Hola de nuevo! Como ya sos paciente de la casa, te derivamos directamente con un asistente humano para ayudarte con lo que necesites. Aguardanos un momento... 👤",
+                message: "¡Hola de nuevo! Por favor, decinos qué necesitás y te derivamos directamente con un asistente humano.",
                 options: [],
-                actions: { pauseConversation: true, addTags: ["atencion-paciente"] }
+                nextStepId: "manual_handoff"
             },
             "derivacion_profesional": {
                 id: "derivacion_profesional",
                 title: "Derivación Profesional",
                 message: "¡Bienvenido! Podés conocer nuestra propuesta en: 🌐 https://rad.jaef.com/profesionales\n\nO dejanos tu mensaje aquí y te contactaremos. 👇",
                 options: [],
-                actions: { pauseConversation: true, addTags: ["perfil-profesional"] }
+                nextStepId: "manual_handoff",
+                actions: { addTags: ["perfil-profesional"] }
             }
         };
 
