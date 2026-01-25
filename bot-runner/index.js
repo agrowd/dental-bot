@@ -626,6 +626,27 @@ async function startBot() {
         // 1.5 MEDIA DETECTION (Receipts)
         if (msg.hasMedia) {
             console.log(`[TRACE] 📸 Media detected from ${contact.phone}. Assuming receipt/document.`);
+
+            // CONTEXTUAL HANDLING: If we are waiting for a reservation payment
+            if (conversation.currentStepId === 'esperando_pago_reserva') {
+                console.log(`[TRACE] 💳 Payment received for reservation. Advancing to data capture.`);
+                await Conversation.updateOne(
+                    { _id: conversation._id },
+                    {
+                        $push: { history: conversation.currentStepId },
+                        $set: { currentStepId: 'captura_nombre' },
+                        $addToSet: { tags: 'pago-enviado' }
+                    }
+                );
+                conversation.currentStepId = 'captura_nombre';
+                const chat = await msg.getChat();
+                await chat.sendMessage('✅ ¡Recibimos tu comprobante de reserva! Muchas gracias.');
+                // Trigger recursion to ask for Name immediately
+                await handleStepLogic(client, msg, conversation, flow, contact);
+                return;
+            }
+
+            // DEFAULT BEHAVIOR: Pause and wait for human
             await Conversation.updateOne(
                 { _id: conversation._id },
                 {
