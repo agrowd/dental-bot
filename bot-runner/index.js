@@ -594,7 +594,7 @@ async function startBot() {
             conversation.currentStepId = newStepId;
             conversation.history = [];
             conversation.loopDetection.messagesInCurrentStep = 0;
-            return; // EXIT and wait for next message
+            // Removed early return to allow immediate menu response
         }
         else if (input === 'v' || input === 'atras' || input.includes('volver')) {
             console.log(`[TRACE] ⬅️ Universal Back requested by ${contact.phone}`);
@@ -620,7 +620,7 @@ async function startBot() {
             conversation.currentStepId = newStepId;
             conversation.history = newHistory;
             conversation.loopDetection.messagesInCurrentStep = 0;
-            return; // EXIT and wait for next message
+            // Removed early return to allow immediate back response
         }
 
         // 1.5 MEDIA DETECTION (Receipts)
