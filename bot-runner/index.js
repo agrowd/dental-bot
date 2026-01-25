@@ -720,6 +720,18 @@ async function startBot() {
                 break;
             }
 
+            // --- CAPTURE MODE CHECK ---
+            // If the step has NO options but HAS a nextStepId, it's a data-capture step.
+            // Any input is accepted and moves to the next step.
+            if (options.length === 0 && currentStep.nextStepId) {
+                console.log(`[TRACE] 📝 Capture step detected: ${currentStep.id}. Input recognized: "${input}"`);
+                targetOption = {
+                    nextStepId: currentStep.nextStepId,
+                    label: 'Capture: ' + input.substring(0, 10)
+                };
+                break;
+            }
+
             // If NO match found, handle fallback inside the loop or break
             // We need to break to let the fallback logic AFTER the loop run?
             // Actually, the structure assumes we handle logic *inside* or *after*?
@@ -857,7 +869,7 @@ async function selectFlow({ isAgendado, source, forceOnly = false, body = '' }) 
     // console.log(`[DEBUG] Found ${flows.length} ACTIVE & PUBLISHED flows.`);
 
     // Activation keywords (hardcoded for now to prevent infinite loops)
-    const RESTART_KEYWORDS = ['hola', 'menu', 'inicio', 'empezar', 'reset'];
+    const RESTART_KEYWORDS = ['hola', 'menu', 'inicio', 'empezar', 'reset', 'm'];
 
     // Filter by activation rules
     const matchingFlows = flows.filter(flow => {

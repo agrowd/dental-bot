@@ -10,12 +10,11 @@ export DOCKER_BUILDKIT=0
 export COMPOSE_DOCKER_CLI_BUILD=0
 echo "✅ Modo compatibilidad activado"
 
-# 2. Limpieza Específica (Safe Mode)
-echo "🧹 Limpiando contenedores y versiones viejas de ESTE proyecto..."
+# 2. Limpieza Agresiva (Safe Mode)
+echo "🧹 Limpiando contenedores y procesos previos..."
 docker-compose down --remove-orphans || true
-
-# Elimina solo imágenes huérfanas (dangling) para no tocar otros proyectos
-docker image prune -f || true
+docker system prune -f || true
+echo "✅ Limpieza completada"
 
 # 3. Actualizar Código
 echo "⬇️  Bajando última versión del código..."
