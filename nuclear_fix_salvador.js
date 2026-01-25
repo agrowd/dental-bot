@@ -147,7 +147,7 @@ async function nuclearFix() {
             "derivacion_paciente": {
                 id: "derivacion_paciente",
                 title: "Atencion del Paciente",
-                message: "¡Hola! Por favor, decinos qué necesitás y un asistente humano te responderá directamente. 👇",
+                message: "¡Hola! Por favor, decinos qué necesitás (o envianos tu comprobante) y un asistente humano te responderá directamente. 👇",
                 options: [],
                 nextStepId: "manual_handoff",
                 actions: { addTags: ["atencion-paciente"] }
