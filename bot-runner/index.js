@@ -462,12 +462,19 @@ async function startBot() {
             // ----------------------------
 
             // Find active conversation
-            let conversation = await Conversation.findOne({ phone, state: 'active' });
+            let activeConversations = await Conversation.find({ phone, state: 'active' });
+            if (activeConversations.length > 1) {
+                console.log(`[WARNING] ⚠️ Multiple active conversations found for ${phone}. Closing all except the most recent.`);
+                const kept = activeConversations.pop();
+                await Conversation.updateMany({ phone, state: 'active', _id: { $ne: kept._id } }, { $set: { state: 'closed' } });
+                activeConversations = [kept];
+            }
+            let conversation = activeConversations[0];
 
             // Check for explicit "reset" command
             if (msg.body.trim().toUpperCase() === 'RESET') {
-                if (conversation) {
-                    await Conversation.updateOne({ _id: conversation._id }, { state: 'closed' });
+                if (activeConversations.length > 0) {
+                    await Conversation.updateMany({ phone, state: 'active' }, { $set: { state: 'closed' } });
                 }
                 const chat = await msg.getChat();
                 await chat.sendMessage('🔄 Conversación reiniciada.');
@@ -522,8 +529,8 @@ async function startBot() {
 
                 if (forcingFlow) {
                     console.log(`[TRACE] ⚡ FORCE RESTART by flow: "${forcingFlow.name}"`);
-                    // Archive old conversation
-                    await Conversation.updateOne({ _id: conversation._id }, { $set: { state: 'closed' } });
+                    // Archive ALL existing active conversations
+                    await Conversation.updateMany({ phone, state: 'active' }, { $set: { state: 'closed' } });
 
                     // Create new one
                     conversation = await Conversation.create({
@@ -685,7 +692,7 @@ async function startBot() {
                 try {
                     await sendTyping(chat);
                     await randomDelay(1000, 500);
-                    console.log(`[TRACE] 📤 Sending[${currentStep.id}]: "${response.replace(/\n/g, ' ')}"`);
+                    console.log(`[TRACE][${conversation._id}] 📤 Sending[${currentStep.id}]: "${response.replace(/\n/g, ' ')}"`);
                     await chat.sendMessage(response);
                 } catch (error) {
                     console.error('[ERROR] Failed to send message:', error);
@@ -784,7 +791,7 @@ async function startBot() {
 
         // 3. MATCH OR FALLBACK
         if (targetOption) {
-            console.log(`[TRACE] ✅ Option Matched: ${targetOption.label} -> ${targetOption.nextStepId}`);
+            console.log(`[TRACE][${conversation._id}] ✅ Option Matched: ${targetOption.label} -> ${targetOption.nextStepId}`);
             // Atomic state update for transition
             await Conversation.updateOne(
                 { _id: conversation._id },
