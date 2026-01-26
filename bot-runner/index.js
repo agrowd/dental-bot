@@ -693,8 +693,14 @@ async function startBot() {
             conversation.loopDetection.messagesInCurrentStep = newCount;
 
             const chat = await msg.getChat();
-            // Instead of auto-handoff, just give a softer fallback message
-            let fallbackMsg = flow.published.fallbackMessage || 'No entendí esa opción. Por favor elegí una de las opciones válidas o escribí M para volver al inicio.';
+            // Refined fallback message as requested by Salvador
+            let fallbackMsg = "No comprendí tu mensaje. Si deseás ser atendido por un asesor, por favor aguardá a ser contactado. \n\nCaso contrario, podés usar:\n🔹 *V:* Volver atrás\n🔹 *M:* Menú principal";
+
+            // If we are at the entry step, don't show "V"
+            if (flow && flow.published && currentStep.id === flow.published.entryStepId) {
+                fallbackMsg = "No comprendí tu mensaje. Si deseás ser atendido por un asesor, por favor aguardá a ser contactado. \n\nSi querés ver las opciones de nuevo, escribí:\n🔹 *M:* Menú principal";
+            }
+
             await chat.sendMessage(fallbackMsg);
             return;
         }
