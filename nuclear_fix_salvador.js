@@ -155,16 +155,33 @@ async function nuclearFix() {
             "derivacion_profesional": {
                 id: "derivacion_profesional",
                 title: "Derivación Profesional",
-                message: "¡Bienvenido! Podés ver nuestra propuesta profesional en: 🌐 https://rad.jaef.com/profesionales\n\nO dejanos tu mensaje o propuesta aquí debajo para contactarte. 👇",
+                message: "🦷 **Área Profesional**\n\n¿Ya trabajás con R.A.D. o querés presentarnos una propuesta?",
+                options: [
+                    { id: "prof-1", key: "A", label: "Ya trabajo con ustedes / Soy Staff", nextStepId: "profesional_activo_msg" },
+                    { id: "prof-2", key: "B", label: "Quiero postularme / Ofrecer productos", nextStepId: "profesional_postulante_msg" }
+                ]
+            },
+            "profesional_activo_msg": {
+                id: "profesional_activo_msg",
+                title: "Mensaje Profesional Activo",
+                message: "¡Hola! Dejanos tu consulta o requerimiento aquí debajo y te respondemos enseguida. 👇",
                 options: [],
                 nextStepId: "manual_handoff",
-                actions: { addTags: ["perfil-profesional"] }
+                actions: { addTags: ["staff-profesional"] }
+            },
+            "profesional_postulante_msg": {
+                id: "profesional_postulante_msg",
+                title: "Mensaje Postulante",
+                message: "¡Gracias por tu interés! Por favor, contanos brevemente **qué ofrecés o cuál es tu especialidad**.\n\nSi nos interesa, te contactaremos. 👇",
+                options: [],
+                nextStepId: "manual_handoff",
+                actions: { addTags: ["propuesta-comercial"] }
             }
         };
 
         const flow = await Flow.create({
             name: flowName,
-            description: "Flujo RAD - Versión NUCLEAR V101",
+            description: "Flujo RAD - Versión NUCLEAR V102",
             isActive: true,
             activationRules: {
                 sources: { meta_ads: true, organic: true },
