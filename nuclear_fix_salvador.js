@@ -32,7 +32,7 @@ async function nuclearFix() {
         await Contact.updateOne({ phone: viperNumber }, { $set: { "meta.lastOOOSentAt": null } });
 
         // 4. SEED NEW FLOW (V100 to be sure it stands out)
-        console.log(`🌱 Seeding FRESH Flow V111...`);
+        console.log(`🌱 Seeding FRESH Flow V112...`);
 
         const steps = {
             "welcome": {
@@ -121,7 +121,7 @@ async function nuclearFix() {
             "derivacion_paciente": {
                 id: "derivacion_paciente",
                 title: "Atencion del Paciente",
-                message: "Un asesor se va a comunicar con vos lo antes posible. Si querés adelantar, por favor dejá tu mensaje o consulta debajo. 👇",
+                message: "Un asesor se va a comunicar con vos lo antes posible si queres adelantar, por favor dejá tu mensaje. 👇",
                 options: [],
                 actions: { pauseConversation: true, addTags: ["atencion-paciente"] }
             },
@@ -152,7 +152,7 @@ async function nuclearFix() {
 
         const flow = await Flow.create({
             name: flowName,
-            description: "Flujo RAD - Versión NUCLEAR V111",
+            description: "Flujo RAD - Versión NUCLEAR V112",
             isActive: true,
             activationRules: {
                 sources: { meta_ads: true, organic: true },
@@ -167,7 +167,7 @@ async function nuclearFix() {
                 steps: steps,
                 fallbackMessage: "No entendí esa opción. Por favor elegí una de las opciones válidas (ej: A)."
             },
-            publishedVersion: 111,
+            publishedVersion: 112,
             createdAt: new Date(),
             updatedAt: new Date()
         });

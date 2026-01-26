@@ -492,6 +492,8 @@ async function startBot() {
         }
     });
 
+    const PAUSE_STEP_IDS = ['derivacion_paciente', 'derivacion_profesional', 'profesional_activo_msg', 'profesional_postulante_msg'];
+
     // Helper: Logic to handle a step
     async function handleStepLogic(client, msg, conversation, flow, contact) {
         const steps = flow.published.steps;
@@ -596,8 +598,12 @@ async function startBot() {
             if (currentStep.actions) {
                 console.log(`[TRACE][${conversation._id}] ⚡ Actions detected for ${currentStep.id}: ${JSON.stringify(currentStep.actions)}`);
                 const ops = {};
-                if (currentStep.actions.pauseConversation) {
-                    console.log(`[TRACE][${conversation._id}] ⏸️ Specific Action: pauseConversation detected.`);
+                if (currentStep.actions.pauseConversation || PAUSE_STEP_IDS.includes(currentStep.id)) {
+                    if (!currentStep.actions.pauseConversation) {
+                        console.log(`[TRACE][${conversation._id}] ⚠️ FAIL-SAFE: Forcing pause for handoff step ${currentStep.id}`);
+                    } else {
+                        console.log(`[TRACE][${conversation._id}] ⏸️ Specific Action: pauseConversation detected.`);
+                    }
                     ops.$set = { state: 'paused' };
                     conversation.state = 'paused';
                     const chat = await msg.getChat();
@@ -781,9 +787,11 @@ function formatMessage(step, flow) {
         step.options.forEach(opt => { msg += `${opt.key}) ${opt.label}\n`; });
     }
 
-    // Navigation Labels (V/M) - Skip if it's the entry step or if it's a handoff (pauseConversation: true)
-    const isHandoff = step.actions && (step.actions.pauseConversation === true || step.actions.pauseConversation === 'true');
-    console.log(`[DEBUG] formatMessage: Step=${step.id}, isHandoff=${isHandoff}, Actions=${JSON.stringify(step.actions || {})}`);
+    // Navigation Labels (V/M) - Skip if it's the entry step or if it's a handoff (pauseConversation: true OR hardcoded IDs)
+    const hasPauseAction = step.actions && (step.actions.pauseConversation === true || step.actions.pauseConversation === 'true');
+    const isHandoff = hasPauseAction || PAUSE_STEP_IDS.includes(step.id);
+
+    console.log(`[DEBUG] formatMessage: Step=${step.id}, isHandoff=${isHandoff}, hasPauseAction=${hasPauseAction}, Actions=${JSON.stringify(step.actions || {})}`);
     if (flow && flow.published && step.id !== flow.published.entryStepId && !isHandoff) {
         msg += `\n\n🔹 *V:* Volver atrás\n🔹 *M:* Menú principal`;
     } else if (isHandoff) {
