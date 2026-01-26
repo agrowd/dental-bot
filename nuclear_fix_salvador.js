@@ -32,7 +32,7 @@ async function nuclearFix() {
         await Contact.updateOne({ phone: viperNumber }, { $set: { "meta.lastOOOSentAt": null } });
 
         // 4. SEED NEW FLOW (V100 to be sure it stands out)
-        console.log(`🌱 Seeding FRESH Flow V107...`);
+        console.log(`🌱 Seeding FRESH Flow V108...`);
 
         const steps = {
             "welcome": {
@@ -69,8 +69,7 @@ async function nuclearFix() {
                     { id: "t-1", key: "A", label: "Implantes Dentales", nextStepId: "info_implantes" },
                     { id: "t-2", key: "B", label: "Prótesis (Dientes Provisorios)", nextStepId: "info_protesis" },
                     { id: "t-3", key: "C", label: "Estética y Blanqueamiento", nextStepId: "info_estetica" },
-                    { id: "t-4", key: "D", label: "Limpieza y Prevención", nextStepId: "info_limpieza" },
-                    { id: "h-info", key: "H", label: "Hablar con un asesor", nextStepId: "ack_and_pause" }
+                    { id: "t-4", key: "D", label: "Limpieza y Prevención", nextStepId: "info_limpieza" }
                 ]
             },
             "info_implantes": {
@@ -156,7 +155,7 @@ async function nuclearFix() {
 
         const flow = await Flow.create({
             name: flowName,
-            description: "Flujo RAD - Versión NUCLEAR V107",
+            description: "Flujo RAD - Versión NUCLEAR V108",
             isActive: true,
             activationRules: {
                 sources: { meta_ads: true, organic: true },
@@ -171,7 +170,7 @@ async function nuclearFix() {
                 steps: steps,
                 fallbackMessage: "No entendí esa opción. Por favor elegí una de las opciones válidas (ej: A)."
             },
-            publishedVersion: 107,
+            publishedVersion: 108,
             createdAt: new Date(),
             updatedAt: new Date()
         });
