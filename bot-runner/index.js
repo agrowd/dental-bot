@@ -591,6 +591,24 @@ async function startBot() {
                 break;
             }
 
+            // --- ACTION HANDLER ---
+            if (currentStep.actions) {
+                console.log(`[TRACE][${conversation._id}] ⚡ Actions detected for ${currentStep.id}`);
+                const ops = {};
+                if (currentStep.actions.pauseConversation) {
+                    ops.$set = { state: 'paused' };
+                    conversation.state = 'paused';
+                    const chat = await msg.getChat();
+                    await syncWhatsAppLabel(chat, 'Derivado con Personal');
+                }
+                if (currentStep.actions.addTags && Array.isArray(currentStep.actions.addTags)) {
+                    ops.$addToSet = { tags: { $each: currentStep.actions.addTags } };
+                }
+                if (Object.keys(ops).length > 0) {
+                    await Conversation.updateOne({ _id: conversation._id }, ops);
+                }
+            }
+
             // Entry Point (Send Message)
             if (conversation.loopDetection.messagesInCurrentStep === 0) {
                 // 1. Proactive State Sync: Mark as 'sending' to prevent parallel triggers

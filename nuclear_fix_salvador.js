@@ -164,7 +164,7 @@ async function nuclearFix() {
 
         const flow = await Flow.create({
             name: flowName,
-            description: "Flujo RAD - Versión NUCLEAR V100",
+            description: "Flujo RAD - Versión NUCLEAR V101",
             isActive: true,
             activationRules: {
                 sources: { meta_ads: true, organic: true },
@@ -179,7 +179,7 @@ async function nuclearFix() {
                 steps: steps,
                 fallbackMessage: "No entiendo esa opción. Por favor elegí una válida o escribí M para volver al inicio."
             },
-            publishedVersion: 100,
+            publishedVersion: 101,
             createdAt: new Date(),
             updatedAt: new Date()
         });
