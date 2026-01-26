@@ -32,7 +32,7 @@ async function nuclearFix() {
         await Contact.updateOne({ phone: viperNumber }, { $set: { "meta.lastOOOSentAt": null } });
 
         // 4. SEED NEW FLOW (V100 to be sure it stands out)
-        console.log(`🌱 Seeding FRESH Flow V106...`);
+        console.log(`🌱 Seeding FRESH Flow V107...`);
 
         const steps = {
             "welcome": {
@@ -78,8 +78,7 @@ async function nuclearFix() {
                 title: "Info Implantes",
                 message: "🦷 **Implantes RAD**\n\nAcá tenés la información detallada: Entrá a este link para saber sobre nuestros tipos de implantes y materiales: https://rad.jaef.com/implantes\n\nPara realizar el pago del pre-presupuesto y reservar tu turno, usá este link: https://mpago.la/implantes-rad",
                 options: [
-                    { id: "opt-next-1", key: "A", label: "Quiero este tratamiento", nextStepId: "esperando_pago_reserva" },
-                    { id: "h-imp", key: "H", label: "Hablar con un asesor", nextStepId: "ack_and_pause" }
+                    { id: "opt-next-1", key: "A", label: "Quiero este tratamiento", nextStepId: "esperando_pago_reserva" }
                 ]
             },
             "info_protesis": {
@@ -87,8 +86,7 @@ async function nuclearFix() {
                 title: "Info Prótesis",
                 message: "🦷 **Prótesis RAD**\n\nAcá tenés la información: Entrá a este link para saber sobre prótesis fijas y removibles: https://rad.jaef.com/protesis\n\nPodés realizar el pago de la seña aquí: https://mpago.la/protesis-rad",
                 options: [
-                    { id: "opt-next-2", key: "A", label: "Quiero este tratamiento", nextStepId: "esperando_pago_reserva" },
-                    { id: "h-prot", key: "H", label: "Hablar con un asesor", nextStepId: "ack_and_pause" }
+                    { id: "opt-next-2", key: "A", label: "Quiero este tratamiento", nextStepId: "esperando_pago_reserva" }
                 ]
             },
             "info_estetica": {
@@ -96,8 +94,7 @@ async function nuclearFix() {
                 title: "Info Estética",
                 message: "✨ **Estética Dental RAD**\n\nAcá tenés la información: Entrá a este link para conocer nuestros diseños de sonrisa: https://rad.jaef.com/estetica\n\nRealizá el pago de tu sesión aquí: https://mpago.la/estetica-rad",
                 options: [
-                    { id: "opt-next-3", key: "A", label: "Quiero este tratamiento", nextStepId: "esperando_pago_reserva" },
-                    { id: "h-est", key: "H", label: "Hablar con un asesor", nextStepId: "ack_and_pause" }
+                    { id: "opt-next-3", key: "A", label: "Quiero este tratamiento", nextStepId: "esperando_pago_reserva" }
                 ]
             },
             "info_limpieza": {
@@ -105,17 +102,14 @@ async function nuclearFix() {
                 title: "Info Limpieza",
                 message: "🧼 **Limpieza RAD**\n\nAcá tenés la información: Entrá a este link para saber sobre nuestro sistema de limpieza profunda: https://rad.jaef.com/limpieza\n\nAboná tu turno de limpieza aquí: https://mpago.la/limpieza-rad",
                 options: [
-                    { id: "opt-next-4", key: "A", label: "Quiero este tratamiento", nextStepId: "esperando_pago_reserva" },
-                    { id: "h-limp", key: "H", label: "Hablar con un asesor", nextStepId: "ack_and_pause" }
+                    { id: "opt-next-4", key: "A", label: "Quiero este tratamiento", nextStepId: "esperando_pago_reserva" }
                 ]
             },
             "esperando_pago_reserva": {
                 id: "esperando_pago_reserva",
                 title: "Esperando Pago de Reserva",
                 message: "¡Excelente elección! 🦷\n\nPara reservar tu lugar, por favor:\n1️⃣ Realizá el pago de la seña en el link del tratamiento.\n2️⃣ Mandame el **comprobante** (foto o PDF) por acá.\n\n*En cuanto reciba el comprobante, te derivaremos con un asesor.*",
-                options: [
-                    { id: "h-pay", key: "H", label: "Hablar con un asesor", nextStepId: "ack_and_pause" }
-                ]
+                options: []
             },
             "ack_and_pause": {
                 id: "ack_and_pause",
@@ -162,7 +156,7 @@ async function nuclearFix() {
 
         const flow = await Flow.create({
             name: flowName,
-            description: "Flujo RAD - Versión NUCLEAR V106",
+            description: "Flujo RAD - Versión NUCLEAR V107",
             isActive: true,
             activationRules: {
                 sources: { meta_ads: true, organic: true },
@@ -177,7 +171,7 @@ async function nuclearFix() {
                 steps: steps,
                 fallbackMessage: "No entendí esa opción. Por favor elegí una de las opciones válidas (ej: A)."
             },
-            publishedVersion: 106,
+            publishedVersion: 107,
             createdAt: new Date(),
             updatedAt: new Date()
         });
