@@ -123,27 +123,7 @@ async function nuclearFix() {
                 options: [],
                 actions: { pauseConversation: true, addTags: ["solicitud-humana"] }
             },
-            "captura_nombre": {
-                id: "captura_nombre",
-                title: "Captura de Nombre",
-                message: "¡Genial! Por favor, ingresá tu Nombre y Apellido para agendarte:",
-                options: [],
-                nextStepId: "captura_dni"
-            },
-            "captura_dni": {
-                id: "captura_dni",
-                title: "Captura de DNI",
-                message: "Gracias. Ahora ingresá tu DNI (solo números):",
-                options: [],
-                nextStepId: "cierre_final"
-            },
-            "cierre_final": {
-                id: "cierre_final",
-                title: "Cierre",
-                message: "¡Listo! Ya registramos tus datos. Un asesor revisará tu pedido y se contactará con vos en breve para confirmar el turno. ¡Gracias por confiar en RAD!",
-                options: [],
-                actions: { pauseConversation: true }
-            },
+
             "derivacion_paciente": {
                 id: "derivacion_paciente",
                 title: "Atencion del Paciente",
@@ -181,7 +161,7 @@ async function nuclearFix() {
 
         const flow = await Flow.create({
             name: flowName,
-            description: "Flujo RAD - Versión NUCLEAR V103",
+            description: "Flujo RAD - Versión NUCLEAR V104",
             isActive: true,
             activationRules: {
                 sources: { meta_ads: true, organic: true },
@@ -196,7 +176,7 @@ async function nuclearFix() {
                 steps: steps,
                 fallbackMessage: "No entiendo esa opción. Por favor elegí una válida o escribí M para volver al inicio."
             },
-            publishedVersion: 103,
+            publishedVersion: 104,
             createdAt: new Date(),
             updatedAt: new Date()
         });
