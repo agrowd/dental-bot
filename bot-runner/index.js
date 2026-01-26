@@ -497,6 +497,8 @@ async function startBot() {
         const steps = flow.published.steps;
         const getStep = (id) => (typeof steps.get === 'function') ? steps.get(id) : steps[id];
 
+        console.log(`[TRACE][${conversation._id}] 🤖 Handling message with Flow V${flow.publishedVersion} at Step: ${conversation.currentStepId}`);
+
         let loopSafety = 0;
         const input = (msg.body || '').trim().toLowerCase();
 
@@ -604,6 +606,12 @@ async function startBot() {
                 }
                 if (Object.keys(ops).length > 0) {
                     await Conversation.updateOne({ _id: conversation._id }, ops);
+                }
+
+                // SILENCE CHECK: If actions paused the conversation, we stop here (no evaluation, no response)
+                if (conversation.state === 'paused') {
+                    console.log(`[TRACE][${conversation._id}] 🛑 Conversation paused by actions. Stopping evaluation.`);
+                    return;
                 }
             }
 

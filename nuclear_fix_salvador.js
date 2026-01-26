@@ -32,7 +32,7 @@ async function nuclearFix() {
         await Contact.updateOne({ phone: viperNumber }, { $set: { "meta.lastOOOSentAt": null } });
 
         // 4. SEED NEW FLOW (V100 to be sure it stands out)
-        console.log(`🌱 Seeding FRESH Flow V108...`);
+        console.log(`🌱 Seeding FRESH Flow V110...`);
 
         const steps = {
             "welcome": {
@@ -121,10 +121,9 @@ async function nuclearFix() {
             "derivacion_paciente": {
                 id: "derivacion_paciente",
                 title: "Atencion del Paciente",
-                message: "¡Hola! Como ya sos paciente de la casa, te derivamos directamente con un asistente humano para ayudarte con lo que necesites👤\n\nPor favor, **dejá tu mensaje o consulta debajo.** 👇",
+                message: "¡Hola! Como ya sos paciente de la casa, te derivamos directamente con un asistente humano para ayudarte con lo que necesites👤\n\nPor favor, **dejá tu mensaje o consulta debajo** y un asesor te responderá a la brevedad. 👇",
                 options: [],
-                nextStepId: "ack_and_pause",
-                actions: { addTags: ["atencion-paciente"] }
+                actions: { pauseConversation: true, addTags: ["atencion-paciente"] }
             },
             "derivacion_profesional": {
                 id: "derivacion_profesional",
@@ -138,24 +137,22 @@ async function nuclearFix() {
             "profesional_activo_msg": {
                 id: "profesional_activo_msg",
                 title: "Mensaje Profesional Activo",
-                message: "¡Bienvenido! Por favor **dejanos tu consulta aquí debajo** para que podamos derivarla al sector correspondiente. 👇",
+                message: "¡Bienvenido! Por favor **dejanos tu consulta aquí debajo**. Un asesor del sector correspondiente te responderá pronto. 👇",
                 options: [],
-                nextStepId: "ack_and_pause",
-                actions: { addTags: ["staff-profesional"] }
+                actions: { pauseConversation: true, addTags: ["staff-profesional"] }
             },
             "profesional_postulante_msg": {
                 id: "profesional_postulante_msg",
                 title: "Mensaje Postulante",
-                message: "Muchas gracias por contactarnos. Por favor **dejanos tu propuesta o CV aquí debajo** para que RRHH pueda revisarlo. 👇",
+                message: "Muchas gracias por contactarnos. Por favor **dejanos tu propuesta o CV aquí debajo**. El equipo de RRHH lo revisará y se contactará con vos. 👇",
                 options: [],
-                nextStepId: "ack_and_pause",
-                actions: { addTags: ["propuesta-comercial"] }
+                actions: { pauseConversation: true, addTags: ["propuesta-comercial"] }
             }
         };
 
         const flow = await Flow.create({
             name: flowName,
-            description: "Flujo RAD - Versión NUCLEAR V109",
+            description: "Flujo RAD - Versión NUCLEAR V110",
             isActive: true,
             activationRules: {
                 sources: { meta_ads: true, organic: true },
@@ -170,7 +167,7 @@ async function nuclearFix() {
                 steps: steps,
                 fallbackMessage: "No entendí esa opción. Por favor elegí una de las opciones válidas (ej: A)."
             },
-            publishedVersion: 109,
+            publishedVersion: 110,
             createdAt: new Date(),
             updatedAt: new Date()
         });
