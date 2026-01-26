@@ -462,6 +462,17 @@ async function startBot() {
             }
 
             const flow = await Flow.findOne({ publishedVersion: conversation.flowVersion });
+
+            // Allow V/M to unpause if requested
+            const inputRaw = (msg.body || '').trim().toLowerCase();
+            const isNav = inputRaw === 'm' || inputRaw === 'v' || inputRaw === 'menu' || inputRaw === 'atras' || inputRaw.includes('menu principal') || inputRaw.includes('volver');
+
+            if (isNav && conversation.state === 'paused') {
+                console.log(`[TRACE] 🔓 Unpausing conversation for navigation request from ${phone}`);
+                await Conversation.updateOne({ _id: conversation._id }, { $set: { state: 'active' } });
+                conversation.state = 'active';
+            }
+
             if (!flow || conversation.state === 'paused') {
                 console.log(`[TRACE] Flow missing or Bot PAUSED for ${phone}.`);
                 await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout);
@@ -497,6 +508,7 @@ async function startBot() {
                 { _id: conversation._id },
                 {
                     $set: {
+                        state: 'active', // Ensure state is active on nav
                         currentStepId: newStepId,
                         history: [],
                         "loopDetection.currentStepId": newStepId,
@@ -506,6 +518,7 @@ async function startBot() {
                 }
             );
             conversation.currentStepId = newStepId;
+            conversation.state = 'active';
             conversation.history = [];
             conversation.loopDetection.messagesInCurrentStep = 0;
             // Removed early return to allow immediate menu response
@@ -523,6 +536,7 @@ async function startBot() {
                 { _id: conversation._id },
                 {
                     $set: {
+                        state: 'active', // Ensure state is active on nav
                         currentStepId: newStepId,
                         history: newHistory,
                         "loopDetection.currentStepId": newStepId,
@@ -532,6 +546,7 @@ async function startBot() {
                 }
             );
             conversation.currentStepId = newStepId;
+            conversation.state = 'active';
             conversation.history = newHistory;
             conversation.loopDetection.messagesInCurrentStep = 0;
             // Removed early return to allow immediate back response
