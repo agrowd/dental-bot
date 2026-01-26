@@ -69,7 +69,7 @@ async function nuclearFix() {
                     { id: "t-2", key: "B", label: "Prótesis (Dientes Provisorios)", nextStepId: "info_protesis" },
                     { id: "t-3", key: "C", label: "Estética y Blanqueamiento", nextStepId: "info_estetica" },
                     { id: "t-4", key: "D", label: "Limpieza y Prevención", nextStepId: "info_limpieza" },
-                    { id: "h-info", key: "H", label: "Hablar con un asesor", nextStepId: "manual_handoff" }
+                    { id: "h-info", key: "H", label: "Hablar con un asesor", nextStepId: "ack_and_pause" }
                 ]
             },
             "info_implantes": {
@@ -78,7 +78,7 @@ async function nuclearFix() {
                 message: "🦷 **Implantes RAD**\n\nAcá tenés la información detallada: Entrá a este link para saber sobre nuestros tipos de implantes y materiales: https://rad.jaef.com/implantes\n\nPara realizar el pago del pre-presupuesto y reservar tu turno, usá este link: https://mpago.la/implantes-rad",
                 options: [
                     { id: "opt-next-1", key: "A", label: "Quiero este tratamiento", nextStepId: "esperando_pago_reserva" },
-                    { id: "h-imp", key: "H", label: "Hablar con un asesor", nextStepId: "manual_handoff" }
+                    { id: "h-imp", key: "H", label: "Hablar con un asesor", nextStepId: "ack_and_pause" }
                 ]
             },
             "info_protesis": {
@@ -87,7 +87,7 @@ async function nuclearFix() {
                 message: "🦷 **Prótesis RAD**\n\nAcá tenés la información: Entrá a este link para saber sobre prótesis fijas y removibles: https://rad.jaef.com/protesis\n\nPodés realizar el pago de la seña aquí: https://mpago.la/protesis-rad",
                 options: [
                     { id: "opt-next-2", key: "A", label: "Quiero este tratamiento", nextStepId: "esperando_pago_reserva" },
-                    { id: "h-prot", key: "H", label: "Hablar con un asesor", nextStepId: "manual_handoff" }
+                    { id: "h-prot", key: "H", label: "Hablar con un asesor", nextStepId: "ack_and_pause" }
                 ]
             },
             "info_estetica": {
@@ -96,7 +96,7 @@ async function nuclearFix() {
                 message: "✨ **Estética Dental RAD**\n\nAcá tenés la información: Entrá a este link para conocer nuestros diseños de sonrisa: https://rad.jaef.com/estetica\n\nRealizá el pago de tu sesión aquí: https://mpago.la/estetica-rad",
                 options: [
                     { id: "opt-next-3", key: "A", label: "Quiero este tratamiento", nextStepId: "esperando_pago_reserva" },
-                    { id: "h-est", key: "H", label: "Hablar con un asesor", nextStepId: "manual_handoff" }
+                    { id: "h-est", key: "H", label: "Hablar con un asesor", nextStepId: "ack_and_pause" }
                 ]
             },
             "info_limpieza": {
@@ -105,7 +105,7 @@ async function nuclearFix() {
                 message: "🧼 **Limpieza RAD**\n\nAcá tenés la información: Entrá a este link para saber sobre nuestro sistema de limpieza profunda: https://rad.jaef.com/limpieza\n\nAboná tu turno de limpieza aquí: https://mpago.la/limpieza-rad",
                 options: [
                     { id: "opt-next-4", key: "A", label: "Quiero este tratamiento", nextStepId: "esperando_pago_reserva" },
-                    { id: "h-limp", key: "H", label: "Hablar con un asesor", nextStepId: "manual_handoff" }
+                    { id: "h-limp", key: "H", label: "Hablar con un asesor", nextStepId: "ack_and_pause" }
                 ]
             },
             "esperando_pago_reserva": {
@@ -113,13 +113,13 @@ async function nuclearFix() {
                 title: "Esperando Pago de Reserva",
                 message: "¡Excelente elección! 🦷\n\nPara reservar tu lugar, por favor:\n1️⃣ Realizá el pago de la seña en el link del tratamiento.\n2️⃣ Mandame el **comprobante** (foto o PDF) por acá.\n\n*En cuanto reciba el comprobante, te pediré tus datos finales para agendarte.*",
                 options: [
-                    { id: "h-pay", key: "H", label: "Hablar con un asesor", nextStepId: "manual_handoff" }
+                    { id: "h-pay", key: "H", label: "Hablar con un asesor", nextStepId: "ack_and_pause" }
                 ]
             },
-            "manual_handoff": {
-                id: "manual_handoff",
-                title: "Derivación Manual",
-                message: "👍 Recibido. Un asesor humano revisará tu mensaje y te responderá a la brevedad.",
+            "ack_and_pause": {
+                id: "ack_and_pause",
+                title: "Confirmación y Pausa",
+                message: "✅ Recibido.",
                 options: [],
                 actions: { pauseConversation: true, addTags: ["solicitud-humana"] }
             },
@@ -147,9 +147,9 @@ async function nuclearFix() {
             "derivacion_paciente": {
                 id: "derivacion_paciente",
                 title: "Atencion del Paciente",
-                message: "¡Hola! Por favor, decinos qué necesitás (o envianos tu comprobante) y un asistente humano te responderá directamente. 👇",
+                message: "Por favor dejá tu mensaje. 👇",
                 options: [],
-                nextStepId: "manual_handoff",
+                nextStepId: "ack_and_pause",
                 actions: { addTags: ["atencion-paciente"] }
             },
             "derivacion_profesional": {
@@ -164,24 +164,24 @@ async function nuclearFix() {
             "profesional_activo_msg": {
                 id: "profesional_activo_msg",
                 title: "Mensaje Profesional Activo",
-                message: "¡Hola! Dejanos tu consulta o requerimiento aquí debajo y te respondemos enseguida. 👇",
+                message: "Dejanos tu consulta aquí. 👇",
                 options: [],
-                nextStepId: "manual_handoff",
+                nextStepId: "ack_and_pause",
                 actions: { addTags: ["staff-profesional"] }
             },
             "profesional_postulante_msg": {
                 id: "profesional_postulante_msg",
                 title: "Mensaje Postulante",
-                message: "¡Gracias por tu interés! Por favor, contanos brevemente **qué ofrecés o cuál es tu especialidad**.\n\nSi nos interesa, te contactaremos. 👇",
+                message: "Dejanos tu propuesta aquí. 👇",
                 options: [],
-                nextStepId: "manual_handoff",
+                nextStepId: "ack_and_pause",
                 actions: { addTags: ["propuesta-comercial"] }
             }
         };
 
         const flow = await Flow.create({
             name: flowName,
-            description: "Flujo RAD - Versión NUCLEAR V102",
+            description: "Flujo RAD - Versión NUCLEAR V103",
             isActive: true,
             activationRules: {
                 sources: { meta_ads: true, organic: true },
@@ -196,12 +196,12 @@ async function nuclearFix() {
                 steps: steps,
                 fallbackMessage: "No entiendo esa opción. Por favor elegí una válida o escribí M para volver al inicio."
             },
-            publishedVersion: 101,
+            publishedVersion: 103,
             createdAt: new Date(),
             updatedAt: new Date()
         });
 
-        console.log(`✅ NUCLEAR FIX COMPLETE. New Flow "${flowName}" seeded at Version 100.`);
+        console.log(`✅ NUCLEAR FIX COMPLETE. New Flow "${flowName}" seeded at Version ${flow.publishedVersion}.`);
         process.exit(0);
 
     } catch (e) {
