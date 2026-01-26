@@ -502,8 +502,9 @@ async function startBot() {
         let loopSafety = 0;
         const input = (msg.body || '').trim().toLowerCase();
 
-        // 1. UNIVERSAL COMMANDS (V/M)
-        if (input === 'm' || input === 'menu' || input.includes('menu principal')) {
+        // 1. UNIVERSAL COMMANDS (V/M) - Only if NOT paused
+        const isPaused = conversation.state === 'paused';
+        if (!isPaused && (input === 'm' || input === 'menu' || input.includes('menu principal'))) {
             console.log(`[TRACE] 🏠 Universal Menu requested by ${contact.phone}`);
             const newStepId = flow.published.entryStepId;
             await Conversation.updateOne(
@@ -525,7 +526,7 @@ async function startBot() {
             conversation.loopDetection.messagesInCurrentStep = 0;
             // Removed early return to allow immediate menu response
         }
-        else if (input === 'v' || input === 'atras' || input.includes('volver')) {
+        else if (!isPaused && (input === 'v' || input === 'atras' || input.includes('volver'))) {
             console.log(`[TRACE] ⬅️ Universal Back requested by ${contact.phone}`);
             let newStepId = flow.published.entryStepId;
             let newHistory = [...(conversation.history || [])];
@@ -776,8 +777,9 @@ function formatMessage(step, flow) {
         step.options.forEach(opt => { msg += `${opt.key}) ${opt.label}\n`; });
     }
 
-    // Navigation Labels (V/M)
-    if (flow && flow.published && step.id !== flow.published.entryStepId) {
+    // Navigation Labels (V/M) - Skip if it's the entry step or if it's a handoff (pauseConversation: true)
+    const isHandoff = step.actions && step.actions.pauseConversation;
+    if (flow && flow.published && step.id !== flow.published.entryStepId && !isHandoff) {
         msg += `\n\n🔹 *V:* Volver atrás\n🔹 *M:* Menú principal`;
     }
 
