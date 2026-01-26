@@ -35,6 +35,7 @@ const FlowStepSchema = new Schema<FlowStep>({
     title: String,
     message: String,
     options: [StepOptionSchema],
+    nextStepId: String,
     actions: StepActionsSchema,
 }, { _id: false });
 

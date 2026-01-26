@@ -622,7 +622,6 @@ async function startBot() {
 
             // Evaluation (Process Input)
             const options = currentStep.options || [];
-            console.log(`[DEBUG] Validating Step: ${currentStep.id} | Options Len: ${options.length} | Next: ${currentStep.nextStepId}`);
 
             for (const opt of options) {
                 const key = (opt.key || '').toLowerCase();

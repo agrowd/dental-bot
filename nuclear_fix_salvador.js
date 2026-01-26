@@ -32,7 +32,7 @@ async function nuclearFix() {
         await Contact.updateOne({ phone: viperNumber }, { $set: { "meta.lastOOOSentAt": null } });
 
         // 4. SEED NEW FLOW (V100 to be sure it stands out)
-        console.log(`🌱 Seeding FRESH Flow V100...`);
+        console.log(`🌱 Seeding FRESH Flow V106...`);
 
         const steps = {
             "welcome": {
@@ -58,6 +58,7 @@ async function nuclearFix() {
                 title: "Instruccion Comprobante",
                 message: "¡Perfecto! Por favor, **adjuntá la foto o PDF de tu comprobante** ahora mismo.\n\nAl recibirlo, un humano revisará tu pago para confirmarte el turno. 👇",
                 options: [],
+                nextStepId: "ack_and_pause",
                 actions: { pauseConversation: true, addTags: ["esperando-comprobante"] }
             },
             "info_general": {
@@ -111,7 +112,7 @@ async function nuclearFix() {
             "esperando_pago_reserva": {
                 id: "esperando_pago_reserva",
                 title: "Esperando Pago de Reserva",
-                message: "¡Excelente elección! 🦷\n\nPara reservar tu lugar, por favor:\n1️⃣ Realizá el pago de la seña en el link del tratamiento.\n2️⃣ Mandame el **comprobante** (foto o PDF) por acá.\n\n*En cuanto reciba el comprobante, te pediré tus datos finales para agendarte.*",
+                message: "¡Excelente elección! 🦷\n\nPara reservar tu lugar, por favor:\n1️⃣ Realizá el pago de la seña en el link del tratamiento.\n2️⃣ Mandame el **comprobante** (foto o PDF) por acá.\n\n*En cuanto reciba el comprobante, te derivaremos con un asesor.*",
                 options: [
                     { id: "h-pay", key: "H", label: "Hablar con un asesor", nextStepId: "ack_and_pause" }
                 ]
@@ -119,7 +120,7 @@ async function nuclearFix() {
             "ack_and_pause": {
                 id: "ack_and_pause",
                 title: "Confirmación y Pausa",
-                message: "✅ Recibido.",
+                message: "✅ Recibido. Un asesor humano revisará tu mensaje y se contactará con vos a la brevedad.",
                 options: [],
                 actions: { pauseConversation: true, addTags: ["solicitud-humana"] }
             },
@@ -127,7 +128,7 @@ async function nuclearFix() {
             "derivacion_paciente": {
                 id: "derivacion_paciente",
                 title: "Atencion del Paciente",
-                message: "Por favor dejá tu mensaje. 👇",
+                message: "¡Hola! Como ya sos paciente de la casa, te derivamos directamente con un asistente humano para ayudarte con lo que necesites👤\n\nPor favor, **dejá tu mensaje o consulta debajo.** 👇",
                 options: [],
                 nextStepId: "ack_and_pause",
                 actions: { addTags: ["atencion-paciente"] }
@@ -144,7 +145,7 @@ async function nuclearFix() {
             "profesional_activo_msg": {
                 id: "profesional_activo_msg",
                 title: "Mensaje Profesional Activo",
-                message: "Dejanos tu consulta aquí. 👇",
+                message: "¡Bienvenido! Por favor **dejanos tu consulta aquí debajo** para que podamos derivarla al sector correspondiente. 👇",
                 options: [],
                 nextStepId: "ack_and_pause",
                 actions: { addTags: ["staff-profesional"] }
@@ -152,7 +153,7 @@ async function nuclearFix() {
             "profesional_postulante_msg": {
                 id: "profesional_postulante_msg",
                 title: "Mensaje Postulante",
-                message: "Dejanos tu propuesta aquí. 👇",
+                message: "Muchas gracias por contactarnos. Por favor **dejanos tu propuesta o CV aquí debajo** para que RRHH pueda revisarlo. 👇",
                 options: [],
                 nextStepId: "ack_and_pause",
                 actions: { addTags: ["propuesta-comercial"] }
@@ -161,7 +162,7 @@ async function nuclearFix() {
 
         const flow = await Flow.create({
             name: flowName,
-            description: "Flujo RAD - Versión NUCLEAR V104",
+            description: "Flujo RAD - Versión NUCLEAR V106",
             isActive: true,
             activationRules: {
                 sources: { meta_ads: true, organic: true },
@@ -174,9 +175,9 @@ async function nuclearFix() {
             published: {
                 entryStepId: "welcome",
                 steps: steps,
-                fallbackMessage: "No entiendo esa opción. Por favor elegí una válida o escribí M para volver al inicio."
+                fallbackMessage: "No entendí esa opción. Por favor elegí una de las opciones válidas (ej: A)."
             },
-            publishedVersion: 104,
+            publishedVersion: 106,
             createdAt: new Date(),
             updatedAt: new Date()
         });
