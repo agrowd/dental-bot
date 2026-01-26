@@ -594,9 +594,10 @@ async function startBot() {
 
             // --- ACTION HANDLER ---
             if (currentStep.actions) {
-                console.log(`[TRACE][${conversation._id}] ⚡ Actions detected for ${currentStep.id}`);
+                console.log(`[TRACE][${conversation._id}] ⚡ Actions detected for ${currentStep.id}: ${JSON.stringify(currentStep.actions)}`);
                 const ops = {};
                 if (currentStep.actions.pauseConversation) {
+                    console.log(`[TRACE][${conversation._id}] ⏸️ Specific Action: pauseConversation detected.`);
                     ops.$set = { state: 'paused' };
                     conversation.state = 'paused';
                     const chat = await msg.getChat();
@@ -650,6 +651,9 @@ async function startBot() {
             for (const opt of options) {
                 const key = (opt.key || '').toLowerCase();
                 const label = (opt.label || '').toLowerCase();
+                if (key === 'h' || label.includes('asesor')) {
+                    console.log(`[TRACE][${conversation._id}] 🕵️ FOUND OPTION H IN EVALUATION: ${JSON.stringify(opt)}`);
+                }
                 if (input === key || input === label || (input.length > 3 && label.includes(input))) {
                     targetOption = opt;
                     break;
@@ -778,9 +782,12 @@ function formatMessage(step, flow) {
     }
 
     // Navigation Labels (V/M) - Skip if it's the entry step or if it's a handoff (pauseConversation: true)
-    const isHandoff = step.actions && step.actions.pauseConversation;
+    const isHandoff = step.actions && (step.actions.pauseConversation === true || step.actions.pauseConversation === 'true');
+    console.log(`[DEBUG] formatMessage: Step=${step.id}, isHandoff=${isHandoff}, Actions=${JSON.stringify(step.actions || {})}`);
     if (flow && flow.published && step.id !== flow.published.entryStepId && !isHandoff) {
         msg += `\n\n🔹 *V:* Volver atrás\n🔹 *M:* Menú principal`;
+    } else if (isHandoff) {
+        console.log(`[DEBUG] formatMessage: SKIPPING Navigation Labels for handoff step ${step.id}`);
     }
 
     return msg.trim();
