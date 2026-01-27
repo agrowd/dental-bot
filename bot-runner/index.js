@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 
 // ... (existing code)
+const PAUSE_STEP_IDS = ['derivacion_paciente', 'derivacion_profesional', 'profesional_activo_msg', 'profesional_postulante_msg'];
 
 // Connect to MongoDB
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://mongo:27017/odontobot';
@@ -491,8 +492,6 @@ async function startBot() {
             await releaseLock();
         }
     });
-
-    const PAUSE_STEP_IDS = ['derivacion_paciente', 'derivacion_profesional', 'profesional_activo_msg', 'profesional_postulante_msg'];
 
     // Helper: Logic to handle a step
     async function handleStepLogic(client, msg, conversation, flow, contact) {
