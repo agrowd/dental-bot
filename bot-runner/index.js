@@ -413,12 +413,12 @@ async function startBot() {
                 await Contact.updateOne({ _id: contact._id }, { $set: { lastSeenAt: new Date() } });
             }
 
-            // Find active conversation - SORT BY UPDATED AT
-            let activeConversations = await Conversation.find({ phone, state: 'active' }).sort({ updatedAt: -1 });
+            // Find active or paused conversation - SORT BY UPDATED AT
+            let activeConversations = await Conversation.find({ phone, state: { $in: ['active', 'paused'] } }).sort({ updatedAt: -1 });
             if (activeConversations.length > 1) {
-                console.log(`[WARNING] ⚠️ Multiple active conversations found for ${phone}. Closing duplicates.`);
+                console.log(`[WARNING] ⚠️ Multiple active/paused conversations found for ${phone}. Closing duplicates.`);
                 const kept = activeConversations.shift();
-                await Conversation.updateMany({ phone, state: 'active', _id: { $ne: kept._id } }, { $set: { state: 'closed' } });
+                await Conversation.updateMany({ phone, state: { $in: ['active', 'paused'] }, _id: { $ne: kept._id } }, { $set: { state: 'closed' } });
                 activeConversations = [kept];
             }
             let conversation = activeConversations[0];
@@ -451,8 +451,15 @@ async function startBot() {
                 const forcingFlow = await selectFlow({ isAgendado: chatContact.isMyContact, source: contact.source, forceOnly: true, body: msg.body });
 
                 if (forcingFlow) {
+                    // SILENCE CHECK: Even if a force keyword is sent, if the conversation is paused, we STAY PAUSED and ignore it.
+                    if (conversation.state === 'paused') {
+                        console.log(`[TRACE] 🛑 Force restart IGNORED because conversation is PAUSED for ${phone}`);
+                        await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout);
+                        return;
+                    }
+
                     console.log(`[TRACE] ⚡ FORCE RESTART: "${forcingFlow.name}"`);
-                    await Conversation.updateMany({ phone, state: 'active' }, { $set: { state: 'closed' } });
+                    await Conversation.updateMany({ phone, state: { $in: ['active', 'paused'] } }, { $set: { state: 'closed' } });
                     conversation = await Conversation.create({
                         phone, flowVersion: forcingFlow.publishedVersion,
                         currentStepId: forcingFlow.published.entryStepId,
@@ -460,6 +467,14 @@ async function startBot() {
                         loopDetection: { currentStepId: forcingFlow.published.entryStepId, messagesInCurrentStep: 0, lastStepChangeAt: new Date() }
                     });
                 }
+            }
+
+            // --- FINAL SILENCE GATE ---
+            // If the conversation is officially paused, we STOP here. No automation.
+            if (conversation.state === 'paused' && !msg.hasMedia) {
+                console.log(`[TRACE] 🛑 Conversation is PAUSED for ${phone}. Bot remains silent.`);
+                await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout);
+                return;
             }
 
             const flow = await Flow.findOne({ publishedVersion: conversation.flowVersion });
@@ -614,12 +629,6 @@ async function startBot() {
                 if (Object.keys(ops).length > 0) {
                     await Conversation.updateOne({ _id: conversation._id }, ops);
                 }
-
-                // SILENCE CHECK: If actions paused the conversation, we stop here (no evaluation, no response)
-                if (conversation.state === 'paused') {
-                    console.log(`[TRACE][${conversation._id}] 🛑 Conversation paused by actions. Stopping evaluation.`);
-                    return;
-                }
             }
 
             // Entry Point (Send Message)
@@ -642,6 +651,13 @@ async function startBot() {
                     await randomDelay(1000, 500);
                     console.log(`[TRACE][${conversation._id}] 📤 Sending[${currentStep.id}]: "${response.replace(/\n/g, ' ')}"`);
                     await chat.sendMessage(response);
+
+                    // --- TERMINAL PAUSE ---
+                    // If this step just paused the conversation, we stop processing AFTER sending the message.
+                    if (conversation.state === 'paused') {
+                        console.log(`[TRACE][${conversation._id}] 🛑 Terminal message sent. Bot now entering SILENCE.`);
+                        return;
+                    }
                 } catch (error) {
                     console.error('[ERROR] Failed to send message:', error);
                     // Rollback state if sending failed so it can retry

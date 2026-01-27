@@ -32,7 +32,7 @@ async function nuclearFix() {
         await Contact.updateOne({ phone: viperNumber }, { $set: { "meta.lastOOOSentAt": null } });
 
         // 4. SEED NEW FLOW (V100 to be sure it stands out)
-        console.log(`🌱 Seeding FRESH Flow V112...`);
+        console.log(`🌱 Seeding FRESH Flow V113...`);
 
         const steps = {
             "welcome": {
@@ -152,7 +152,7 @@ async function nuclearFix() {
 
         const flow = await Flow.create({
             name: flowName,
-            description: "Flujo RAD - Versión NUCLEAR V112",
+            description: "Flujo RAD - Versión NUCLEAR V113",
             isActive: true,
             activationRules: {
                 sources: { meta_ads: true, organic: true },
@@ -167,7 +167,7 @@ async function nuclearFix() {
                 steps: steps,
                 fallbackMessage: "No entendí esa opción. Por favor elegí una de las opciones válidas (ej: A)."
             },
-            publishedVersion: 112,
+            publishedVersion: 113,
             createdAt: new Date(),
             updatedAt: new Date()
         });
