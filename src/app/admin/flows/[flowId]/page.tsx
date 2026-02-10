@@ -49,6 +49,7 @@ export default function FlowEditorPage() {
     const [showToast, setShowToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
     const [showNewStepModal, setShowNewStepModal] = useState(false);
     const [newStepTitle, setNewStepTitle] = useState('');
+    const [editingOption, setEditingOption] = useState<StepOption | null>(null);
 
     const selectedStep = steps[selectedStepId];
     const stepIds = Object.keys(steps);
@@ -526,57 +527,58 @@ export default function FlowEditorPage() {
                                         </div>
                                         <div className="space-y-2">
                                             {selectedStep.options.map((opt, idx) => (
-                                                <div key={opt.id} className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg group">
-                                                    {/* Reorder buttons */}
-                                                    <div className="flex flex-col opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        <button onClick={() => moveOption(opt.id, 'up')} className="p-0.5 hover:bg-slate-200 rounded" disabled={idx === 0}>
-                                                            <svg className="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                                                            </svg>
-                                                        </button>
-                                                        <button onClick={() => moveOption(opt.id, 'down')} className="p-0.5 hover:bg-slate-200 rounded" disabled={idx === selectedStep.options.length - 1}>
-                                                            <svg className="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                            </svg>
-                                                        </button>
-                                                    </div>
-
+                                                <div key={opt.id} className="flex items-center gap-2 p-3 bg-white border border-slate-200 rounded-lg hover:border-blue-300 transition-colors group">
                                                     {/* Key badge */}
-                                                    <span className="w-6 h-6 rounded bg-blue-600 text-white flex items-center justify-center font-bold text-xs flex-shrink-0">
+                                                    <span className="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 font-bold flex items-center justify-center flex-shrink-0 border border-slate-200">
                                                         {opt.key}
                                                     </span>
 
-                                                    {/* Label input */}
-                                                    <input
-                                                        type="text"
-                                                        value={opt.label}
-                                                        onChange={(e) => updateOption(opt.id, 'label', e.target.value)}
-                                                        placeholder="Texto de la opción"
-                                                        className="input flex-1 text-sm py-1.5"
-                                                    />
+                                                    {/* Label display */}
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="font-medium text-slate-900 truncate" title={opt.label}>
+                                                            {opt.label || 'Sin texto'}
+                                                        </div>
+                                                        <div className="text-xs text-slate-500 flex items-center gap-1">
+                                                            <span>→</span>
+                                                            <span className="truncate max-w-[150px]">
+                                                                {steps[opt.nextStepId]?.title || 'Paso no encontrado'}
+                                                            </span>
+                                                        </div>
+                                                    </div>
 
-                                                    {/* Arrow */}
-                                                    <span className="text-slate-300">→</span>
+                                                    {/* Actions */}
+                                                    <div className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <button
+                                                            onClick={() => setEditingOption(opt)}
+                                                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"
+                                                            title="Editar opción"
+                                                        >
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                            </svg>
+                                                        </button>
 
-                                                    {/* Next step select */}
-                                                    <select
-                                                        value={opt.nextStepId}
-                                                        onChange={(e) => updateOption(opt.id, 'nextStepId', e.target.value)}
-                                                        className="input w-28 text-sm py-1.5"
-                                                    >
-                                                        {stepIds.map((id) => <option key={id} value={id}>{steps[id].title}</option>)}
-                                                    </select>
+                                                        <div className="flex flex-col">
+                                                            <button onClick={() => moveOption(opt.id, 'up')} className="p-0.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600" disabled={idx === 0}>
+                                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
+                                                            </button>
+                                                            <button onClick={() => moveOption(opt.id, 'down')} className="p-0.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600" disabled={idx === selectedStep.options.length - 1}>
+                                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                                                            </button>
+                                                        </div>
 
-                                                    {/* Delete button */}
-                                                    <button
-                                                        onClick={() => removeOption(opt.id)}
-                                                        className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                                                        title="Eliminar opción"
-                                                    >
-                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                                        </svg>
-                                                    </button>
+                                                        <div className="w-px h-4 bg-slate-200 mx-1"></div>
+
+                                                        <button
+                                                            onClick={() => removeOption(opt.id)}
+                                                            className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                                                            title="Eliminar opción"
+                                                        >
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             ))}
                                         </div>
@@ -639,21 +641,104 @@ export default function FlowEditorPage() {
 
             {/* New Step Modal */}
             {showNewStepModal && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowNewStepModal(false)}>
-                    <div className="bg-white rounded-xl p-6 w-96 shadow-xl" onClick={e => e.stopPropagation()}>
-                        <h3 className="text-lg font-semibold text-slate-900 mb-4">Crear nuevo paso</h3>
-                        <input
-                            type="text"
-                            value={newStepTitle}
-                            onChange={(e) => setNewStepTitle(e.target.value)}
-                            placeholder="Nombre del paso (ej: Selección de Servicio)"
-                            className="input w-full mb-4"
-                            autoFocus
-                            onKeyDown={(e) => e.key === 'Enter' && handleCreateStep()}
-                        />
-                        <div className="flex justify-end gap-3">
-                            <button onClick={() => setShowNewStepModal(false)} className="btn btn-secondary">Cancelar</button>
-                            <button onClick={handleCreateStep} className="btn btn-primary" disabled={!newStepTitle.trim()}>Crear</button>
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowNewStepModal(false)}>
+                    <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl animate-fadeIn" onClick={e => e.stopPropagation()}>
+                        <h3 className="text-xl font-bold text-slate-900 mb-4">Crear nuevo paso</h3>
+                        <p className="text-sm text-slate-500 mb-4">Dale un nombre descriptivo a este paso del flujo.</p>
+
+                        <div className="mb-6">
+                            <label className="label">Nombre del paso</label>
+                            <input
+                                type="text"
+                                value={newStepTitle}
+                                onChange={(e) => setNewStepTitle(e.target.value)}
+                                placeholder="Ej: Selección de Servicio"
+                                className="input w-full"
+                                autoFocus
+                                onKeyDown={(e) => e.key === 'Enter' && handleCreateStep()}
+                            />
+                        </div>
+
+                        <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+                            <button onClick={() => setShowNewStepModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors">
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleCreateStep}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 shadow-sm shadow-blue-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                disabled={!newStepTitle.trim()}
+                            >
+                                Crear Paso
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Option Modal */}
+            {editingOption && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setEditingOption(null)}>
+                    <div className="bg-white rounded-xl p-6 w-full max-w-lg shadow-2xl animate-fadeIn" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between mb-6">
+                            <h3 className="text-xl font-bold text-slate-900">
+                                Editar Opción <span className="text-blue-600">{editingOption.key}</span>
+                            </h3>
+                            <button onClick={() => setEditingOption(null)} className="text-slate-400 hover:text-slate-600">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                        </div>
+
+                        <div className="space-y-6">
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-700 mb-2">Texto de la opción</label>
+                                <input
+                                    type="text"
+                                    value={editingOption.label}
+                                    onChange={(e) => setEditingOption({ ...editingOption, label: e.target.value })}
+                                    className="input w-full text-lg"
+                                    placeholder="Ej: Ver horarios disponibles"
+                                    autoFocus
+                                />
+                                <p className="text-xs text-slate-500 mt-1">Este es el texto que verá el usuario en el menú.</p>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-700 mb-2">Acción al seleccionar</label>
+                                <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                                    <div className="text-sm text-slate-600 mb-2">Ir al siguiente paso:</div>
+                                    <select
+                                        value={editingOption.nextStepId}
+                                        onChange={(e) => setEditingOption({ ...editingOption, nextStepId: e.target.value })}
+                                        className="input w-full bg-white font-medium"
+                                    >
+                                        {stepIds.map((id) => (
+                                            <option key={id} value={id}>
+                                                {id === entryStepId ? '🏁 ' : ''}{steps[id].title}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-slate-100">
+                            <button onClick={() => setEditingOption(null)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors">
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={() => {
+                                    if (editingOption) {
+                                        // Update label
+                                        updateOption(editingOption.id, 'label', editingOption.label);
+                                        // Update nextStepId
+                                        updateOption(editingOption.id, 'nextStepId', editingOption.nextStepId);
+                                        setEditingOption(null);
+                                    }
+                                }}
+                                className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 shadow-md shadow-blue-200 transition-all transform active:scale-95"
+                            >
+                                Guardar Cambios
+                            </button>
                         </div>
                     </div>
                 </div>
