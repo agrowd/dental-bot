@@ -42,7 +42,7 @@ const FlowStepSchema = new Schema<FlowStep>({
 const FlowContentSchema = new Schema({
     entryStepId: String,
     fallbackMessage: { type: String, default: 'No entendí esa opción. Por favor elegí una de las opciones válidas (ej: A).' },
-    steps: { type: Map, of: FlowStepSchema },
+    steps: { type: Schema.Types.Mixed },
 }, { _id: false });
 
 const FlowSchema = new Schema<IFlowDoc>({
