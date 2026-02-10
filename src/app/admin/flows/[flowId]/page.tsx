@@ -185,9 +185,9 @@ export default function FlowEditorPage() {
     };
 
     // Update option
-    const updateOption = (optionId: string, field: 'label' | 'nextStepId', value: string) => {
+    const updateOption = (optionId: string, updates: Partial<StepOption>) => {
         const updated = selectedStep.options.map(opt =>
-            opt.id === optionId ? { ...opt, [field]: value } : opt
+            opt.id === optionId ? { ...opt, ...updates } : opt
         );
         updateStep('options', updated);
     };
@@ -728,10 +728,10 @@ export default function FlowEditorPage() {
                             <button
                                 onClick={() => {
                                     if (editingOption) {
-                                        // Update label
-                                        updateOption(editingOption.id, 'label', editingOption.label);
-                                        // Update nextStepId
-                                        updateOption(editingOption.id, 'nextStepId', editingOption.nextStepId);
+                                        updateOption(editingOption.id, {
+                                            label: editingOption.label,
+                                            nextStepId: editingOption.nextStepId
+                                        });
                                         setEditingOption(null);
                                     }
                                 }}
