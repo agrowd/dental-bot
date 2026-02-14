@@ -408,8 +408,11 @@ async function startBot() {
 
             if (isNav) {
                 console.log(`[TRACE] 🔓 Universal Navigation command detected from ${phone}: "${inputRaw}"`);
-                // If there's an existing conversation, unpause it first
+                // If there's an existing conversation, unpause it
                 await Conversation.updateMany({ phone, state: { $in: ['active', 'paused'] } }, { $set: { state: 'active' } });
+                if (conversation && conversation.state === 'paused') {
+                    conversation.state = 'active';
+                }
             }
 
             // 3. CONTACT & CONVERSATION
