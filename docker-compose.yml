@@ -34,3 +34,5 @@ services:
     environment:
       - MONGODB_URI=${MONGODB_URI}
       - WHATSAPP_SESSION_PATH=/app/.wwebjs_auth
+    volumes:
+      - ./public/uploads:/app/public/uploads

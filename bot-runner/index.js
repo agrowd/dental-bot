@@ -652,13 +652,16 @@ async function startBot() {
 
                     if (currentStep.mediaUrl) {
                         try {
-                            let mediaUrl = currentStep.mediaUrl;
+                            const mediaUrl = currentStep.mediaUrl;
+                            let media;
                             if (mediaUrl.startsWith('/uploads/')) {
-                                mediaUrl = `http://nextjs:3000${mediaUrl}`;
-                                console.log(`[TRACE][${conversation._id}] 🔗 Resolved relative media URL to: ${mediaUrl}`);
+                                const filePath = path.join(__dirname, 'public', mediaUrl);
+                                console.log(`[TRACE][${conversation._id}] 📂 Loading local media from: ${filePath}`);
+                                media = MessageMedia.fromFilePath(filePath);
+                            } else {
+                                console.log(`[TRACE][${conversation._id}] 🖼️ Fetching remote media from: ${mediaUrl}`);
+                                media = await MessageMedia.fromUrl(mediaUrl);
                             }
-                            console.log(`[TRACE][${conversation._id}] 🖼️ Fetching media from: ${mediaUrl}`);
-                            const media = await MessageMedia.fromUrl(mediaUrl);
                             console.log(`[TRACE][${conversation._id}] 📤 Sending Media + Text[${currentStep.id}]: "${response.replace(/\n/g, ' ')}"`);
                             await chat.sendMessage(media, { caption: response });
                         } catch (mediaError) {
@@ -827,15 +830,13 @@ function formatMessage(step, flow) {
 
     console.log(`[DEBUG] formatMessage: Step=${step.id}, isHandoff=${isHandoff}, hasPauseAction=${hasPauseAction}, Actions=${JSON.stringify(step.actions || {})}`);
 
-    if (!isHandoff) {
-        if (flow && flow.published && step.id !== flow.published.entryStepId) {
+    // Navigation Labels (V/M)
+    if (flow && flow.published) {
+        if (step.id !== flow.published.entryStepId) {
             msg += `\n\n🔹 *V:* Volver atrás\n🔹 *M:* Menú principal`;
         } else {
-            // Even in the entry step, show "V" if they made a mistake (as requested by Salvador)
             msg += `\n\n_(Si te equivocaste, escribí *V* para volver)_`;
         }
-    } else {
-        console.log(`[DEBUG] formatMessage: SKIPPING Navigation Labels for handoff step ${step.id}`);
     }
 
     return msg.trim();
@@ -872,7 +873,7 @@ async function selectFlow({ isAgendado, source, forceOnly = false, body = '' }) 
     // console.log(`[DEBUG] Found ${flows.length} ACTIVE & PUBLISHED flows.`);
 
     // Activation keywords (hardcoded for now to prevent infinite loops)
-    const RESTART_KEYWORDS = ['hola', 'menu', 'inicio', 'empezar', 'reset', 'm'];
+    const RESTART_KEYWORDS = ['hola', 'menu', 'inicio', 'empezar', 'reset', 'm', 'v', 'volver'];
 
     // Filter by activation rules
     const matchingFlows = flows.filter(flow => {
