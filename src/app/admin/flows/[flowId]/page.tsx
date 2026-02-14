@@ -50,6 +50,7 @@ export default function FlowEditorPage() {
     const [showNewStepModal, setShowNewStepModal] = useState(false);
     const [newStepTitle, setNewStepTitle] = useState('');
     const [editingOption, setEditingOption] = useState<StepOption | null>(null);
+    const [isUploading, setIsUploading] = useState(false);
 
     const selectedStep = steps[selectedStepId];
     const stepIds = Object.keys(steps);
@@ -130,6 +131,36 @@ export default function FlowEditorPage() {
         setShowNewStepModal(false);
         setHasChanges(true);
         setShowToast({ type: 'success', message: `Paso "${newStepTitle}" creado` });
+    };
+
+    // Handle File Upload
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setIsUploading(true);
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const res = await fetch('/api/upload', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!res.ok) throw new Error('Upload failed');
+            const data = await res.json();
+
+            updateStep('mediaUrl', data.url);
+            setShowToast({ type: 'success', message: 'Imagen subida correctamente' });
+        } catch (error) {
+            console.error('Upload error:', error);
+            setShowToast({ type: 'error', message: 'Error al subir la imagen' });
+        } finally {
+            setIsUploading(false);
+            // Reset input
+            e.target.value = '';
+        }
     };
 
     // Delete step
@@ -517,13 +548,36 @@ export default function FlowEditorPage() {
                                     {/* Media URL */}
                                     <div>
                                         <label className="label text-xs">URL de Imagen / Media (Opcional)</label>
-                                        <input
-                                            type="text"
-                                            value={selectedStep.mediaUrl || ''}
-                                            onChange={(e) => updateStep('mediaUrl', e.target.value)}
-                                            className="input text-sm"
-                                            placeholder="https://ejemplo.com/imagen.jpg"
-                                        />
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                value={selectedStep.mediaUrl || ''}
+                                                onChange={(e) => updateStep('mediaUrl', e.target.value)}
+                                                className="input text-sm flex-1"
+                                                placeholder="https://ejemplo.com/imagen.jpg o archivo local"
+                                            />
+                                            <input
+                                                type="file"
+                                                id="file-upload"
+                                                className="hidden"
+                                                accept="image/*,video/*"
+                                                onChange={handleFileUpload}
+                                            />
+                                            <button
+                                                onClick={() => document.getElementById('file-upload')?.click()}
+                                                disabled={isUploading}
+                                                className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg text-xs font-medium hover:bg-slate-200 flex items-center gap-1 shrink-0 border border-slate-200 transition-colors"
+                                            >
+                                                {isUploading ? (
+                                                    <span className="w-3 h-3 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></span>
+                                                ) : (
+                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                                                    </svg>
+                                                )}
+                                                {isUploading ? 'Subiendo...' : 'Subir'}
+                                            </button>
+                                        </div>
                                         <p className="text-xs text-slate-400 mt-1">Soporta JPG, PNG, GIF o videos públicos.</p>
                                     </div>
 

@@ -19,6 +19,8 @@ services:
       - BOT_HOST=dental-bot-runner
     depends_on:
       - bot-runner
+    volumes:
+      - ./public/uploads:/app/public/uploads
 
   # WhatsApp Bot Runner
   bot-runner:
