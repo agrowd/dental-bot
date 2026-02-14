@@ -652,8 +652,13 @@ async function startBot() {
 
                     if (currentStep.mediaUrl) {
                         try {
-                            console.log(`[TRACE][${conversation._id}] 🖼️ Fetching media from: ${currentStep.mediaUrl}`);
-                            const media = await MessageMedia.fromUrl(currentStep.mediaUrl);
+                            let mediaUrl = currentStep.mediaUrl;
+                            if (mediaUrl.startsWith('/uploads/')) {
+                                mediaUrl = `http://nextjs:3000${mediaUrl}`;
+                                console.log(`[TRACE][${conversation._id}] 🔗 Resolved relative media URL to: ${mediaUrl}`);
+                            }
+                            console.log(`[TRACE][${conversation._id}] 🖼️ Fetching media from: ${mediaUrl}`);
+                            const media = await MessageMedia.fromUrl(mediaUrl);
                             console.log(`[TRACE][${conversation._id}] 📤 Sending Media + Text[${currentStep.id}]: "${response.replace(/\n/g, ' ')}"`);
                             await chat.sendMessage(media, { caption: response });
                         } catch (mediaError) {
@@ -816,14 +821,20 @@ function formatMessage(step, flow) {
         step.options.forEach(opt => { msg += `${opt.key}) ${opt.label}\n`; });
     }
 
-    // Navigation Labels (V/M) - Skip if it's the entry step or if it's a handoff (pauseConversation: true OR hardcoded IDs)
+    // Navigation Labels (V/M)
     const hasPauseAction = step.actions && (step.actions.pauseConversation === true || step.actions.pauseConversation === 'true');
     const isHandoff = hasPauseAction || PAUSE_STEP_IDS.includes(step.id);
 
     console.log(`[DEBUG] formatMessage: Step=${step.id}, isHandoff=${isHandoff}, hasPauseAction=${hasPauseAction}, Actions=${JSON.stringify(step.actions || {})}`);
-    if (flow && flow.published && step.id !== flow.published.entryStepId && !isHandoff) {
-        msg += `\n\n🔹 *V:* Volver atrás\n🔹 *M:* Menú principal`;
-    } else if (isHandoff) {
+
+    if (!isHandoff) {
+        if (flow && flow.published && step.id !== flow.published.entryStepId) {
+            msg += `\n\n🔹 *V:* Volver atrás\n🔹 *M:* Menú principal`;
+        } else {
+            // Even in the entry step, show "V" if they made a mistake (as requested by Salvador)
+            msg += `\n\n_(Si te equivocaste, escribí *V* para volver)_`;
+        }
+    } else {
         console.log(`[DEBUG] formatMessage: SKIPPING Navigation Labels for handoff step ${step.id}`);
     }
 
