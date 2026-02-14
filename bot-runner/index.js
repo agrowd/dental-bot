@@ -402,6 +402,16 @@ async function startBot() {
 
             console.log(`[TRACE] 📨 RAW MESSAGE from ${sender}: "${body}"`);
 
+            // --- NAVIGATION INTERCEPTOR (V/M) ---
+            const inputRaw = (body || '').trim().toLowerCase();
+            const isNav = inputRaw === 'm' || inputRaw === 'v' || inputRaw === 'menu' || inputRaw === 'atras' || inputRaw.includes('menu principal') || inputRaw.includes('volver');
+
+            if (isNav) {
+                console.log(`[TRACE] 🔓 Universal Navigation command detected from ${phone}: "${inputRaw}"`);
+                // If there's an existing conversation, unpause it first
+                await Conversation.updateMany({ phone, state: { $in: ['active', 'paused'] } }, { $set: { state: 'active' } });
+            }
+
             // 3. CONTACT & CONVERSATION
             let contact = await Contact.findOne({ phone });
             if (!contact) {
@@ -478,16 +488,6 @@ async function startBot() {
             }
 
             const flow = await Flow.findOne({ publishedVersion: conversation.flowVersion });
-
-            // Allow V/M to unpause if requested
-            const inputRaw = (msg.body || '').trim().toLowerCase();
-            const isNav = inputRaw === 'm' || inputRaw === 'v' || inputRaw === 'menu' || inputRaw === 'atras' || inputRaw.includes('menu principal') || inputRaw.includes('volver');
-
-            if (isNav && conversation.state === 'paused') {
-                console.log(`[TRACE] 🔓 Unpausing conversation for navigation request from ${phone}`);
-                await Conversation.updateOne({ _id: conversation._id }, { $set: { state: 'active' } });
-                conversation.state = 'active';
-            }
 
             if (!flow || conversation.state === 'paused') {
                 console.log(`[TRACE] Flow missing or Bot PAUSED for ${phone}.`);
