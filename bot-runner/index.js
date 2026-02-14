@@ -1,4 +1,4 @@
-const { Client, LocalAuth } = require('whatsapp-web.js');
+const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const express = require('express');
 const mongoose = require('mongoose');
@@ -649,8 +649,22 @@ async function startBot() {
                 try {
                     await sendTyping(chat);
                     await randomDelay(1000, 500);
-                    console.log(`[TRACE][${conversation._id}] 📤 Sending[${currentStep.id}]: "${response.replace(/\n/g, ' ')}"`);
-                    await chat.sendMessage(response);
+
+                    if (currentStep.mediaUrl) {
+                        try {
+                            console.log(`[TRACE][${conversation._id}] 🖼️ Fetching media from: ${currentStep.mediaUrl}`);
+                            const media = await MessageMedia.fromUrl(currentStep.mediaUrl);
+                            console.log(`[TRACE][${conversation._id}] 📤 Sending Media + Text[${currentStep.id}]: "${response.replace(/\n/g, ' ')}"`);
+                            await chat.sendMessage(media, { caption: response });
+                        } catch (mediaError) {
+                            console.error(`[ERROR] Failed to fetch media from ${currentStep.mediaUrl}:`, mediaError);
+                            console.log(`[TRACE][${conversation._id}] 📤 Falling back to Text Only[${currentStep.id}]: "${response.replace(/\n/g, ' ')}"`);
+                            await chat.sendMessage(response);
+                        }
+                    } else {
+                        console.log(`[TRACE][${conversation._id}] 📤 Sending[${currentStep.id}]: "${response.replace(/\n/g, ' ')}"`);
+                        await chat.sendMessage(response);
+                    }
 
                     // --- TERMINAL PAUSE ---
                     // If this step just paused the conversation, we stop processing AFTER sending the message.

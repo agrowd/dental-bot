@@ -18,6 +18,7 @@ export interface FlowStep {
   id: string;
   title: string;
   message: string;
+  mediaUrl?: string;
   options: StepOption[];  // Dynamic array of options (can add/remove)
   nextStepId?: string;    // Forward to next step for free-text capture
   actions?: StepActions;

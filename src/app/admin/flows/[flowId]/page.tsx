@@ -514,6 +514,19 @@ export default function FlowEditorPage() {
                                         <p className="text-xs text-slate-400 mt-1">Tip: Usá emojis para hacerlo más amigable 👋</p>
                                     </div>
 
+                                    {/* Media URL */}
+                                    <div>
+                                        <label className="label text-xs">URL de Imagen / Media (Opcional)</label>
+                                        <input
+                                            type="text"
+                                            value={selectedStep.mediaUrl || ''}
+                                            onChange={(e) => updateStep('mediaUrl', e.target.value)}
+                                            className="input text-sm"
+                                            placeholder="https://ejemplo.com/imagen.jpg"
+                                        />
+                                        <p className="text-xs text-slate-400 mt-1">Soporta JPG, PNG, GIF o videos públicos.</p>
+                                    </div>
+
                                     {/* Options */}
                                     <div>
                                         <div className="flex items-center justify-between mb-2">
@@ -622,6 +635,16 @@ export default function FlowEditorPage() {
                         <div className="flex-1 overflow-y-auto p-4">
                             {selectedStep && (
                                 <div className="bg-white rounded-2xl rounded-tl-sm p-4 shadow-sm max-w-[280px]">
+                                    {selectedStep.mediaUrl && (
+                                        <div className="mb-2 rounded-lg overflow-hidden border border-slate-100">
+                                            <img
+                                                src={selectedStep.mediaUrl}
+                                                alt="Preview"
+                                                className="w-full h-auto object-cover max-h-[200px]"
+                                                onError={(e) => (e.currentTarget.style.display = 'none')}
+                                            />
+                                        </div>
+                                    )}
                                     <p className="text-sm whitespace-pre-wrap text-slate-800">
                                         {selectedStep.message}
                                     </p>
