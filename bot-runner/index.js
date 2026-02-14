@@ -451,11 +451,11 @@ async function startBot() {
                 const forcingFlow = await selectFlow({ isAgendado: chatContact.isMyContact, source: contact.source, forceOnly: true, body: msg.body });
 
                 if (forcingFlow) {
-                    // SILENCE CHECK: Even if a force keyword is sent, if the conversation is paused, we STAY PAUSED and ignore it.
+                    // SILENCE CHECK: Usually we ignore automation when paused.
+                    // BUT: If the user sends a FORCE RESTART keyword (like V, M, or Hola), we allow it to "break" the pause.
                     if (conversation.state === 'paused') {
-                        console.log(`[TRACE] 🛑 Force restart IGNORED because conversation is PAUSED for ${phone}`);
-                        await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout);
-                        return;
+                        console.log(`[TRACE] 🔓 Force restart keyword detected! Unpausing conversation for ${phone}`);
+                        // Don't return here, continue with the restart logic below
                     }
 
                     console.log(`[TRACE] ⚡ FORCE RESTART: "${forcingFlow.name}"`);
