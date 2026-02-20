@@ -9,6 +9,7 @@ interface IConversationDoc extends Omit<IConversation, 'id'>, Document {
         lastStepChangeAt: Date;
     };
     history: string[]; // Stack of step IDs visited
+    handoffAckSent: boolean; // True after the first "ack" message is sent in a paused/handoff state
 }
 
 const ConversationSchema = new Schema<IConversationDoc>({
@@ -31,6 +32,7 @@ const ConversationSchema = new Schema<IConversationDoc>({
         lastStepChangeAt: { type: Date, default: Date.now as any },
     },
     history: { type: [String], default: [] },
+    handoffAckSent: { type: Boolean, default: false },
     createdAt: { type: Date, default: Date.now as any },
     updatedAt: { type: Date, default: Date.now as any },
 });

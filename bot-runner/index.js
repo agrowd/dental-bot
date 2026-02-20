@@ -482,10 +482,30 @@ async function startBot() {
             // --- FINAL SILENCE GATE ---
             // If the conversation is officially paused, we STOP here. No automation.
             if (conversation.state === 'paused' && !msg.hasMedia) {
+                // ============================================================
+                // [HARDCODED BEHAVIOR - MIGRATE TO FLOW BUILDER]
+                // When the user sends their first message after a handoff step,
+                // send a one-time acknowledgment so they know their message arrived.
+                // In the future, this should be a configurable option on the
+                // pauseConversation action in the Flow Builder (e.g. "ackMessage").
+                // ============================================================
+                const isNavCommand = ['v', 'volver', 'm', 'menu'].includes((msg.body || '').trim().toLowerCase());
+                if (!isNavCommand && !conversation.handoffAckSent) {
+                    const ackMessage = '✅ *Recibimos tu mensaje.* Un asesor lo revisará y se pondrá en contacto con vos a la brevedad. ¡Gracias!';
+                    try {
+                        const chat = await msg.getChat();
+                        await chat.sendMessage(ackMessage);
+                        await Conversation.updateOne({ _id: conversation._id }, { $set: { handoffAckSent: true } });
+                        console.log(`[TRACE] 📨 Handoff ACK sent to ${phone}`);
+                    } catch (ackErr) {
+                        console.error(`[ERROR] Failed to send handoff ACK to ${phone}:`, ackErr);
+                    }
+                }
                 console.log(`[TRACE] 🛑 Conversation is PAUSED for ${phone}. Bot remains silent.`);
                 await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout);
                 return;
             }
+
 
             const flow = await Flow.findOne({ publishedVersion: conversation.flowVersion });
 
