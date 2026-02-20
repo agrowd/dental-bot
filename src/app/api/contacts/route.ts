@@ -23,6 +23,8 @@ export async function GET(req: NextRequest) {
             contacts: contacts.map(c => ({
                 id: c._id.toString(),
                 phone: c.phone,
+                name: c.name,
+                email: c.email,
                 firstSeenAt: c.firstSeenAt,
                 lastSeenAt: c.lastSeenAt,
                 source: c.source,

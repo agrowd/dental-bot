@@ -344,6 +344,32 @@ async function startBot() {
     const processedMessages = new Set();
     setInterval(() => processedMessages.clear(), 3600000); // 1hr cleanup
 
+    // --- GLOBAL MESSAGE LOGGER (INCOMING & OUTGOING) ---
+    const loggedHistory = new Set();
+    setInterval(() => loggedHistory.clear(), 3600000 * 2);
+
+    client.on('message_create', async (msg) => {
+        try {
+            const messageId = msg.id._serialized;
+            if (loggedHistory.has(messageId)) return;
+            loggedHistory.add(messageId);
+
+            if (msg.from === 'status@broadcast' || msg.to === 'status@broadcast') return;
+            if (msg.from.endsWith('@g.us') || msg.to.endsWith('@g.us')) return;
+
+            const phone = msg.fromMe ? msg.to.replace('@c.us', '') : msg.from.replace('@c.us', '');
+
+            await Message.create({
+                phone,
+                direction: msg.fromMe ? 'out' : 'in',
+                text: msg.body || (msg.hasMedia ? '[Archivo Multimedia]' : ''),
+                timestamp: new Date(msg.timestamp * 1000)
+            });
+        } catch (e) {
+            console.error('[ERROR] Global message logger failed:', e);
+        }
+    });
+
     // Message handler
     client.on('message', async (msg) => {
         const messageId = msg.id._serialized;
