@@ -873,7 +873,9 @@ async function selectFlow({ isAgendado, source, forceOnly = false, body = '' }) 
     // console.log(`[DEBUG] Found ${flows.length} ACTIVE & PUBLISHED flows.`);
 
     // Activation keywords (hardcoded for now to prevent infinite loops)
-    const RESTART_KEYWORDS = ['hola', 'menu', 'inicio', 'empezar', 'reset', 'm', 'v', 'volver'];
+    // 'v' and 'volver' intentionally removed: they use history-based back-navigation, NOT full restart.
+    // Only 'm' / 'menu' trigger a full restart to the main menu.
+    const RESTART_KEYWORDS = ['hola', 'menu', 'inicio', 'empezar', 'reset', 'm'];
 
     // Filter by activation rules
     const matchingFlows = flows.filter(flow => {
