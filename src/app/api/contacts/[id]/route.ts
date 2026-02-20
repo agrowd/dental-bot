@@ -33,3 +33,44 @@ export async function DELETE(
         );
     }
 }
+
+export async function PATCH(
+    req: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
+) {
+    try {
+        await dbConnect();
+        const { id } = await params;
+        const body = await req.json();
+
+        // Only allow editing safe fields from the CRM
+        const ALLOWED_FIELDS = ['name', 'email', 'status', 'tags'];
+        const update: Record<string, any> = {};
+        for (const field of ALLOWED_FIELDS) {
+            if (field in body) update[field] = body[field];
+        }
+
+        if (Object.keys(update).length === 0) {
+            return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
+        }
+
+        const contact = await Contact.findByIdAndUpdate(
+            id,
+            { $set: update },
+            { new: true }
+        );
+
+        if (!contact) {
+            return NextResponse.json({ error: 'Contact not found' }, { status: 404 });
+        }
+
+        return NextResponse.json({ success: true, contact });
+    } catch (error) {
+        console.error('Error updating contact:', error);
+        return NextResponse.json(
+            { error: 'Internal Server Error' },
+            { status: 500 }
+        );
+    }
+}
+

@@ -10,6 +10,14 @@ interface IConversationDoc extends Omit<IConversation, 'id'>, Document {
     };
     history: string[]; // Stack of step IDs visited
     handoffAckSent: boolean; // True after the first "ack" message is sent in a paused/handoff state
+    formState: {
+        active: boolean;      // Currently collecting data
+        pendingStepId: string; // Step to go to after form completes
+        currentField: string; // 'name' | 'email'
+        name: string;
+        email: string;
+        attempts: number;     // Retry counter for validation
+    };
 }
 
 const ConversationSchema = new Schema<IConversationDoc>({
@@ -33,6 +41,14 @@ const ConversationSchema = new Schema<IConversationDoc>({
     },
     history: { type: [String], default: [] },
     handoffAckSent: { type: Boolean, default: false },
+    formState: {
+        active: { type: Boolean, default: false },
+        pendingStepId: { type: String, default: '' },
+        currentField: { type: String, default: '' },
+        name: { type: String, default: '' },
+        email: { type: String, default: '' },
+        attempts: { type: Number, default: 0 },
+    },
     createdAt: { type: Date, default: Date.now as any },
     updatedAt: { type: Date, default: Date.now as any },
 });

@@ -515,7 +515,157 @@ async function startBot() {
                 return;
             }
 
+            // ============================================================
+            // [HARDCODED BEHAVIOR - MIGRATE TO FLOW BUILDER]
+            // LEAD CAPTURE FORM INTERCEPTOR
+            // Triggered when formState.active is true.
+            // Collects name (full) then email before entering info_general.
+            // Prompts can be edited in Settings (keys: lead_form_name_prompt, lead_form_email_prompt)
+            // ============================================================
+            if (conversation.formState && conversation.formState.active) {
+                const formInput = (msg.body || '').trim();
+                const chat = await msg.getChat();
+
+                // Allow V/M to cancel the form
+                const formInputLow = formInput.toLowerCase();
+                if (formInputLow === 'v' || formInputLow === 'm' || formInputLow === 'menu' || formInputLow === 'volver') {
+                    await Conversation.updateOne({ _id: conversation._id }, { $set: { 'formState.active': false } });
+                    await handleStepLogic(client, msg, conversation, flow, contact);
+                    if (lockTimeout) clearTimeout(lockTimeout);
+                    await releaseLock();
+                    return;
+                }
+
+                if (conversation.formState.currentField === 'name') {
+                    // Accept any text of 2+ chars as name
+                    if (formInput.length < 2) {
+                        await sendTyping(chat);
+                        await randomDelay(500, 300);
+                        await chat.sendMessage('Por favor ingresá tu nombre y apellido completo 🙏');
+                        await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout);
+                        return;
+                    }
+                    // Save name, advance to email
+                    const emailPromptSetting = await Setting.findOne({ key: 'lead_form_email_prompt' });
+                    const emailPrompt = emailPromptSetting?.value || '¡Gracias! Ahora necesito tu *email* para poder enviarte información detallada 📧';
+                    await Conversation.updateOne({ _id: conversation._id }, {
+                        $set: { 'formState.name': formInput, 'formState.currentField': 'email', 'formState.attempts': 0 }
+                    });
+                    await sendTyping(chat);
+                    await randomDelay(600, 300);
+                    await chat.sendMessage(emailPrompt);
+                    await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout);
+                    return;
+                }
+
+                if (conversation.formState.currentField === 'email') {
+                    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                    const currentAttempts = conversation.formState.attempts || 0;
+
+                    if (!emailRegex.test(formInput)) {
+                        if (currentAttempts >= 2) {
+                            // 3 failed attempts: skip email, continue anyway
+                            console.log(`[TRACE] 📋 Lead form: email validation failed 3x for ${phone}. Skipping email.`);
+                            const savedName = conversation.formState.name;
+                            const pendingStepId = conversation.formState.pendingStepId;
+                            await Contact.updateOne({ phone }, { $set: { name: savedName } });
+                            await Conversation.updateOne({ _id: conversation._id }, {
+                                $set: {
+                                    'formState.active': false,
+                                    'formState.email': '',
+                                    currentStepId: pendingStepId,
+                                    'loopDetection.currentStepId': pendingStepId,
+                                    'loopDetection.messagesInCurrentStep': 0,
+                                    'loopDetection.lastStepChangeAt': new Date()
+                                }
+                            });
+                            conversation.currentStepId = pendingStepId;
+                            conversation.formState.active = false;
+                            conversation.loopDetection.messagesInCurrentStep = 0;
+                            await handleStepLogic(client, msg, conversation, flow, contact);
+                            if (lockTimeout) clearTimeout(lockTimeout);
+                            await releaseLock();
+                            return;
+                        }
+                        await Conversation.updateOne({ _id: conversation._id }, { $inc: { 'formState.attempts': 1 } });
+                        await sendTyping(chat);
+                        await randomDelay(500, 300);
+                        await chat.sendMessage('Ese email no parece válido 🤔 Por favor ingresá uno correcto (ej: nombre@ejemplo.com)');
+                        await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout);
+                        return;
+                    }
+
+                    // Valid email — save everything to Contact and advance
+                    const savedName = conversation.formState.name;
+                    const pendingStepId = conversation.formState.pendingStepId;
+                    console.log(`[TRACE] 📋 Lead form COMPLETE for ${phone}: name="${savedName}" email="${formInput}"`);
+                    await Contact.updateOne({ phone }, { $set: { name: savedName, email: formInput } });
+                    await Conversation.updateOne({ _id: conversation._id }, {
+                        $set: {
+                            'formState.active': false,
+                            'formState.email': formInput,
+                            currentStepId: pendingStepId,
+                            'loopDetection.currentStepId': pendingStepId,
+                            'loopDetection.messagesInCurrentStep': 0,
+                            'loopDetection.lastStepChangeAt': new Date()
+                        }
+                    });
+                    conversation.currentStepId = pendingStepId;
+                    conversation.formState.active = false;
+                    conversation.loopDetection.messagesInCurrentStep = 0;
+                    await handleStepLogic(client, msg, conversation, flow, contact);
+                    if (lockTimeout) clearTimeout(lockTimeout);
+                    await releaseLock();
+                    return;
+                }
+            }
+
+            // --- LEAD CAPTURE FORM TRIGGER ---
+            // [HARDCODED BEHAVIOR - MIGRATE TO FLOW BUILDER]
+            // When the user is about to enter 'info_general' step AND we don't have their name+email yet,
+            // intercept and start the form instead.
+            // In the future this should be a Flow Builder option: "collect_lead_data: true" on a step.
+            const LEAD_CAPTURE_STEPS = ['info_general']; // Steps that require lead data
+            const nextStepForCapture = (() => {
+                const steps = flow?.published?.steps;
+                if (!steps || !conversation.currentStepId) return null;
+                const getStep = (id) => (typeof steps.get === 'function') ? steps.get(id) : steps[id];
+                const currentStep = getStep(conversation.currentStepId);
+                if (!currentStep) return null;
+                const input = (msg.body || '').trim().toLowerCase();
+                for (const opt of (currentStep.options || [])) {
+                    const key = (opt.key || '').toLowerCase();
+                    if (input === key && LEAD_CAPTURE_STEPS.includes(opt.nextStepId)) {
+                        return opt.nextStepId;
+                    }
+                }
+                return null;
+            })();
+
+            if (nextStepForCapture && (!contact.name || !contact.email)) {
+                const chat = await msg.getChat();
+                const namePromptSetting = await Setting.findOne({ key: 'lead_form_name_prompt' });
+                const namePrompt = namePromptSetting?.value || '¡Perfecto! Antes de continuar necesito un par de datos 😊\n\n¿Cuál es tu *nombre y apellido*?';
+                await Conversation.updateOne({ _id: conversation._id }, {
+                    $set: {
+                        'formState.active': true,
+                        'formState.pendingStepId': nextStepForCapture,
+                        'formState.currentField': 'name',
+                        'formState.name': '',
+                        'formState.email': '',
+                        'formState.attempts': 0,
+                    }
+                });
+                conversation.formState = { active: true, pendingStepId: nextStepForCapture, currentField: 'name', name: '', email: '', attempts: 0 };
+                await sendTyping(chat);
+                await randomDelay(600, 300);
+                await chat.sendMessage(namePrompt);
+                await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout);
+                return;
+            }
+
             await handleStepLogic(client, msg, conversation, flow, contact);
+
 
             // FINAL CLEANUP
             if (lockTimeout) clearTimeout(lockTimeout);

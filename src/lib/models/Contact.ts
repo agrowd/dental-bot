@@ -2,7 +2,10 @@
 import mongoose, { Schema, Document } from 'mongoose';
 import { Contact as IContact, LeadSource, LeadStatus } from '../types';
 
-interface IContactDoc extends Omit<IContact, 'id'>, Document { }
+interface IContactDoc extends Omit<IContact, 'id'>, Document {
+    name?: string;
+    email?: string;
+}
 
 const ContactSchema = new Schema<IContactDoc>({
     phone: {
@@ -11,6 +14,8 @@ const ContactSchema = new Schema<IContactDoc>({
         unique: true,
         index: true,
     },
+    name: { type: String, default: '' },
+    email: { type: String, default: '' },
     firstSeenAt: { type: Date, default: Date.now as any },
     lastSeenAt: { type: Date, default: Date.now as any },
     source: {
