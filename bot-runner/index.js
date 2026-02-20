@@ -483,22 +483,39 @@ async function startBot() {
             // If the conversation is officially paused, we STOP here. No automation.
             if (conversation.state === 'paused' && !msg.hasMedia) {
                 // ============================================================
-                // [HARDCODED BEHAVIOR - MIGRATE TO FLOW BUILDER]
+                // HANDOFF ACKNOWLEDGMENT
                 // When the user sends their first message after a handoff step,
                 // send a one-time acknowledgment so they know their message arrived.
-                // In the future, this should be a configurable option on the
-                // pauseConversation action in the Flow Builder (e.g. "ackMessage").
+                // Text is pulled dynamically from the flow step configuration.
                 // ============================================================
                 const isNavCommand = ['v', 'volver', 'm', 'menu'].includes((msg.body || '').trim().toLowerCase());
                 if (!isNavCommand && !conversation.handoffAckSent) {
-                    const ackMessage = '✅ *Recibimos tu mensaje.* Un asesor lo revisará y se pondrá en contacto con vos a la brevedad. ¡Gracias!';
-                    try {
-                        const chat = await msg.getChat();
-                        await chat.sendMessage(ackMessage);
+                    let ackMessage = null;
+                    const flow = await Flow.findOne({ publishedVersion: conversation.flowVersion });
+
+                    if (flow && flow.published && flow.published.steps) {
+                        const steps = flow.published.steps;
+                        const getStep = (id) => (typeof steps.get === 'function') ? steps.get(id) : steps[id];
+                        const lastStep = getStep(conversation.currentStepId);
+
+                        // We check both current step and potentially history, but currentStepId is usually where it paused
+                        if (lastStep?.actions?.handoffAckMessage) {
+                            ackMessage = lastStep.actions.handoffAckMessage;
+                        }
+                    }
+
+                    if (ackMessage) {
+                        try {
+                            const chat = await msg.getChat();
+                            await chat.sendMessage(ackMessage);
+                            await Conversation.updateOne({ _id: conversation._id }, { $set: { handoffAckSent: true } });
+                            console.log(`[TRACE] 📨 Handoff ACK sent to ${phone}`);
+                        } catch (ackErr) {
+                            console.error(`[ERROR] Failed to send handoff ACK to ${phone}:`, ackErr);
+                        }
+                    } else {
+                        // Mark as sent anyway to avoid evaluating DB queries again
                         await Conversation.updateOne({ _id: conversation._id }, { $set: { handoffAckSent: true } });
-                        console.log(`[TRACE] 📨 Handoff ACK sent to ${phone}`);
-                    } catch (ackErr) {
-                        console.error(`[ERROR] Failed to send handoff ACK to ${phone}:`, ackErr);
                     }
                 }
                 console.log(`[TRACE] 🛑 Conversation is PAUSED for ${phone}. Bot remains silent.`);
@@ -516,11 +533,10 @@ async function startBot() {
             }
 
             // ============================================================
-            // [HARDCODED BEHAVIOR - MIGRATE TO FLOW BUILDER]
             // LEAD CAPTURE FORM INTERCEPTOR
             // Triggered when formState.active is true.
-            // Collects name (full) then email before entering info_general.
-            // Prompts can be edited in Settings (keys: lead_form_name_prompt, lead_form_email_prompt)
+            // Collects name (full) then email before entering the intended step.
+            // Prompts are loaded from the flow step configuration.
             // ============================================================
             if (conversation.formState && conversation.formState.active) {
                 const formInput = (msg.body || '').trim();
@@ -545,9 +561,13 @@ async function startBot() {
                         await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout);
                         return;
                     }
-                    // Save name, advance to email
-                    const emailPromptSetting = await Setting.findOne({ key: 'lead_form_email_prompt' });
-                    const emailPrompt = emailPromptSetting?.value || '¡Gracias! Ahora necesito tu *email* para poder enviarte información detallada 📧';
+
+                    // Get the step config for email prompt
+                    const steps = flow.published.steps;
+                    const getStep = (id) => (typeof steps.get === 'function') ? steps.get(id) : steps[id];
+                    const pendingStep = getStep(conversation.formState.pendingStepId);
+                    const emailPrompt = pendingStep?.actions?.leadDataEmailPrompt || '¡Gracias! Ahora necesito tu *email* para poder enviarte información detallada 📧';
+
                     await Conversation.updateOne({ _id: conversation._id }, {
                         $set: { 'formState.name': formInput, 'formState.currentField': 'email', 'formState.attempts': 0 }
                     });
@@ -621,22 +641,22 @@ async function startBot() {
             }
 
             // --- LEAD CAPTURE FORM TRIGGER ---
-            // [HARDCODED BEHAVIOR - MIGRATE TO FLOW BUILDER]
-            // When the user is about to enter 'info_general' step AND we don't have their name+email yet,
-            // intercept and start the form instead.
-            // In the future this should be a Flow Builder option: "collect_lead_data: true" on a step.
-            const LEAD_CAPTURE_STEPS = ['info_general']; // Steps that require lead data
+            // Trigger the form if the user selected an option that leads to a step with `collectLeadData: true`
             const nextStepForCapture = (() => {
                 const steps = flow?.published?.steps;
                 if (!steps || !conversation.currentStepId) return null;
                 const getStep = (id) => (typeof steps.get === 'function') ? steps.get(id) : steps[id];
                 const currentStep = getStep(conversation.currentStepId);
                 if (!currentStep) return null;
+
                 const input = (msg.body || '').trim().toLowerCase();
                 for (const opt of (currentStep.options || [])) {
                     const key = (opt.key || '').toLowerCase();
-                    if (input === key && LEAD_CAPTURE_STEPS.includes(opt.nextStepId)) {
-                        return opt.nextStepId;
+                    if (input === key) {
+                        const targetStep = getStep(opt.nextStepId);
+                        if (targetStep && targetStep.actions?.collectLeadData) {
+                            return { id: opt.nextStepId, step: targetStep };
+                        }
                     }
                 }
                 return null;
@@ -644,19 +664,19 @@ async function startBot() {
 
             if (nextStepForCapture && (!contact.name || !contact.email)) {
                 const chat = await msg.getChat();
-                const namePromptSetting = await Setting.findOne({ key: 'lead_form_name_prompt' });
-                const namePrompt = namePromptSetting?.value || '¡Perfecto! Antes de continuar necesito un par de datos 😊\n\n¿Cuál es tu *nombre y apellido*?';
+                const namePrompt = nextStepForCapture.step.actions?.leadDataNamePrompt || '¡Perfecto! Antes de continuar necesito un par de datos 😊\n\n¿Cuál es tu *nombre y apellido*?';
+
                 await Conversation.updateOne({ _id: conversation._id }, {
                     $set: {
                         'formState.active': true,
-                        'formState.pendingStepId': nextStepForCapture,
+                        'formState.pendingStepId': nextStepForCapture.id,
                         'formState.currentField': 'name',
                         'formState.name': '',
                         'formState.email': '',
                         'formState.attempts': 0,
                     }
                 });
-                conversation.formState = { active: true, pendingStepId: nextStepForCapture, currentField: 'name', name: '', email: '', attempts: 0 };
+                conversation.formState = { active: true, pendingStepId: nextStepForCapture.id, currentField: 'name', name: '', email: '', attempts: 0 };
                 await sendTyping(chat);
                 await randomDelay(600, 300);
                 await chat.sendMessage(namePrompt);

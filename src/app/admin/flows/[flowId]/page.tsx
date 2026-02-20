@@ -653,26 +653,129 @@ export default function FlowEditorPage() {
 
                                     {/* Actions */}
                                     <div>
-                                        <label className="label text-xs">Acciones automáticas</label>
-                                        <div className="p-3 bg-slate-50 rounded-lg space-y-2">
-                                            <label className="flex items-center gap-2 cursor-pointer">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={selectedStep.actions?.pauseConversation || false}
-                                                    onChange={(e) => {
-                                                        setSteps(prev => ({
-                                                            ...prev,
-                                                            [selectedStepId]: {
-                                                                ...prev[selectedStepId],
-                                                                actions: { ...prev[selectedStepId].actions, pauseConversation: e.target.checked }
-                                                            }
-                                                        }));
-                                                        setHasChanges(true);
-                                                    }}
-                                                    className="rounded"
-                                                />
-                                                <span className="text-sm">👤 Pausar bot (handoff a humano)</span>
-                                            </label>
+                                        <label className="label text-xs">Acciones y Automatismos (Avanzado)</label>
+                                        <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-4">
+
+                                            {/* PAUSE / HANDOFF CONFIG */}
+                                            <div className="space-y-3">
+                                                <label className="flex items-start gap-3 cursor-pointer group">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedStep.actions?.pauseConversation || false}
+                                                        onChange={(e) => {
+                                                            setSteps(prev => ({
+                                                                ...prev,
+                                                                [selectedStepId]: {
+                                                                    ...prev[selectedStepId],
+                                                                    actions: { ...prev[selectedStepId].actions, pauseConversation: e.target.checked }
+                                                                }
+                                                            }));
+                                                            setHasChanges(true);
+                                                        }}
+                                                        className="mt-1 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                                    />
+                                                    <div>
+                                                        <span className="text-sm font-medium text-slate-800 group-hover:text-blue-700 transition-colors">👤 Pausar bot (Derivar a humano)</span>
+                                                        <p className="text-xs text-slate-500 mt-0.5">El bot dejará de responder al usuario hasta que un administrador lo reactive desde el panel.</p>
+                                                    </div>
+                                                </label>
+
+                                                {selectedStep.actions?.pauseConversation && (
+                                                    <div className="ml-7 space-y-2 border-l-2 border-slate-200 pl-4">
+                                                        <label className="text-xs font-medium text-slate-700">Mensaje automático de recepción (Opcional)</label>
+                                                        <input
+                                                            type="text"
+                                                            value={selectedStep.actions?.handoffAckMessage || ''}
+                                                            onChange={(e) => {
+                                                                setSteps(prev => ({
+                                                                    ...prev,
+                                                                    [selectedStepId]: {
+                                                                        ...prev[selectedStepId],
+                                                                        actions: { ...prev[selectedStepId].actions, handoffAckMessage: e.target.value }
+                                                                    }
+                                                                }));
+                                                                setHasChanges(true);
+                                                            }}
+                                                            className="input py-1.5 text-sm w-full"
+                                                            placeholder="Ej: Se esta procesando tu respuesta. Gracias."
+                                                        />
+                                                        <p className="text-[11px] text-slate-500 leading-tight">
+                                                            Este mensaje se enviará automáticamente UNA VEZ después de que el usuario escriba su primer mensaje estando en pausa. Si lo dejas vacío, el bot guardará silencio total.
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="h-px bg-slate-200 w-full"></div>
+
+                                            {/* LEAD CAPTURE CONFIG */}
+                                            <div className="space-y-3">
+                                                <label className="flex items-start gap-3 cursor-pointer group">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedStep.actions?.collectLeadData || false}
+                                                        onChange={(e) => {
+                                                            setSteps(prev => ({
+                                                                ...prev,
+                                                                [selectedStepId]: {
+                                                                    ...prev[selectedStepId],
+                                                                    actions: { ...prev[selectedStepId].actions, collectLeadData: e.target.checked }
+                                                                }
+                                                            }));
+                                                            setHasChanges(true);
+                                                        }}
+                                                        className="mt-1 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                                    />
+                                                    <div>
+                                                        <span className="text-sm font-medium text-slate-800 group-hover:text-blue-700 transition-colors">📋 Requerir Nombre y Email antes de mostrar este paso</span>
+                                                        <p className="text-xs text-slate-500 mt-0.5">El bot interceptará la conversación y obligará al usuario a dejar sus datos antes de avanzar. Si ya los tiene, ingresará directo.</p>
+                                                    </div>
+                                                </label>
+
+                                                {selectedStep.actions?.collectLeadData && (
+                                                    <div className="ml-7 space-y-3 border-l-2 border-slate-200 pl-4 py-2">
+                                                        <div>
+                                                            <label className="text-xs font-medium text-slate-700">Mensaje para pedir Nombre</label>
+                                                            <input
+                                                                type="text"
+                                                                value={selectedStep.actions?.leadDataNamePrompt || ''}
+                                                                onChange={(e) => {
+                                                                    setSteps(prev => ({
+                                                                        ...prev,
+                                                                        [selectedStepId]: {
+                                                                            ...prev[selectedStepId],
+                                                                            actions: { ...prev[selectedStepId].actions, leadDataNamePrompt: e.target.value }
+                                                                        }
+                                                                    }));
+                                                                    setHasChanges(true);
+                                                                }}
+                                                                className="input py-1.5 text-sm w-full mt-1"
+                                                                placeholder="Ej: ¡Perfecto! Antes de continuar, ¿cuál es tu nombre y apellido?"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-xs font-medium text-slate-700">Mensaje para pedir Email</label>
+                                                            <input
+                                                                type="text"
+                                                                value={selectedStep.actions?.leadDataEmailPrompt || ''}
+                                                                onChange={(e) => {
+                                                                    setSteps(prev => ({
+                                                                        ...prev,
+                                                                        [selectedStepId]: {
+                                                                            ...prev[selectedStepId],
+                                                                            actions: { ...prev[selectedStepId].actions, leadDataEmailPrompt: e.target.value }
+                                                                        }
+                                                                    }));
+                                                                    setHasChanges(true);
+                                                                }}
+                                                                className="input py-1.5 text-sm w-full mt-1"
+                                                                placeholder="Ej: ¡Gracias! Ahora necesito tu email para enviarte info 📧"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+
                                         </div>
                                     </div>
                                 </div>

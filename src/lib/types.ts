@@ -11,7 +11,15 @@ export interface StepOption {
 export interface StepActions {
   setLeadStatus?: 'agendado' | 'no_agendado' | 'pendiente';
   addTags?: string[];
+
+  // Handoff configuration
   pauseConversation?: boolean;
+  handoffAckMessage?: string;
+
+  // Lead capture configuration
+  collectLeadData?: boolean;
+  leadDataNamePrompt?: string;
+  leadDataEmailPrompt?: string;
 }
 
 export interface FlowStep {
