@@ -678,7 +678,8 @@ async function startBot() {
                 const input = (msg.body || '').trim().toLowerCase();
                 for (const opt of (currentStep.options || [])) {
                     const key = (opt.key || '').toLowerCase();
-                    if (input === key) {
+                    const label = (opt.label || '').toLowerCase();
+                    if (input === key || input === label || (input.length > 3 && label.includes(input))) {
                         const targetStep = getStep(opt.nextStepId);
                         if (targetStep && targetStep.actions?.collectLeadData) {
                             return { id: opt.nextStepId, step: targetStep };
