@@ -246,13 +246,6 @@ async function startBot() {
         try {
             const phone = call.from.replace('@c.us', '');
 
-            // VIP Whitelist: Only respond to Salvador for now
-            const VIP_NUMBER = '5491144118569';
-            if (phone !== VIP_NUMBER) {
-                console.log(`[TRACE] ⛔ Call from NON-VIP number ${phone}. Ignoring due to whitelist.`);
-                return;
-            }
-
             // 1. Get Contact Info
             const wppContact = await client.getContactById(call.from);
 
@@ -404,9 +397,6 @@ async function startBot() {
             const sender = msg.from;
             const body = msg.body;
             console.log(`[TRACE][${INSTANCE_ID}] 📨 PROCESSING: "${body}" from ${sender}`);
-
-            const WHITELIST = ['5491144118569@c.us', '5491157351676@c.us'];
-            if (!WHITELIST.includes(msg.from)) { await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout); return; }
 
             // 2. SESSION TIME FILTER
             const msgDate = new Date(msg.timestamp * 1000);
