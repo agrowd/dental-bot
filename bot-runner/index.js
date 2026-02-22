@@ -350,7 +350,14 @@ async function startBot() {
             if (msg.from === 'status@broadcast' || msg.to === 'status@broadcast') return;
             if (msg.from.endsWith('@g.us') || msg.to.endsWith('@g.us')) return;
 
-            const phone = msg.fromMe ? msg.to.replace('@c.us', '') : msg.from.replace('@c.us', '');
+            let sourceId = msg.fromMe ? msg.to : msg.from;
+            if (sourceId.includes('@lid')) {
+                try {
+                    const wppContact = await client.getContactById(sourceId);
+                    if (wppContact && wppContact.number) sourceId = wppContact.number;
+                } catch (e) { }
+            }
+            const phone = sourceId.replace('@c.us', '').replace('@lid', '');
 
             await Message.create({
                 phone,
@@ -369,7 +376,15 @@ async function startBot() {
         if (processedMessages.has(messageId)) return;
         processedMessages.add(messageId);
 
-        const phone = msg.from.replace('@c.us', '');
+        let sourceId = msg.from;
+        if (sourceId.includes('@lid')) {
+            try {
+                const wppContact = await client.getContactById(sourceId);
+                if (wppContact && wppContact.number) sourceId = wppContact.number;
+            } catch (e) { }
+        }
+        const phone = sourceId.replace('@c.us', '').replace('@lid', '');
+
         const lockKey = `lock_phone_${phone}`;
         const releaseLock = async () => {
             await Setting.deleteOne({ key: lockKey }).catch(() => { });
