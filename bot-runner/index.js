@@ -283,7 +283,7 @@ async function startBot() {
 
             // Select Flow (simulate organic entry)
             // Reuse selectFlow function
-            const selectedFlow = await selectFlow({ isAgendado: false, source: dbContact.source });
+            const selectedFlow = await selectFlow({ isAgendado: false, source: dbContact.source, phone });
 
             if (!selectedFlow) {
                 console.log('[TRACE] ❌ No flow found for rejected call.');
@@ -476,7 +476,7 @@ async function startBot() {
 
             if (!conversation) {
                 const chatContact = await msg.getContact();
-                const selectedFlow = await selectFlow({ isAgendado: chatContact.isMyContact, source: contact.source });
+                const selectedFlow = await selectFlow({ isAgendado: chatContact.isMyContact, source: contact.source, phone });
                 if (!selectedFlow) { await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout); return; }
 
                 conversation = await Conversation.create({
@@ -489,7 +489,7 @@ async function startBot() {
             } else {
                 console.log(`[TRACE] Active conversation: ${conversation._id} at ${conversation.currentStepId}`);
                 const chatContact = await msg.getContact();
-                const forcingFlow = await selectFlow({ isAgendado: chatContact.isMyContact, source: contact.source, forceOnly: true, body: msg.body });
+                const forcingFlow = await selectFlow({ isAgendado: chatContact.isMyContact, source: contact.source, forceOnly: true, body: msg.body, phone });
 
                 if (forcingFlow) {
                     // SILENCE CHECK: Usually we ignore automation when paused.
@@ -1084,7 +1084,7 @@ function getNextBookingDays(count = 7) {
 }
 
 // Select flow based on rules
-async function selectFlow({ isAgendado, source, forceOnly = false, body = '' }) {
+async function selectFlow({ isAgendado, source, forceOnly = false, body = '', phone = '' }) {
     console.log(`[DEBUG] Finding flow for: Source=${source}, Agendado=${isAgendado}, ForceOnly=${forceOnly}, Body="${body}"`);
 
     // DEBUG: Dump ALL flows to see what we have
@@ -1098,6 +1098,13 @@ async function selectFlow({ isAgendado, source, forceOnly = false, body = '' }) 
     // 'v' and 'volver' intentionally removed: they use history-based back-navigation, NOT full restart.
     // Only 'm' / 'menu' trigger a full restart to the main menu.
     const RESTART_KEYWORDS = ['hola', 'menu', 'inicio', 'empezar', 'reset', 'm'];
+
+    // VIP Admin Override
+    if (phone === '5491144118569' || phone === '5491136753434') {
+        // Find highest priority active flow (sort descending)
+        const sortedFlows = [...flows].sort((a, b) => (b.activationRules?.priority || 0) - (a.activationRules?.priority || 0));
+        return sortedFlows[0] || null;
+    }
 
     // Filter by activation rules
     const matchingFlows = flows.filter(flow => {
