@@ -1102,29 +1102,25 @@ async function selectFlow({ isAgendado, source, forceOnly = false, body = '', ph
     // Only 'm' / 'menu' trigger a full restart to the main menu.
     const RESTART_KEYWORDS = ['hola', 'menu', 'inicio', 'empezar', 'reset', 'm'];
 
-    // VIP Admin Override
-    if (phone === '5491144118569' || phone === '5491136753434') {
-        // Find highest priority active flow (sort descending)
-        const sortedFlows = [...flows].sort((a, b) => (b.activationRules?.priority || 0) - (a.activationRules?.priority || 0));
-        return sortedFlows[0] || null;
-    }
-
     // Filter by activation rules
     const matchingFlows = flows.filter(flow => {
         const rules = flow.activationRules;
         if (!rules) return false;
 
+        const isVIP = phone === '5491144118569' || phone === '5491136753434';
+
         // Check source
-        const sourceMatch = (source === 'meta_ads' && rules.sources.meta_ads) ||
+        const sourceMatch = isVIP || (source === 'meta_ads' && rules.sources.meta_ads) ||
             (source === 'organic' && rules.sources.organic);
 
         // Check WhatsApp status
-        const statusMatch = (isAgendado && rules.whatsappStatus.agendado) ||
+        const statusMatch = isVIP || (isAgendado && rules.whatsappStatus.agendado) ||
             (!isAgendado && rules.whatsappStatus.no_agendado);
 
         // Check forceRestart if forceOnly is requested
         if (forceOnly) {
-            if (!rules.forceRestart) return false;
+            // If it's not a VIP, the flow must have forceRestart enabled
+            if (!rules.forceRestart && !isVIP) return false;
 
             // CRITICAL FIX: Only allow force restart if message matches a keyword
             // This prevents "Every message restarts the flow" loops.
