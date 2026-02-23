@@ -69,11 +69,15 @@ export interface FlowDocument {
   draft: {
     entryStepId: string;
     fallbackMessage?: string;
+    msgNavigationMenu?: string;
+    msgNavigationBack?: string;
     steps: Record<string, FlowStep>;
   };
   published: {
     entryStepId: string;
     fallbackMessage?: string;
+    msgNavigationMenu?: string;
+    msgNavigationBack?: string;
     steps: Record<string, FlowStep>;
   } | null;
   publishedVersion: number;

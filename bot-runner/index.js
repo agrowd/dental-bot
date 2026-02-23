@@ -1054,10 +1054,13 @@ function formatMessage(step, flow) {
 
     // Navigation Labels (V/M)
     if (flow && flow.published) {
+        const defaultNavMenu = '🔹 *V:* Volver atrás\n🔹 *M:* Menú principal';
+        const defaultNavBack = '_(Si te equivocaste, escribí *V* para volver)_';
+
         if (step.id !== flow.published.entryStepId) {
-            msg += `\n\n🔹 *V:* Volver atrás\n🔹 *M:* Menú principal`;
+            msg += '\n\n' + (flow.published.msgNavigationMenu || defaultNavMenu);
         } else {
-            msg += `\n\n_(Si te equivocaste, escribí *V* para volver)_`;
+            msg += '\n\n' + (flow.published.msgNavigationBack || defaultNavBack);
         }
     }
 

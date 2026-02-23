@@ -42,6 +42,8 @@ export default function FlowEditorPage() {
     });
     const [isActive, setIsActive] = useState(true);
     const [fallbackMessage, setFallbackMessage] = useState('');
+    const [msgNavigationMenu, setMsgNavigationMenu] = useState('🔹 *V:* Volver atrás\n🔹 *M:* Menú principal');
+    const [msgNavigationBack, setMsgNavigationBack] = useState('_(Si te equivocaste, escribí *V* para volver)_');
     const [steps, setSteps] = useState<Record<string, FlowStep>>({});
     const [selectedStepId, setSelectedStepId] = useState<string>('');
     const [entryStepId, setEntryStepId] = useState<string>('');
@@ -80,6 +82,8 @@ export default function FlowEditorPage() {
             // Use draft data if available, otherwise fallback to published or empty
             const sourceData = flow.draft || flow.published || {};
             setFallbackMessage(sourceData.fallbackMessage || 'No entendí esa opción. Por favor elegí una de las opciones válidas (ej: A).');
+            setMsgNavigationMenu(sourceData.msgNavigationMenu || '🔹 *V:* Volver atrás\n🔹 *M:* Menú principal');
+            setMsgNavigationBack(sourceData.msgNavigationBack || '_(Si te equivocaste, escribí *V* para volver)_');
             setSteps(sourceData.steps || {});
             setEntryStepId(sourceData.entryStepId || '');
             setSelectedStepId(sourceData.entryStepId || (sourceData.steps ? Object.keys(sourceData.steps)[0] : '') || '');
@@ -246,7 +250,7 @@ export default function FlowEditorPage() {
             name: flowName,
             description: flowDescription,
             activationRules, // Check if this is correct
-            draft: { steps, entryStepId, fallbackMessage },
+            draft: { steps, entryStepId, fallbackMessage, msgNavigationMenu, msgNavigationBack },
             isActive
         };
         console.log('[DEBUG-FRONTEND] Saving flow payload:', JSON.stringify(payload, null, 2));
@@ -456,9 +460,37 @@ export default function FlowEditorPage() {
                             <textarea
                                 value={fallbackMessage}
                                 onChange={(e) => { setFallbackMessage(e.target.value); setHasChanges(true); }}
-                                className="input min-h-[100px] w-full text-sm"
+                                className="input min-h-[80px] w-full text-sm"
                                 placeholder="Ej: No entendí esa opción. Por favor elegí una de las opciones válidas (ej: A)."
                             />
+                        </div>
+
+                        {/* Navigation Texts Setting */}
+                        <div className="card p-4 flex flex-col gap-4">
+                            <div>
+                                <h3 className="font-medium text-slate-900 mb-2">Mensaje de Navegación (General)</h3>
+                                <p className="text-xs text-slate-500 mb-3">
+                                    Aparece al final de los menús para guiar al usuario a volver o ir al menú principal.
+                                </p>
+                                <textarea
+                                    value={msgNavigationMenu}
+                                    onChange={(e) => { setMsgNavigationMenu(e.target.value); setHasChanges(true); }}
+                                    className="input min-h-[60px] w-full text-sm"
+                                    placeholder="Ej: 🔹 *V:* Volver atrás&#10;🔹 *M:* Menú principal"
+                                />
+                            </div>
+                            <div>
+                                <h3 className="font-medium text-slate-900 mb-2">Mensaje de Navegación (Inicio)</h3>
+                                <p className="text-xs text-slate-500 mb-3">
+                                    Aparece sólo en el primer menú del flujo para indicar cómo retroceder.
+                                </p>
+                                <textarea
+                                    value={msgNavigationBack}
+                                    onChange={(e) => { setMsgNavigationBack(e.target.value); setHasChanges(true); }}
+                                    className="input min-h-[60px] w-full text-sm"
+                                    placeholder="Ej: _(Si te equivocaste, escribí *V* para volver)_"
+                                />
+                            </div>
                         </div>
                     </div>
                 </div>
