@@ -480,7 +480,7 @@ async function startBot() {
                 if (!selectedFlow) { await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout); return; }
 
                 conversation = await Conversation.create({
-                    phone, flowVersion: selectedFlow.publishedVersion,
+                    phone, flowId: selectedFlow._id, flowVersion: selectedFlow.publishedVersion,
                     currentStepId: selectedFlow.published.entryStepId,
                     state: 'active', tags: [],
                     loopDetection: { currentStepId: selectedFlow.published.entryStepId, messagesInCurrentStep: 0, lastStepChangeAt: new Date() }
@@ -502,7 +502,7 @@ async function startBot() {
                     console.log(`[TRACE] ⚡ FORCE RESTART: "${forcingFlow.name}"`);
                     await Conversation.updateMany({ phone, state: { $in: ['active', 'paused'] } }, { $set: { state: 'closed' } });
                     conversation = await Conversation.create({
-                        phone, flowVersion: forcingFlow.publishedVersion,
+                        phone, flowId: forcingFlow._id, flowVersion: forcingFlow.publishedVersion,
                         currentStepId: forcingFlow.published.entryStepId,
                         state: 'active', tags: [],
                         loopDetection: { currentStepId: forcingFlow.published.entryStepId, messagesInCurrentStep: 0, lastStepChangeAt: new Date() }
@@ -555,7 +555,43 @@ async function startBot() {
             }
 
 
-            const flow = await Flow.findOne({ publishedVersion: conversation.flowVersion });
+            // Try strict ID first (if exists), then fallback to publishedVersion
+            let flow = null;
+            if (conversation.flowId) {
+                flow = await Flow.findById(conversation.flowId);
+            } else {
+                flow = await Flow.findOne({ publishedVersion: conversation.flowVersion });
+            }
+
+            // Verify if the current step still exists (flow might have been edited)
+            let isFlowBroken = !flow || !flow.published;
+            if (flow && flow.published && flow.published.steps) {
+                const getStep = (id) => (typeof flow.published.steps.get === 'function') ? flow.published.steps.get(id) : flow.published.steps[id];
+                if (!getStep(conversation.currentStepId)) isFlowBroken = true;
+            }
+
+            // If the flow is broken (e.g. republished or deleted) while we are active, graceful restart
+            if (isFlowBroken && conversation.state !== 'paused') {
+                console.log(`[WARNING] Flow V${conversation.flowVersion} missing or step broken for ${phone}. Forcing restart.`);
+                await Conversation.updateOne({ _id: conversation._id }, { $set: { state: 'closed' } });
+
+                const chatContact = await msg.getContact();
+                const selectedFlow = await selectFlow({ isAgendado: chatContact.isMyContact, source: contact.source, phone });
+
+                if (!selectedFlow) {
+                    console.log(`[TRACE] No fallback flow found for ${phone}.`);
+                    await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout);
+                    return;
+                }
+
+                conversation = await Conversation.create({
+                    phone, flowId: selectedFlow._id, flowVersion: selectedFlow.publishedVersion,
+                    currentStepId: selectedFlow.published.entryStepId,
+                    state: 'active', tags: [],
+                    loopDetection: { currentStepId: selectedFlow.published.entryStepId, messagesInCurrentStep: 0, lastStepChangeAt: new Date() }
+                });
+                flow = selectedFlow;
+            }
 
             if (!flow || conversation.state === 'paused') {
                 console.log(`[TRACE] Flow missing or Bot PAUSED for ${phone}.`);

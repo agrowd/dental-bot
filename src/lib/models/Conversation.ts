@@ -26,6 +26,7 @@ const ConversationSchema = new Schema<IConversationDoc>({
         required: true,
         index: true,
     },
+    flowId: { type: Schema.Types.ObjectId, ref: 'Flow', required: false },
     flowVersion: { type: Number, required: true },
     currentStepId: { type: String, required: true },
     state: {
