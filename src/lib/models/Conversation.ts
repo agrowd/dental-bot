@@ -9,6 +9,7 @@ interface IConversationDoc extends Omit<IConversation, 'id'>, Document {
         lastStepChangeAt: Date;
     };
     history: string[]; // Stack of step IDs visited
+    visitedMediaSteps: string[]; // Steps where media was already sent (skip on revisit)
     handoffAckSent: boolean; // True after the first "ack" message is sent in a paused/handoff state
     formState: {
         active: boolean;      // Currently collecting data
@@ -41,6 +42,7 @@ const ConversationSchema = new Schema<IConversationDoc>({
         lastStepChangeAt: { type: Date, default: Date.now as any },
     },
     history: { type: [String], default: [] },
+    visitedMediaSteps: { type: [String], default: [] },
     handoffAckSent: { type: Boolean, default: false },
     formState: {
         active: { type: Boolean, default: false },

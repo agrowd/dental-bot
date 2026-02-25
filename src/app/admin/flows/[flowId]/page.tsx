@@ -42,6 +42,9 @@ export default function FlowEditorPage() {
     });
     const [isActive, setIsActive] = useState(true);
     const [fallbackMessage, setFallbackMessage] = useState('');
+    const [msgFallback, setMsgFallback] = useState('No comprendí tu mensaje. Si deseás ser atendido por un asesor, por favor aguardá a ser contactado.\n\nCaso contrario, podés usar:\n🔹 *V:* Volver atrás\n🔹 *M:* Menú principal');
+    const [msgFallbackLockout, setMsgFallbackLockout] = useState('Intentaste demasiadas veces. Cuando estés listo, escribí *M* para volver al menú o *V* para volver atrás.');
+    const [fallbackMaxAttempts, setFallbackMaxAttempts] = useState(5);
     const [msgNavigationMenu, setMsgNavigationMenu] = useState('🔹 *V:* Volver atrás\n🔹 *M:* Menú principal');
     const [msgNavigationBack, setMsgNavigationBack] = useState('_(Si te equivocaste, escribí *V* para volver)_');
     const [steps, setSteps] = useState<Record<string, FlowStep>>({});
@@ -82,6 +85,9 @@ export default function FlowEditorPage() {
             // Use draft data if available, otherwise fallback to published or empty
             const sourceData = flow.draft || flow.published || {};
             setFallbackMessage(sourceData.fallbackMessage || 'No entendí esa opción. Por favor elegí una de las opciones válidas (ej: A).');
+            setMsgFallback(sourceData.msgFallback || 'No comprendí tu mensaje. Si deseás ser atendido por un asesor, por favor aguardá a ser contactado.\n\nCaso contrario, podés usar:\n🔹 *V:* Volver atrás\n🔹 *M:* Menú principal');
+            setMsgFallbackLockout(sourceData.msgFallbackLockout || 'Intentaste demasiadas veces. Cuando estés listo, escribí *M* para volver al menú o *V* para volver atrás.');
+            setFallbackMaxAttempts(sourceData.fallbackMaxAttempts ?? 5);
             setMsgNavigationMenu(sourceData.msgNavigationMenu || '🔹 *V:* Volver atrás\n🔹 *M:* Menú principal');
             setMsgNavigationBack(sourceData.msgNavigationBack || '_(Si te equivocaste, escribí *V* para volver)_');
             setSteps(sourceData.steps || {});
@@ -250,7 +256,7 @@ export default function FlowEditorPage() {
             name: flowName,
             description: flowDescription,
             activationRules, // Check if this is correct
-            draft: { steps, entryStepId, fallbackMessage, msgNavigationMenu, msgNavigationBack },
+            draft: { steps, entryStepId, fallbackMessage, msgFallback, msgFallbackLockout, fallbackMaxAttempts, msgNavigationMenu, msgNavigationBack },
             isActive
         };
         console.log('[DEBUG-FRONTEND] Saving flow payload:', JSON.stringify(payload, null, 2));
@@ -451,24 +457,52 @@ export default function FlowEditorPage() {
                             </label>
                         </div>
 
-                        {/* Fallback Message Setting */}
-                        <div className="card p-4">
-                            <h3 className="font-medium text-slate-900 mb-2">Mensaje de "Opción no válida"</h3>
-                            <p className="text-xs text-slate-500 mb-3">
-                                Este mensaje se enviará automáticamente si el usuario escribe algo que no coincide con las opciones del paso actual.
-                            </p>
-                            <textarea
-                                value={fallbackMessage}
-                                onChange={(e) => { setFallbackMessage(e.target.value); setHasChanges(true); }}
-                                className="input min-h-[80px] w-full text-sm"
-                                placeholder="Ej: No entendí esa opción. Por favor elegí una de las opciones válidas (ej: A)."
-                            />
+                        {/* Fallback Message Settings */}
+                        <div className="card p-4 flex flex-col gap-4">
+                            <div>
+                                <h3 className="font-medium text-slate-900 mb-2">💬 Mensaje cuando no entiende</h3>
+                                <p className="text-xs text-slate-500 mb-3">
+                                    Se envía cuando el usuario escribe algo que no coincide con ninguna opción del paso actual.
+                                </p>
+                                <textarea
+                                    value={msgFallback}
+                                    onChange={(e) => { setMsgFallback(e.target.value); setHasChanges(true); }}
+                                    className="input min-h-[80px] w-full text-sm"
+                                    placeholder="Ej: No comprendí tu mensaje..."
+                                />
+                            </div>
+                            <div>
+                                <h3 className="font-medium text-slate-900 mb-2">🔒 Mensaje de bloqueo (tras muchos intentos)</h3>
+                                <p className="text-xs text-slate-500 mb-3">
+                                    Si el usuario falla muchas veces seguidas, se envía este mensaje y el bot deja de responder hasta que escriba M o V.
+                                </p>
+                                <textarea
+                                    value={msgFallbackLockout}
+                                    onChange={(e) => { setMsgFallbackLockout(e.target.value); setHasChanges(true); }}
+                                    className="input min-h-[60px] w-full text-sm"
+                                    placeholder="Ej: Intentaste demasiadas veces..."
+                                />
+                            </div>
+                            <div>
+                                <h3 className="font-medium text-slate-900 mb-2">🔢 Máximo de intentos antes de bloquear</h3>
+                                <p className="text-xs text-slate-500 mb-3">
+                                    Cantidad de veces que el usuario puede equivocarse antes de que el bot se silencie.
+                                </p>
+                                <input
+                                    type="number"
+                                    min={1}
+                                    max={20}
+                                    value={fallbackMaxAttempts}
+                                    onChange={(e) => { setFallbackMaxAttempts(parseInt(e.target.value) || 5); setHasChanges(true); }}
+                                    className="input w-24 text-sm"
+                                />
+                            </div>
                         </div>
 
                         {/* Navigation Texts Setting */}
                         <div className="card p-4 flex flex-col gap-4">
                             <div>
-                                <h3 className="font-medium text-slate-900 mb-2">Mensaje de Navegación (General)</h3>
+                                <h3 className="font-medium text-slate-900 mb-2">🧭 Mensaje de Navegación (General)</h3>
                                 <p className="text-xs text-slate-500 mb-3">
                                     Aparece al final de los menús para guiar al usuario a volver o ir al menú principal.
                                 </p>
@@ -480,7 +514,7 @@ export default function FlowEditorPage() {
                                 />
                             </div>
                             <div>
-                                <h3 className="font-medium text-slate-900 mb-2">Mensaje de Navegación (Inicio)</h3>
+                                <h3 className="font-medium text-slate-900 mb-2">🧭 Mensaje de Navegación (Inicio)</h3>
                                 <p className="text-xs text-slate-500 mb-3">
                                     Aparece sólo en el primer menú del flujo para indicar cómo retroceder.
                                 </p>
@@ -490,6 +524,35 @@ export default function FlowEditorPage() {
                                     className="input min-h-[60px] w-full text-sm"
                                     placeholder="Ej: _(Si te equivocaste, escribí *V* para volver)_"
                                 />
+                            </div>
+                        </div>
+
+                        {/* Per-Step Navigation Toggle */}
+                        <div className="card p-4">
+                            <h3 className="font-medium text-slate-900 mb-2">📋 Navegación por Paso (M/V)</h3>
+                            <p className="text-xs text-slate-500 mb-3">
+                                Elegí en qué pasos se muestra el texto de navegación (Volver / Menú). Los que no estén tildados no muestran M/V.
+                            </p>
+                            <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto">
+                                {Object.values(steps).map((step) => (
+                                    <label key={step.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={step.showNavigation !== false}
+                                            onChange={(e) => {
+                                                setSteps(prev => ({
+                                                    ...prev,
+                                                    [step.id]: { ...prev[step.id], showNavigation: e.target.checked }
+                                                }));
+                                                setHasChanges(true);
+                                            }}
+                                        />
+                                        <div className="flex flex-col">
+                                            <span className="text-sm font-medium text-slate-800">{step.title || step.id}</span>
+                                            <span className="text-xs text-slate-400 truncate max-w-[250px]">{step.message?.substring(0, 60)}...</span>
+                                        </div>
+                                    </label>
+                                ))}
                             </div>
                         </div>
                     </div>

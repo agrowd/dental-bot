@@ -909,22 +909,35 @@ async function startBot() {
                     await randomDelay(1000, 500);
 
                     if (currentStep.mediaUrl) {
-                        try {
-                            const mediaUrl = currentStep.mediaUrl;
-                            let media;
-                            if (mediaUrl.startsWith('/uploads/')) {
-                                const filePath = path.join(__dirname, 'public', mediaUrl);
-                                console.log(`[TRACE][${conversation._id}] 📂 Loading local media from: ${filePath}`);
-                                media = MessageMedia.fromFilePath(filePath);
-                            } else {
-                                console.log(`[TRACE][${conversation._id}] 🖼️ Fetching remote media from: ${mediaUrl}`);
-                                media = await MessageMedia.fromUrl(mediaUrl);
+                        const alreadySentMedia = (conversation.visitedMediaSteps || []).includes(currentStep.id);
+
+                        if (!alreadySentMedia) {
+                            // First visit: send media + text
+                            try {
+                                const mediaUrl = currentStep.mediaUrl;
+                                let media;
+                                if (mediaUrl.startsWith('/uploads/')) {
+                                    const filePath = path.join(__dirname, 'public', mediaUrl);
+                                    console.log(`[TRACE][${conversation._id}] 📂 Loading local media from: ${filePath}`);
+                                    media = MessageMedia.fromFilePath(filePath);
+                                } else {
+                                    console.log(`[TRACE][${conversation._id}] 🖼️ Fetching remote media from: ${mediaUrl}`);
+                                    media = await MessageMedia.fromUrl(mediaUrl);
+                                }
+                                console.log(`[TRACE][${conversation._id}] 📤 Sending Media + Text[${currentStep.id}]: "${response.replace(/\n/g, ' ')}"`);
+                                await chat.sendMessage(media, { caption: response });
+                                // Track that we sent media for this step
+                                await Conversation.updateOne({ _id: conversation._id }, { $addToSet: { visitedMediaSteps: currentStep.id } });
+                                if (!conversation.visitedMediaSteps) conversation.visitedMediaSteps = [];
+                                conversation.visitedMediaSteps.push(currentStep.id);
+                            } catch (mediaError) {
+                                console.error(`[ERROR] Failed to fetch media from ${currentStep.mediaUrl}:`, mediaError);
+                                console.log(`[TRACE][${conversation._id}] 📤 Falling back to Text Only[${currentStep.id}]: "${response.replace(/\n/g, ' ')}"`);
+                                await chat.sendMessage(response);
                             }
-                            console.log(`[TRACE][${conversation._id}] 📤 Sending Media + Text[${currentStep.id}]: "${response.replace(/\n/g, ' ')}"`);
-                            await chat.sendMessage(media, { caption: response });
-                        } catch (mediaError) {
-                            console.error(`[ERROR] Failed to fetch media from ${currentStep.mediaUrl}:`, mediaError);
-                            console.log(`[TRACE][${conversation._id}] 📤 Falling back to Text Only[${currentStep.id}]: "${response.replace(/\n/g, ' ')}"`);
+                        } else {
+                            // Revisit: text only (no image to avoid gallery spam)
+                            console.log(`[TRACE][${conversation._id}] 📤 Revisit (no media)[${currentStep.id}]: "${response.replace(/\n/g, ' ')}"`);
                             await chat.sendMessage(response);
                         }
                     } else {
@@ -1008,10 +1021,9 @@ async function startBot() {
                 return;
             }
 
-            // Standard Fallback logic for everything else (Keep in Flow)
+            // Standard Fallback logic with configurable lockout
             console.log(`[TRACE] ⚠️ Invalid Option: ${input}`);
 
-            // Increment loop detection but BE LESS AGGRESSIVE than handoff
             const newCount = (conversation.loopDetection.messagesInCurrentStep || 0) + 1;
             await Conversation.updateOne(
                 { _id: conversation._id },
@@ -1021,14 +1033,26 @@ async function startBot() {
             );
             conversation.loopDetection.messagesInCurrentStep = newCount;
 
+            const maxAttempts = (flow && flow.published && flow.published.fallbackMaxAttempts) || 5;
             const chat = await msg.getChat();
-            // Refined fallback message as requested by Salvador
-            let fallbackMsg = "No comprendí tu mensaje. Si deseás ser atendido por un asesor, por favor aguardá a ser contactado. \n\nCaso contrario, podés usar:\n🔹 *V:* Volver atrás\n🔹 *M:* Menú principal";
 
-            // If we are at the entry step, don't show "V"
-            if (flow && flow.published && currentStep.id === flow.published.entryStepId) {
-                fallbackMsg = "No comprendí tu mensaje. Si deseás ser atendido por un asesor, por favor aguardá a ser contactado. \n\nSi querés ver las opciones de nuevo, escribí:\n🔹 *M:* Menú principal";
+            if (newCount >= maxAttempts) {
+                // LOCKOUT: Too many failed attempts — silence until M or V
+                const lockoutMsg = (flow && flow.published && flow.published.msgFallbackLockout)
+                    || 'Intentaste demasiadas veces. Cuando estés listo, escribí *M* para volver al menú o *V* para volver atrás.';
+                console.log(`[TRACE] 🔒 Lockout triggered for ${contact.phone} after ${newCount} attempts.`);
+                await Conversation.updateOne(
+                    { _id: conversation._id },
+                    { $set: { state: 'paused' }, $addToSet: { tags: 'fallback-lockout' } }
+                );
+                conversation.state = 'paused';
+                await chat.sendMessage(lockoutMsg);
+                return;
             }
+
+            // Normal fallback (editable from flow settings)
+            let fallbackMsg = (flow && flow.published && flow.published.msgFallback)
+                || "No comprendí tu mensaje. Si deseás ser atendido por un asesor, por favor aguardá a ser contactado. \n\nCaso contrario, podés usar:\n🔹 *V:* Volver atrás\n🔹 *M:* Menú principal";
 
             await chat.sendMessage(fallbackMsg);
             return;
@@ -1088,8 +1112,8 @@ function formatMessage(step, flow) {
 
     console.log(`[DEBUG] formatMessage: Step=${step.id}, isHandoff=${isHandoff}, hasPauseAction=${hasPauseAction}, Actions=${JSON.stringify(step.actions || {})}`);
 
-    // Navigation Labels (V/M)
-    if (flow && flow.published) {
+    // Navigation Labels (V/M) — only if step has showNavigation enabled (default: true)
+    if (flow && flow.published && step.showNavigation !== false) {
         const defaultNavMenu = '🔹 *V:* Volver atrás\n🔹 *M:* Menú principal';
         const defaultNavBack = '_(Si te equivocaste, escribí *V* para volver)_';
 

@@ -37,11 +37,15 @@ const FlowStepSchema = new Schema<FlowStep>({
     options: [StepOptionSchema],
     nextStepId: String,
     actions: StepActionsSchema,
+    showNavigation: { type: Boolean, default: true },
 }, { _id: false });
 
 const FlowContentSchema = new Schema({
     entryStepId: String,
     fallbackMessage: { type: String, default: 'No entendí esa opción. Por favor elegí una de las opciones válidas (ej: A).' },
+    msgFallback: { type: String, default: 'No comprendí tu mensaje. Si deseás ser atendido por un asesor, por favor aguardá a ser contactado.\n\nCaso contrario, podés usar:\n🔹 *V:* Volver atrás\n🔹 *M:* Menú principal' },
+    msgFallbackLockout: { type: String, default: 'Intentaste demasiadas veces. Cuando estés listo, escribí *M* para volver al menú o *V* para volver atrás.' },
+    fallbackMaxAttempts: { type: Number, default: 5 },
     msgNavigationMenu: { type: String, default: '🔹 *V:* Volver atrás\n🔹 *M:* Menú principal' },
     msgNavigationBack: { type: String, default: '_(Si te equivocaste, escribí *V* para volver)_' },
     steps: { type: Schema.Types.Mixed },

@@ -30,6 +30,7 @@ export interface FlowStep {
   options: StepOption[];  // Dynamic array of options (can add/remove)
   nextStepId?: string;    // Forward to next step for free-text capture
   actions?: StepActions;
+  showNavigation?: boolean; // Whether to show M/V navigation on this step (default: true)
 }
 
 export interface Flow {
@@ -69,6 +70,9 @@ export interface FlowDocument {
   draft: {
     entryStepId: string;
     fallbackMessage?: string;
+    msgFallback?: string;
+    msgFallbackLockout?: string;
+    fallbackMaxAttempts?: number;
     msgNavigationMenu?: string;
     msgNavigationBack?: string;
     steps: Record<string, FlowStep>;
@@ -76,6 +80,9 @@ export interface FlowDocument {
   published: {
     entryStepId: string;
     fallbackMessage?: string;
+    msgFallback?: string;
+    msgFallbackLockout?: string;
+    fallbackMaxAttempts?: number;
     msgNavigationMenu?: string;
     msgNavigationBack?: string;
     steps: Record<string, FlowStep>;
