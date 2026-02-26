@@ -1,6 +1,7 @@
-
 import { NextRequest, NextResponse } from 'next/server';
 import BotInstance from '@/lib/models/BotInstance';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(
     request: NextRequest,
@@ -42,7 +43,7 @@ export async function GET(
 
     try {
         console.log(`[PROXY GET] Fetching: ${targetUrl}`);
-        const res = await fetch(targetUrl);
+        const res = await fetch(targetUrl, { cache: 'no-store' });
         const data = await res.json();
         return NextResponse.json(data, { status: res.status });
     } catch (error: any) {
