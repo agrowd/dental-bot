@@ -80,7 +80,7 @@ app.post('/bot/start', async (req, res) => {
     }
 
     // Check retry limit (3 per hour)
-    if (retryCount >= 3) {
+    if (retryCount >= 5) {
         return res.status(429).json({ error: 'Max retries exceeded. Wait 1 hour.' });
     }
 
@@ -1301,8 +1301,5 @@ const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
     console.log(`Bot API running on port ${PORT}`);
     console.log('Bot state:', botState);
-    console.log('To start bot, POST to /bot/start');
-
-    // Auto-start bot on server launch
-    startBot();
+    console.log('To start bot, go to the admin panel → WhatsApp → Activar Bot');
 });
