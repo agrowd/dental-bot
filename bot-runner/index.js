@@ -238,7 +238,7 @@ async function startBot() {
     // Heartbeat log to confirm process is alive
     setInterval(() => {
         console.log(`[HEARTBEAT] Bot runner alive. State: ${botState}. Memory: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB`);
-    }, 60000);
+    }, 20 * 60 * 1000); // Every 20 minutes
 
     // Call Handler (New Implementation)
     client.on('call', async (call) => {
