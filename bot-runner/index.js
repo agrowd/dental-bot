@@ -512,6 +512,19 @@ async function startBot() {
                 }
             }
 
+            // 🔓 ALLOW ESCAPE FROM PAUSE (Emergency Nav Commands)
+            const cleanBody = (msg.body || '').trim().toLowerCase();
+            const isEmergencyNav = cleanBody === 'v' || cleanBody === 'm' || cleanBody === 'volver' || cleanBody === 'menu' || cleanBody === 'atras' || cleanBody.includes('menu principal');
+
+            if (conversation.state === 'paused' && isEmergencyNav) {
+                console.log(`[TRACE] 🔓 Emergency Escape Command executed by ${phone}. Unpausing!`);
+                conversation.state = 'active';
+                await Conversation.updateOne(
+                    { _id: conversation._id },
+                    { $set: { state: 'active' } }
+                );
+            }
+
             // --- FINAL SILENCE GATE ---
             // If the conversation is officially paused, we STOP here. No automation.
             if (conversation.state === 'paused' && !msg.hasMedia) {
@@ -521,8 +534,7 @@ async function startBot() {
                 // send a one-time acknowledgment so they know their message arrived.
                 // Text is pulled dynamically from the flow step configuration.
                 // ============================================================
-                const isNavCommand = ['v', 'volver', 'm', 'menu'].includes((msg.body || '').trim().toLowerCase());
-                if (!isNavCommand && !conversation.handoffAckSent) {
+                if (!conversation.handoffAckSent) {
                     let ackMessage = null;
                     const flow = await Flow.findOne({ publishedVersion: conversation.flowVersion });
 
@@ -531,9 +543,19 @@ async function startBot() {
                         const getStep = (id) => (typeof steps.get === 'function') ? steps.get(id) : steps[id];
                         const lastStep = getStep(conversation.currentStepId);
 
-                        // We check both current step and potentially history, but currentStepId is usually where it paused
                         if (lastStep?.actions?.handoffAckMessage) {
                             ackMessage = lastStep.actions.handoffAckMessage;
+
+                            // 🚀 DYNAMICALLY APPEND M/V TEXT TO ACK MESSAGE
+                            if (lastStep.showNavigation !== false) {
+                                const defaultNavMenu = '🔹 *V:* Volver atrás\n🔹 *M:* Menú principal';
+                                const defaultNavBack = '_(Si te equivocaste, escribí *V* para volver)_';
+                                if (lastStep.id !== flow.published.entryStepId) {
+                                    ackMessage += '\n\n' + (flow.published.msgNavigationMenu || defaultNavMenu);
+                                } else {
+                                    ackMessage += '\n\n' + (flow.published.msgNavigationBack || defaultNavBack);
+                                }
+                            }
                         }
                     }
 

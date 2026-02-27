@@ -533,7 +533,7 @@ export default function FlowEditorPage() {
                             <p className="text-xs text-slate-500 mb-3">
                                 Elegí en qué pasos se muestra el texto de navegación (Volver / Menú). Los que no estén tildados no muestran M/V.
                             </p>
-                            <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto">
+                            <div className="flex flex-col gap-2">
                                 {Object.values(steps).map((step) => (
                                     <label key={step.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 cursor-pointer">
                                         <input
