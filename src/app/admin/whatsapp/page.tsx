@@ -24,13 +24,13 @@ export default function WhatsAppPage() {
         const checkStatus = async () => {
             try {
                 // Correct path: /api/bot/status (proxy adds /bot/)
-                const res = await fetch(`${BOT_URL}/status`);
+                const res = await fetch(`${BOT_URL}/status?t=${Date.now()}`, { cache: 'no-store' });
                 const data = await res.json();
                 setStatus(data.status);
 
                 // If connecting, try to get QR
                 if (data.status === 'connecting') {
-                    const qrRes = await fetch(`${BOT_URL}/qr`);
+                    const qrRes = await fetch(`${BOT_URL}/qr?t=${Date.now()}`, { cache: 'no-store' });
                     if (qrRes.ok) {
                         const qrData = await qrRes.json();
                         setQrCode(qrData.qr);
@@ -41,7 +41,7 @@ export default function WhatsAppPage() {
 
                 // If connected, get bot info
                 if (data.status === 'connected') {
-                    const infoRes = await fetch(`${BOT_URL}/info`);
+                    const infoRes = await fetch(`${BOT_URL}/info?t=${Date.now()}`, { cache: 'no-store' });
                     if (infoRes.ok) {
                         const infoData = await infoRes.json();
                         setBotInfo(infoData);
