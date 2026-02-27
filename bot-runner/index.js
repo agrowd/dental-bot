@@ -92,7 +92,9 @@ app.post('/bot/start', async (req, res) => {
 
         res.json({ status: 'starting' });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        console.error('[ERROR] startBot() threw an exception:', error);
+        botState = 'disconnected'; // 🔥 Prevent hanging in 'connecting' forever
+        res.status(500).json({ error: error.message || 'Unknown error during startup' });
     }
 });
 
@@ -1081,13 +1083,11 @@ async function startBot() {
             await handleStepLogic(client, msg, conversation, flow, contact); // Recursive next step
             return;
         }
-    }
-
-
+    } // End of handleStepLogic
 
     await client.initialize();
     console.log('[INIT] Client initialized inside startBot');
-}
+} // End of startBot
 
 // Format message with options and dynamic variables
 function formatMessage(step, flow) {
