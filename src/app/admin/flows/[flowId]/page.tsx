@@ -534,25 +534,30 @@ export default function FlowEditorPage() {
                                 Elegí en qué pasos se muestra el texto de navegación (Volver / Menú). Los que no estén tildados no muestran M/V.
                             </p>
                             <div className="flex flex-col gap-2">
-                                {Object.values(steps).map((step) => (
-                                    <label key={step.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            checked={step.showNavigation !== false}
-                                            onChange={(e) => {
-                                                setSteps(prev => ({
-                                                    ...prev,
-                                                    [step.id]: { ...prev[step.id], showNavigation: e.target.checked }
-                                                }));
-                                                setHasChanges(true);
-                                            }}
-                                        />
-                                        <div className="flex flex-col">
-                                            <span className="text-sm font-medium text-slate-800">{step.title || step.id}</span>
-                                            <span className="text-xs text-slate-400 truncate max-w-[250px]">{step.message?.substring(0, 60)}...</span>
-                                        </div>
-                                    </label>
-                                ))}
+                                {Object.values(steps).map((step) => {
+                                    const previewText = step.message || step.actions?.handoffAckMessage || '(Paso sin mensaje)';
+                                    return (
+                                        <label key={step.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={step.showNavigation !== false}
+                                                onChange={(e) => {
+                                                    setSteps(prev => ({
+                                                        ...prev,
+                                                        [step.id]: { ...prev[step.id], showNavigation: e.target.checked }
+                                                    }));
+                                                    setHasChanges(true);
+                                                }}
+                                            />
+                                            <div className="flex flex-col overflow-hidden">
+                                                <span className="text-sm font-medium text-slate-800 truncate">{step.title || step.id}</span>
+                                                <span className="text-xs text-slate-400 truncate w-full" title={previewText}>
+                                                    {previewText.substring(0, 60)}{previewText.length > 60 ? '...' : ''}
+                                                </span>
+                                            </div>
+                                        </label>
+                                    );
+                                })}
                             </div>
                         </div>
                     </div>
