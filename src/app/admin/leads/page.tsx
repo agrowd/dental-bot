@@ -205,7 +205,7 @@ export default function LeadsPage() {
     }
 
     return (
-        <div className="animate-fadeIn">
+        <div className="animate-fadeIn w-full max-w-full">
             {/* Header */}
             <div className="flex items-center justify-between mb-8">
                 <div>
@@ -259,7 +259,7 @@ export default function LeadsPage() {
 
             {/* Filters */}
             <div className="card mb-6">
-                <div className="p-4 flex items-center gap-4">
+                <div className="p-4 flex flex-col sm:flex-row sm:items-center gap-4">
                     <div className="flex-1">
                         <div className="relative">
                             <svg className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
