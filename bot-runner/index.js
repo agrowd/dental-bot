@@ -130,6 +130,60 @@ app.get('/bot/info', async (req, res) => {
     }
 });
 
+// POST /bot/force-start
+app.post('/bot/force-start', async (req, res) => {
+    try {
+        if (!client || botState !== 'connected') {
+            return res.status(400).json({ error: 'El bot no está conectado a WhatsApp.' });
+        }
+
+        let { phone } = req.body;
+        if (!phone) return res.status(400).json({ error: 'Número de teléfono requerido.' });
+
+        const cleanPhone = phone.replace(/\D/g, '');
+        const chatId = `${cleanPhone}@c.us`;
+
+        const flow = await Flow.findOne({ isActive: true, "published": { $ne: null } }).sort({ "activationRules.priority": -1 });
+        if (!flow || !flow.published || !flow.published.steps) {
+            return res.status(400).json({ error: 'No hay un flujo activo configurado.' });
+        }
+
+        await Conversation.updateMany({ phone: cleanPhone, state: { $in: ['active', 'paused'] } }, { $set: { state: 'closed' } });
+
+        const conversation = await Conversation.create({
+            phone: cleanPhone,
+            flowId: flow._id,
+            flowVersion: flow.publishedVersion,
+            currentStepId: flow.published.entryStepId,
+            state: 'active',
+            tags: ['forced-start'],
+            loopDetection: {
+                currentStepId: flow.published.entryStepId,
+                messagesInCurrentStep: 0,
+                lastStepChangeAt: new Date()
+            }
+        });
+
+        const steps = flow.published.steps;
+        const getStep = (id) => (typeof steps.get === 'function') ? steps.get(id) : steps[id];
+        const firstStep = getStep(flow.published.entryStepId);
+
+        if (!firstStep) {
+            return res.status(400).json({ error: 'El flujo activo está roto (Falta paso inicial).' });
+        }
+
+        const msgText = formatMessage(firstStep, flow);
+        await client.sendMessage(chatId, msgText);
+
+        console.log(`[FORCE START] 🚀 Bot manually injected for ${cleanPhone}`);
+
+        res.json({ success: true, message: 'Bot iniciado exitosamente.' });
+    } catch (error) {
+        console.error('[FORCE START ERROR]', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Helper: Random delay (10-15 seconds)
 const randomDelay = (baseMs = 10000, rangeMs = 5000) => {
     return new Promise(resolve => setTimeout(resolve, baseMs + Math.random() * rangeMs));
@@ -872,7 +926,21 @@ async function startBot() {
             const chat = await msg.getChat();
             await sendTyping(chat);
             await randomDelay(1000, 500);
-            await chat.sendMessage('✅ ¡Recibimos tu archivo! Un administrador lo revisará en breve para confirmar tu pago y turno. ¡Gracias! 👤');
+
+            let mediaAckMsg = (flow && flow.published && flow.published.msgMediaAck)
+                ? flow.published.msgMediaAck
+                : '✅ ¡Recibimos tu archivo! Un administrador lo revisará en breve para confirmar tu pago y turno. ¡Gracias! 👤';
+
+            const showNav = flow && flow.published && flow.published.showNavigationOnMediaAck !== undefined
+                ? flow.published.showNavigationOnMediaAck
+                : true;
+
+            if (showNav) {
+                const defaultNavMenu = '🔹 *V:* Volver atrás\n🔹 *M:* Menú principal';
+                mediaAckMsg += '\n\n' + (flow?.published?.msgNavigationMenu || defaultNavMenu);
+            }
+
+            await chat.sendMessage(mediaAckMsg);
 
             await syncWhatsAppLabel(chat, 'Derivado con Personal');
             return; // Stop processing for this message

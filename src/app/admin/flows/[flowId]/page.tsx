@@ -47,6 +47,8 @@ export default function FlowEditorPage() {
     const [fallbackMaxAttempts, setFallbackMaxAttempts] = useState(5);
     const [msgNavigationMenu, setMsgNavigationMenu] = useState('🔹 *V:* Volver atrás\n🔹 *M:* Menú principal');
     const [msgNavigationBack, setMsgNavigationBack] = useState('_(Si te equivocaste, escribí *V* para volver)_');
+    const [msgMediaAck, setMsgMediaAck] = useState('✅ ¡Recibimos tu archivo! Un administrador lo revisará en breve para confirmar tu pago y turno. ¡Gracias! 👤');
+    const [showNavigationOnMediaAck, setShowNavigationOnMediaAck] = useState(true);
     const [steps, setSteps] = useState<Record<string, FlowStep>>({});
     const [selectedStepId, setSelectedStepId] = useState<string>('');
     const [entryStepId, setEntryStepId] = useState<string>('');
@@ -90,6 +92,8 @@ export default function FlowEditorPage() {
             setFallbackMaxAttempts(sourceData.fallbackMaxAttempts ?? 5);
             setMsgNavigationMenu(sourceData.msgNavigationMenu || '🔹 *V:* Volver atrás\n🔹 *M:* Menú principal');
             setMsgNavigationBack(sourceData.msgNavigationBack || '_(Si te equivocaste, escribí *V* para volver)_');
+            setMsgMediaAck(sourceData.msgMediaAck || '✅ ¡Recibimos tu archivo! Un administrador lo revisará en breve para confirmar tu pago y turno. ¡Gracias! 👤');
+            setShowNavigationOnMediaAck(sourceData.showNavigationOnMediaAck ?? true);
             setSteps(sourceData.steps || {});
             setEntryStepId(sourceData.entryStepId || '');
             setSelectedStepId(sourceData.entryStepId || (sourceData.steps ? Object.keys(sourceData.steps)[0] : '') || '');
@@ -256,7 +260,7 @@ export default function FlowEditorPage() {
             name: flowName,
             description: flowDescription,
             activationRules, // Check if this is correct
-            draft: { steps, entryStepId, fallbackMessage, msgFallback, msgFallbackLockout, fallbackMaxAttempts, msgNavigationMenu, msgNavigationBack },
+            draft: { steps, entryStepId, fallbackMessage, msgFallback, msgFallbackLockout, fallbackMaxAttempts, msgNavigationMenu, msgNavigationBack, msgMediaAck, showNavigationOnMediaAck },
             isActive
         };
         console.log('[DEBUG-FRONTEND] Saving flow payload:', JSON.stringify(payload, null, 2));
@@ -524,6 +528,30 @@ export default function FlowEditorPage() {
                                     className="input min-h-[60px] w-full text-sm"
                                     placeholder="Ej: _(Si te equivocaste, escribí *V* para volver)_"
                                 />
+                            </div>
+                        </div>
+
+                        {/* Media Ack Setting */}
+                        <div className="card p-4 flex flex-col gap-4">
+                            <div>
+                                <h3 className="font-medium text-slate-900 mb-2">📸 Mensaje al recibir archivos / imágenes</h3>
+                                <p className="text-xs text-slate-500 mb-3">
+                                    Texto que se enviará automáticamente como acuse de recibo cuando el usuario mande un comprobante o foto.
+                                </p>
+                                <textarea
+                                    value={msgMediaAck}
+                                    onChange={(e) => { setMsgMediaAck(e.target.value); setHasChanges(true); }}
+                                    className="input min-h-[60px] w-full text-sm"
+                                    placeholder="Ej: ✅ ¡Recibimos tu archivo!"
+                                />
+                                <label className="flex items-center gap-3 mt-4 p-2 rounded-lg hover:bg-slate-50 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={showNavigationOnMediaAck}
+                                        onChange={(e) => { setShowNavigationOnMediaAck(e.target.checked); setHasChanges(true); }}
+                                    />
+                                    <span className="text-sm font-medium text-slate-800">Agregar M/V (Volver Atrás / Menú Principal) al final de este mensaje</span>
+                                </label>
                             </div>
                         </div>
 

@@ -79,6 +79,31 @@ export default function ConversationDetailPage() {
         }
     };
 
+    const handleForceBot = async () => {
+        if (!confirm(`¿Estás seguro de forzar el inicio del bot para el número ${phone}? Esto interrumpirá la conversación actual.`)) return;
+
+        try {
+            setSending(true);
+            const res = await fetch('/api/bot/force-start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                alert('Bot iniciado exitosamente para ' + phone);
+                await fetchData(); // Refrescar los mensajes para ver el menù recien enviado
+            } else {
+                alert('Error: ' + data.error);
+            }
+        } catch (e) {
+            console.error('Error forcing bot:', e);
+            alert('Error al conectar con el servidor');
+        } finally {
+            setSending(false);
+        }
+    };
+
     const handleDelete = async () => {
         if (!confirm('¿Estás seguro de eliminar esta conversación y todo su historial?')) return;
 
@@ -166,6 +191,13 @@ export default function ConversationDetailPage() {
                             Pausar Bot
                         </button>
                     )}
+                    <button
+                        onClick={handleForceBot}
+                        disabled={sending}
+                        className="btn bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-200"
+                    >
+                        ▶️ Reiniciar Bot
+                    </button>
                     <button
                         onClick={handleDelete}
                         disabled={sending}

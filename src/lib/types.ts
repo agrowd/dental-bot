@@ -75,6 +75,8 @@ export interface FlowDocument {
     fallbackMaxAttempts?: number;
     msgNavigationMenu?: string;
     msgNavigationBack?: string;
+    msgMediaAck?: string;
+    showNavigationOnMediaAck?: boolean;
     steps: Record<string, FlowStep>;
   };
   published: {
@@ -85,6 +87,8 @@ export interface FlowDocument {
     fallbackMaxAttempts?: number;
     msgNavigationMenu?: string;
     msgNavigationBack?: string;
+    msgMediaAck?: string;
+    showNavigationOnMediaAck?: boolean;
     steps: Record<string, FlowStep>;
   } | null;
   publishedVersion: number;

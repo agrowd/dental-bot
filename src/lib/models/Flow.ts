@@ -48,6 +48,8 @@ const FlowContentSchema = new Schema({
     fallbackMaxAttempts: { type: Number, default: 5 },
     msgNavigationMenu: { type: String, default: '🔹 *V:* Volver atrás\n🔹 *M:* Menú principal' },
     msgNavigationBack: { type: String, default: '_(Si te equivocaste, escribí *V* para volver)_' },
+    msgMediaAck: { type: String, default: '✅ ¡Recibimos tu archivo! Un administrador lo revisará en breve para confirmar tu pago y turno. ¡Gracias! 👤' },
+    showNavigationOnMediaAck: { type: Boolean, default: true },
     steps: { type: Schema.Types.Mixed },
 }, { _id: false });
 

@@ -11,6 +11,9 @@ export default function LeadsPage() {
     const [editingCell, setEditingCell] = useState<{ id: string; field: 'name' | 'email' } | null>(null);
     const [editingValue, setEditingValue] = useState('');
     const [savingId, setSavingId] = useState<string | null>(null);
+    const [showForceBotModal, setShowForceBotModal] = useState(false);
+    const [forceBotPhone, setForceBotPhone] = useState('');
+    const [isForcingBot, setIsForcingBot] = useState(false);
     const [stats, setStats] = useState({
         total: 0,
         agendados: 0,
@@ -62,6 +65,38 @@ export default function LeadsPage() {
         } finally {
             setSavingId(null);
             setEditingCell(null);
+        }
+    }
+
+    async function handleForceBot(customPhone?: string) {
+        const phoneToUse = customPhone || forceBotPhone;
+        if (!phoneToUse) {
+            alert('Ingresa un número de teléfono válido.');
+            return;
+        }
+        if (!confirm(`¿Estás seguro de forzar el inicio del bot para el número ${phoneToUse}? Esto interrumpirá cualquier conversación activa.`)) return;
+
+        setIsForcingBot(true);
+        try {
+            const res = await fetch('/api/bot/force-start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone: phoneToUse })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                alert('Bot iniciado exitosamente para ' + phoneToUse);
+                setShowForceBotModal(false);
+                setForceBotPhone('');
+                fetchLeads(); // refresh
+            } else {
+                alert('Error: ' + data.error);
+            }
+        } catch (e) {
+            console.error('Error forcing bot:', e);
+            alert('Error de conexión');
+        } finally {
+            setIsForcingBot(false);
         }
     }
 
@@ -177,12 +212,17 @@ export default function LeadsPage() {
                     <h1 className="text-2xl font-bold text-slate-900">Leads</h1>
                     <p className="text-slate-500 mt-1">Gestión de contactos y potenciales clientes</p>
                 </div>
-                <button className="btn btn-primary">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                    </svg>
-                    Exportar CSV
-                </button>
+                <div className="flex gap-2">
+                    <button onClick={() => setShowForceBotModal(true)} className="btn bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-200">
+                        ▶️ Forzar Bot a un Número
+                    </button>
+                    <button className="btn btn-primary">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                        </svg>
+                        Exportar CSV
+                    </button>
+                </div>
             </div>
 
             {/* Stats */}
@@ -317,6 +357,14 @@ export default function LeadsPage() {
                                     </td>
                                     <td>
                                         <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => handleForceBot(lead.phone)}
+                                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                title="Forzar inicio del bot"
+                                                disabled={isForcingBot}
+                                            >
+                                                ▶️
+                                            </button>
                                             <a
                                                 href={`/admin/conversations/${encodeURIComponent(lead.phone)}`}
                                                 className="btn btn-secondary py-2 px-3 text-sm"
@@ -356,6 +404,49 @@ export default function LeadsPage() {
                     </tbody>
                 </table>
             </div>
+
+            {/* Force Bot Modal */}
+            {showForceBotModal && (
+                <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-springUp">
+                        <div className="p-4 border-b border-[var(--border)] flex items-center justify-between">
+                            <h3 className="font-semibold text-slate-900 text-lg">Forzar Inicio del Bot</h3>
+                            <button onClick={() => setShowForceBotModal(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div className="p-4 space-y-4">
+                            <p className="text-sm text-slate-600">
+                                Introducí el número de teléfono con código de país (ej: 5491123456789).
+                                Al iniciarlo, el usuario recibirá inmediatamente el menú principal y cualquier conversación anterior será cerrada.
+                            </p>
+                            <div>
+                                <label className="label">Teléfono</label>
+                                <input
+                                    type="text"
+                                    value={forceBotPhone}
+                                    onChange={(e) => setForceBotPhone(e.target.value)}
+                                    placeholder="549..."
+                                    className="input w-full"
+                                    autoFocus
+                                />
+                            </div>
+                        </div>
+                        <div className="p-4 bg-slate-50 border-t border-[var(--border)] flex justify-end gap-2">
+                            <button onClick={() => setShowForceBotModal(false)} className="btn btn-secondary">Cancelar</button>
+                            <button
+                                onClick={() => handleForceBot()}
+                                disabled={isForcingBot || !forceBotPhone.trim()}
+                                className="btn btn-primary"
+                            >
+                                {isForcingBot ? 'Iniciando...' : 'Iniciar Bot'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
