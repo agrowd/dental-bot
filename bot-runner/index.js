@@ -159,7 +159,7 @@ app.post('/bot/force-start', async (req, res) => {
             tags: ['forced-start'],
             loopDetection: {
                 currentStepId: flow.published.entryStepId,
-                messagesInCurrentStep: 0,
+                messagesInCurrentStep: 1, // SET TO 1 SO NEXT REPLY DOES NOT RESEND THE WELCOME TEXT
                 lastStepChangeAt: new Date()
             }
         });

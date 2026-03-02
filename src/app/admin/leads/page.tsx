@@ -289,120 +289,122 @@ export default function LeadsPage() {
 
             {/* Table */}
             <div className="card overflow-hidden">
-                <table className="table">
-                    <thead>
-                        <tr>
-                            <th>Teléfono</th>
-                            <th>
-                                Nombre
-                                <span className="text-slate-400 font-normal text-xs ml-1">(clic para editar)</span>
-                            </th>
-                            <th>
-                                Email
-                                <span className="text-slate-400 font-normal text-xs ml-1">(clic para editar)</span>
-                            </th>
-                            <th>Estado</th>
-                            <th>Fuente</th>
-                            <th>Tags</th>
-                            <th>Último contacto</th>
-                            <th>Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {filteredLeads.length === 0 ? (
+                <div className="overflow-x-auto">
+                    <table className="table min-w-[800px]">
+                        <thead>
                             <tr>
-                                <td colSpan={8} className="text-center py-12 text-slate-500">
-                                    No se encontraron leads
-                                </td>
+                                <th>Teléfono</th>
+                                <th>
+                                    Nombre
+                                    <span className="text-slate-400 font-normal text-xs ml-1">(clic para editar)</span>
+                                </th>
+                                <th>
+                                    Email
+                                    <span className="text-slate-400 font-normal text-xs ml-1">(clic para editar)</span>
+                                </th>
+                                <th>Estado</th>
+                                <th>Fuente</th>
+                                <th>Tags</th>
+                                <th>Último contacto</th>
+                                <th>Acciones</th>
                             </tr>
-                        ) : (
-                            filteredLeads.map((lead) => (
-                                <tr key={lead._id || lead.id}>
-                                    <td>
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
-                                                <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                                </svg>
-                                            </div>
-                                            <span className="font-medium">{lead.phone}</span>
-                                        </div>
-                                    </td>
-                                    <td style={{ minWidth: '140px' }}>
-                                        <EditableCell lead={lead} field="name" />
-                                    </td>
-                                    <td style={{ minWidth: '180px' }}>
-                                        <EditableCell lead={lead} field="email" />
-                                    </td>
-                                    <td>{getStatusBadge(lead.status)}</td>
-                                    <td>{getSourceBadge(lead.source)}</td>
-                                    <td>
-                                        <div className="flex flex-wrap gap-1">
-                                            {lead.tags?.length === 0 ? (
-                                                <span className="text-slate-400 text-sm">—</span>
-                                            ) : (
-                                                lead.tags?.map((tag: string, i: number) => (
-                                                    <span key={i} className="badge badge-neutral">{tag}</span>
-                                                ))
-                                            )}
-                                        </div>
-                                    </td>
-                                    <td className="text-slate-500">
-                                        {new Date(lead.lastSeenAt).toLocaleString('es-AR', {
-                                            day: '2-digit',
-                                            month: '2-digit',
-                                            hour: '2-digit',
-                                            minute: '2-digit'
-                                        })}
-                                    </td>
-                                    <td>
-                                        <div className="flex items-center gap-2">
-                                            <button
-                                                onClick={() => handleForceBot(lead.phone)}
-                                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                                title="Forzar inicio del bot"
-                                                disabled={isForcingBot}
-                                            >
-                                                ▶️
-                                            </button>
-                                            <a
-                                                href={`/admin/conversations/${encodeURIComponent(lead.phone)}`}
-                                                className="btn btn-secondary py-2 px-3 text-sm"
-                                            >
-                                                Ver chat
-                                            </a>
-                                            <button
-                                                onClick={async () => {
-                                                    if (!confirm('¿Estás seguro de eliminar este lead? Se borrará todo su historial.')) return;
-                                                    try {
-                                                        const res = await fetch(`/api/contacts/${lead._id || lead.id}`, { method: 'DELETE' });
-                                                        if (res.ok) {
-                                                            setLeads(prev => prev.filter(l => (l._id || l.id) !== (lead._id || lead.id)));
-                                                            setStats(prev => ({
-                                                                ...prev,
-                                                                total: prev.total - 1,
-                                                                [lead.status === 'agendado' ? 'agendados' : lead.status === 'pendiente' ? 'pendientes' : 'noAgendados']: (prev as any)[lead.status === 'agendado' ? 'agendados' : lead.status === 'pendiente' ? 'pendientes' : 'noAgendados'] - 1
-                                                            }));
-                                                        }
-                                                    } catch (e) {
-                                                        console.error('Error deleting lead:', e);
-                                                        alert('Error al eliminar lead');
-                                                    }
-                                                }}
-                                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                title="Eliminar lead"
-                                            >
-                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                </svg>
-                                            </button>
-                                        </div>
+                        </thead>
+                        <tbody>
+                            {filteredLeads.length === 0 ? (
+                                <tr>
+                                    <td colSpan={8} className="text-center py-12 text-slate-500">
+                                        No se encontraron leads
                                     </td>
                                 </tr>
-                            ))
-                        )}
-                    </tbody>
-                </table>
+                            ) : (
+                                filteredLeads.map((lead) => (
+                                    <tr key={lead._id || lead.id}>
+                                        <td>
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
+                                                    <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                                    </svg>
+                                                </div>
+                                                <span className="font-medium">{lead.phone}</span>
+                                            </div>
+                                        </td>
+                                        <td style={{ minWidth: '140px' }}>
+                                            <EditableCell lead={lead} field="name" />
+                                        </td>
+                                        <td style={{ minWidth: '180px' }}>
+                                            <EditableCell lead={lead} field="email" />
+                                        </td>
+                                        <td>{getStatusBadge(lead.status)}</td>
+                                        <td>{getSourceBadge(lead.source)}</td>
+                                        <td>
+                                            <div className="flex flex-wrap gap-1">
+                                                {lead.tags?.length === 0 ? (
+                                                    <span className="text-slate-400 text-sm">—</span>
+                                                ) : (
+                                                    lead.tags?.map((tag: string, i: number) => (
+                                                        <span key={i} className="badge badge-neutral">{tag}</span>
+                                                    ))
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="text-slate-500">
+                                            {new Date(lead.lastSeenAt).toLocaleString('es-AR', {
+                                                day: '2-digit',
+                                                month: '2-digit',
+                                                hour: '2-digit',
+                                                minute: '2-digit'
+                                            })}
+                                        </td>
+                                        <td>
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={() => handleForceBot(lead.phone)}
+                                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                    title="Forzar inicio del bot"
+                                                    disabled={isForcingBot}
+                                                >
+                                                    ▶️
+                                                </button>
+                                                <a
+                                                    href={`/admin/conversations/${encodeURIComponent(lead.phone)}`}
+                                                    className="btn btn-secondary py-2 px-3 text-sm"
+                                                >
+                                                    Ver chat
+                                                </a>
+                                                <button
+                                                    onClick={async () => {
+                                                        if (!confirm('¿Estás seguro de eliminar este lead? Se borrará todo su historial.')) return;
+                                                        try {
+                                                            const res = await fetch(`/api/contacts/${lead._id || lead.id}`, { method: 'DELETE' });
+                                                            if (res.ok) {
+                                                                setLeads(prev => prev.filter(l => (l._id || l.id) !== (lead._id || lead.id)));
+                                                                setStats(prev => ({
+                                                                    ...prev,
+                                                                    total: prev.total - 1,
+                                                                    [lead.status === 'agendado' ? 'agendados' : lead.status === 'pendiente' ? 'pendientes' : 'noAgendados']: (prev as any)[lead.status === 'agendado' ? 'agendados' : lead.status === 'pendiente' ? 'pendientes' : 'noAgendados'] - 1
+                                                                }));
+                                                            }
+                                                        } catch (e) {
+                                                            console.error('Error deleting lead:', e);
+                                                            alert('Error al eliminar lead');
+                                                        }
+                                                    }}
+                                                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                    title="Eliminar lead"
+                                                >
+                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             {/* Force Bot Modal */}
