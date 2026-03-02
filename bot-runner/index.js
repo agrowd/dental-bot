@@ -150,6 +150,19 @@ app.post('/bot/force-start', async (req, res) => {
 
         await Conversation.updateMany({ phone: cleanPhone, state: { $in: ['active', 'paused'] } }, { $set: { state: 'closed' } });
 
+        let contact = await Contact.findOne({ phone: cleanPhone });
+        if (!contact) {
+            await Contact.create({
+                phone: cleanPhone,
+                status: 'pendiente',
+                source: 'organic',
+                firstSeenAt: new Date(),
+                lastSeenAt: new Date(),
+                tags: ['forced-start'],
+                meta: {}
+            });
+        }
+
         const conversation = await Conversation.create({
             phone: cleanPhone,
             flowId: flow._id,
@@ -913,15 +926,13 @@ async function startBot() {
 
 
 
-            // DEFAULT BEHAVIOR: Pause and wait for human
+            // AUTOPAUSE REMOVED (Per CRM explicit manual request only)
             await Conversation.updateOne(
                 { _id: conversation._id },
                 {
-                    $set: { state: 'paused' },
                     $addToSet: { tags: 'pago-enviado' }
                 }
             );
-            conversation.state = 'paused';
 
             const chat = await msg.getChat();
             await sendTyping(chat);
@@ -1103,11 +1114,9 @@ async function startBot() {
                 await Conversation.updateOne(
                     { _id: conversation._id },
                     {
-                        $set: { state: 'paused' },
                         $addToSet: { tags: 'intervencion-humana' }
                     }
                 );
-                conversation.state = 'paused';
                 const chat = await msg.getChat();
                 await chat.sendMessage("👍 Recibido. Un asesor humano revisará tu mensaje y te responderá a la brevedad.");
                 return;
@@ -1129,15 +1138,14 @@ async function startBot() {
             const chat = await msg.getChat();
 
             if (newCount >= maxAttempts) {
-                // LOCKOUT: Too many failed attempts — silence until M or V
+                // LOCKOUT: Too many failed attempts
                 const lockoutMsg = (flow && flow.published && flow.published.msgFallbackLockout)
                     || 'Intentaste demasiadas veces. Cuando estés listo, escribí *M* para volver al menú o *V* para volver atrás.';
                 console.log(`[TRACE] 🔒 Lockout triggered for ${contact.phone} after ${newCount} attempts.`);
                 await Conversation.updateOne(
                     { _id: conversation._id },
-                    { $set: { state: 'paused' }, $addToSet: { tags: 'fallback-lockout' } }
+                    { $addToSet: { tags: 'fallback-lockout' } }
                 );
-                conversation.state = 'paused';
                 await chat.sendMessage(lockoutMsg);
                 return;
             }

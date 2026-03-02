@@ -14,6 +14,8 @@ export default function ConversationDetailPage() {
     const [loading, setLoading] = useState(true);
     const [sending, setSending] = useState(false);
     const messagesEndRef = useRef<null | HTMLDivElement>(null);
+    const prevMessagesLength = useRef(0);
+    const isFirstLoad = useRef(true);
 
     useEffect(() => {
         fetchData();
@@ -23,7 +25,16 @@ export default function ConversationDetailPage() {
     }, [phone]);
 
     useEffect(() => {
-        scrollToBottom();
+        if (isFirstLoad.current && messages.length > 0) {
+            isFirstLoad.current = false;
+            prevMessagesLength.current = messages.length;
+            return;
+        }
+
+        if (!isFirstLoad.current && messages.length > prevMessagesLength.current) {
+            scrollToBottom();
+            prevMessagesLength.current = messages.length;
+        }
     }, [messages]);
 
     const scrollToBottom = () => {

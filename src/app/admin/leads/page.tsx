@@ -100,6 +100,25 @@ export default function LeadsPage() {
         }
     }
 
+    async function handlePauseBot(phone: string) {
+        if (!confirm(`¿Pausar el bot para el número ${phone}?`)) return;
+        try {
+            const res = await fetch(`/api/conversations/${encodeURIComponent(phone)}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ state: 'paused' })
+            });
+            if (res.ok) {
+                alert('Bot pausado exitosamente.');
+            } else {
+                alert('No se pudo pausar. Puede que no tenga conversación activa.');
+            }
+        } catch (e) {
+            console.error('Error pausing bot:', e);
+            alert('Error de conexión');
+        }
+    }
+
     function startEdit(lead: any, field: 'name' | 'email') {
         setEditingCell({ id: lead._id || lead.id, field });
         setEditingValue(lead[field] || '');
@@ -293,7 +312,7 @@ export default function LeadsPage() {
                     <table className="table min-w-[800px]">
                         <thead>
                             <tr>
-                                <th>Teléfono</th>
+                                <th className="sticky left-0 bg-slate-50 shadow-[1px_0_0_0_#e2e8f0] z-20">Teléfono</th>
                                 <th>
                                     Nombre
                                     <span className="text-slate-400 font-normal text-xs ml-1">(clic para editar)</span>
@@ -306,7 +325,7 @@ export default function LeadsPage() {
                                 <th>Fuente</th>
                                 <th>Tags</th>
                                 <th>Último contacto</th>
-                                <th>Acciones</th>
+                                <th className="sticky right-0 bg-slate-50 shadow-[-1px_0_0_0_#e2e8f0] z-20">Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -318,8 +337,8 @@ export default function LeadsPage() {
                                 </tr>
                             ) : (
                                 filteredLeads.map((lead) => (
-                                    <tr key={lead._id || lead.id}>
-                                        <td>
+                                    <tr key={lead._id || lead.id} className="group">
+                                        <td className="sticky left-0 bg-white group-hover:bg-slate-50 shadow-[1px_0_0_0_#e2e8f0] z-10 transition-colors">
                                             <div className="flex items-center gap-3">
                                                 <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
                                                     <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -356,8 +375,15 @@ export default function LeadsPage() {
                                                 minute: '2-digit'
                                             })}
                                         </td>
-                                        <td>
+                                        <td className="sticky right-0 bg-white group-hover:bg-slate-50 shadow-[-1px_0_0_0_#e2e8f0] z-10 transition-colors">
                                             <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={() => handlePauseBot(lead.phone)}
+                                                    className="p-2 text-yellow-600 hover:bg-yellow-50 rounded-lg transition-colors"
+                                                    title="Pausar el bot"
+                                                >
+                                                    ⏸️
+                                                </button>
                                                 <button
                                                     onClick={() => handleForceBot(lead.phone)}
                                                     className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
