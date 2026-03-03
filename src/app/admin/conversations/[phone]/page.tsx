@@ -13,6 +13,9 @@ export default function ConversationDetailPage() {
     const [messages, setMessages] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [sending, setSending] = useState(false);
+    const [newTagInput, setNewTagInput] = useState('');
+    const [addingTag, setAddingTag] = useState(false);
+    const [editingTag, setEditingTag] = useState<{ index: number; value: string } | null>(null);
     const messagesEndRef = useRef<null | HTMLDivElement>(null);
     const prevMessagesLength = useRef(0);
     const isFirstLoad = useRef(true);
@@ -88,6 +91,35 @@ export default function ConversationDetailPage() {
         } finally {
             setSending(false);
         }
+    };
+
+    const patchConversation = async (body: object) => {
+        await fetch(`/api/conversations/${encodeURIComponent(phone)}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        await fetchData();
+    };
+
+    const handleAddTag = async () => {
+        const trimmed = newTagInput.trim();
+        if (!trimmed) return;
+        await patchConversation({ addTag: trimmed });
+        setNewTagInput('');
+        setAddingTag(false);
+    };
+
+    const handleRemoveTag = async (tag: string) => {
+        await patchConversation({ removeTag: tag });
+    };
+
+    const handleRenameTag = async (oldTag: string, newTag: string) => {
+        if (!newTag.trim() || newTag.trim() === oldTag) { setEditingTag(null); return; }
+        const currentTags: string[] = conversation?.tags || [];
+        const updatedTags = currentTags.map((t: string) => t === oldTag ? newTag.trim() : t);
+        await patchConversation({ tags: updatedTags });
+        setEditingTag(null);
     };
 
     const handleForceBot = async () => {
@@ -294,16 +326,90 @@ export default function ConversationDetailPage() {
                         </div>
                     </div>
 
-                    {/* Tags */}
+                    {/* Tags — Editable */}
                     <div className="card p-4">
-                        <h3 className="font-semibold text-slate-900 mb-3">Tags</h3>
+                        <div className="flex items-center justify-between mb-3">
+                            <h3 className="font-semibold text-slate-900">Tags</h3>
+                            <button
+                                onClick={() => setAddingTag(true)}
+                                className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors"
+                            >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                </svg>
+                                Agregar
+                            </button>
+                        </div>
                         <div className="flex flex-wrap gap-2">
-                            {(!conversation.tags || conversation.tags.length === 0) ? (
+                            {(!conversation.tags || conversation.tags.length === 0) && !addingTag && (
                                 <p className="text-slate-400 text-sm">Sin tags asignados</p>
-                            ) : (
-                                conversation.tags.map((tag: string, i: number) => (
-                                    <span key={i} className="badge badge-info">{tag}</span>
-                                ))
+                            )}
+                            {(conversation.tags || []).map((tag: string, i: number) => (
+                                editingTag?.index === i ? (
+                                    <div key={i} className="flex items-center gap-1">
+                                        <input
+                                            autoFocus
+                                            type="text"
+                                            value={editingTag.value}
+                                            onChange={e => setEditingTag({ index: i, value: e.target.value })}
+                                            onKeyDown={e => {
+                                                if (e.key === 'Enter') handleRenameTag(tag, editingTag.value);
+                                                if (e.key === 'Escape') setEditingTag(null);
+                                            }}
+                                            className="input py-0.5 px-2 text-xs w-28"
+                                        />
+                                        <button onClick={() => handleRenameTag(tag, editingTag.value)} className="text-green-600 hover:text-green-700 p-0.5">
+                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                                        </button>
+                                        <button onClick={() => setEditingTag(null)} className="text-slate-400 hover:text-slate-600 p-0.5">
+                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <span
+                                        key={i}
+                                        className={`badge cursor-pointer hover:opacity-80 group flex items-center gap-1 ${tag === 'atencion-requerida' ? 'bg-orange-100 text-orange-800 border border-orange-200' :
+                                            tag === 'otros-temas' ? 'bg-purple-100 text-purple-800 border border-purple-200' :
+                                                'badge-info'
+                                            }`}
+                                    >
+                                        <span
+                                            onClick={() => setEditingTag({ index: i, value: tag })}
+                                            title="Clic para renombrar"
+                                        >{tag}</span>
+                                        <button
+                                            onClick={() => handleRemoveTag(tag)}
+                                            className="ml-1 text-current opacity-50 hover:opacity-100 transition-opacity"
+                                            title="Eliminar tag"
+                                        >
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                    </span>
+                                )
+                            ))}
+                            {addingTag && (
+                                <div className="flex items-center gap-1">
+                                    <input
+                                        autoFocus
+                                        type="text"
+                                        value={newTagInput}
+                                        onChange={e => setNewTagInput(e.target.value)}
+                                        onKeyDown={e => {
+                                            if (e.key === 'Enter') handleAddTag();
+                                            if (e.key === 'Escape') { setAddingTag(false); setNewTagInput(''); }
+                                        }}
+                                        placeholder="nuevo-tag"
+                                        className="input py-0.5 px-2 text-xs w-28"
+                                    />
+                                    <button onClick={handleAddTag} className="text-green-600 hover:text-green-700 p-0.5">
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                                    </button>
+                                    <button onClick={() => { setAddingTag(false); setNewTagInput(''); }} className="text-slate-400 p-0.5">
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                    </button>
+                                </div>
                             )}
                         </div>
                     </div>

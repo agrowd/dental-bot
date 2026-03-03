@@ -57,7 +57,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     }
 }
 
-// PATCH /api/conversations/[phone] - Update state (Pause/Resume)
+// PATCH /api/conversations/[phone] - Update state or tags
 export async function PATCH(req: NextRequest, { params }: RouteParams) {
     try {
         await requireAuth(req);
@@ -66,29 +66,46 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
         const { phone: rawPhone } = await params;
         const phone = decodeURIComponent(rawPhone);
         const body = await req.json();
-        const { state } = body;
+        const { state, addTag, removeTag, tags } = body;
 
-        if (!['active', 'paused', 'closed'].includes(state)) {
-            return NextResponse.json({ error: 'Invalid state' }, { status: 400 });
+        // Build the update object
+        const updateOps: any = {};
+
+        if (state) {
+            if (!['active', 'paused', 'closed'].includes(state)) {
+                return NextResponse.json({ error: 'Invalid state' }, { status: 400 });
+            }
+            updateOps.$set = { ...(updateOps.$set || {}), state };
+        }
+
+        if (addTag && typeof addTag === 'string') {
+            updateOps.$addToSet = { ...(updateOps.$addToSet || {}), tags: addTag.trim() };
+        }
+
+        if (removeTag && typeof removeTag === 'string') {
+            updateOps.$pull = { ...(updateOps.$pull || {}), tags: removeTag.trim() };
+        }
+
+        if (tags && Array.isArray(tags)) {
+            updateOps.$set = { ...(updateOps.$set || {}), tags };
+        }
+
+        if (Object.keys(updateOps).length === 0) {
+            return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
         }
 
         const conversation = await Conversation.findOneAndUpdate(
-            { phone, state: { $ne: 'closed' } }, // Only update if not closed (unless forcing reopen?)
-            { state },
+            { phone, state: { $ne: 'closed' } },
+            updateOps,
             { new: true, sort: { updatedAt: -1 } }
         );
 
-        // If no active/paused conversation found, maybe we want to reopen the last closed one?
-        // For now, let's assume we operate on the current one.
-
         if (!conversation) {
-            // Try to find ANY conversation to update, even closed ones (reopen case)
             const anyConv = await Conversation.findOneAndUpdate(
                 { phone },
-                { state },
+                updateOps,
                 { new: true, sort: { updatedAt: -1 } }
             );
-
             if (!anyConv) {
                 return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
             }

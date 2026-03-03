@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { ConversationState } from '@/lib/types';
 
 export default function ConversationsPage() {
-    const [stateFilter, setStateFilter] = useState<ConversationState | 'all'>('all');
+    const [stateFilter, setStateFilter] = useState<ConversationState | 'all' | 'attention'>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [conversations, setConversations] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -26,12 +26,18 @@ export default function ConversationsPage() {
         }
     }
 
+    const ATTENTION_TAGS = ['atencion-requerida', 'otros-temas'];
+
     // Filter conversations
     const filteredConversations = conversations.filter(conv => {
-        const matchesState = stateFilter === 'all' || conv.state === stateFilter;
+        const matchesState = stateFilter === 'all'
+            || (stateFilter === 'attention' ? (conv.tags || []).some((t: string) => ATTENTION_TAGS.includes(t))
+                : conv.state === stateFilter);
         const matchesSearch = conv.phone.includes(searchQuery);
         return matchesState && matchesSearch;
     });
+
+    const attentionCount = conversations.filter(c => (c.tags || []).some((t: string) => ATTENTION_TAGS.includes(t))).length;
 
     async function handleDelete(phone: string) {
         if (!confirm(`¿Estás seguro de eliminar la conversación de ${phone} y todo su historial?`)) return;
@@ -106,6 +112,13 @@ export default function ConversationsPage() {
                     <p className="text-sm text-yellow-600">Pausadas (Handoff)</p>
                     <p className="text-2xl font-bold text-yellow-600">{conversations.filter(c => c.state === 'paused').length}</p>
                 </button>
+                <button
+                    onClick={() => setStateFilter('attention')}
+                    className={`card p-4 text-left transition-all ${stateFilter === 'attention' ? 'ring-2 ring-orange-500' : 'hover:shadow-md'}`}
+                >
+                    <p className="text-sm text-orange-600 flex items-center gap-1">⚠️ Requieren atención</p>
+                    <p className="text-2xl font-bold text-orange-600">{attentionCount}</p>
+                </button>
             </div>
 
             {/* Search */}
@@ -134,6 +147,7 @@ export default function ConversationsPage() {
                         <option value="active">Activas</option>
                         <option value="paused">Pausadas</option>
                         <option value="closed">Cerradas</option>
+                        <option value="attention">⚠️ Requieren atención</option>
                     </select>
                 </div>
             </div>
@@ -164,10 +178,13 @@ export default function ConversationsPage() {
                                     <tr key={conv.id}>
                                         <td>
                                             <div className="flex items-center gap-3">
-                                                <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
+                                                <div className="relative w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
                                                     <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                                                     </svg>
+                                                    {(conv.tags || []).some((t: string) => ATTENTION_TAGS.includes(t)) && (
+                                                        <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-orange-500 rounded-full animate-pulse border-2 border-white" title="Requiere atención"></span>
+                                                    )}
                                                 </div>
                                                 <span className="font-medium whitespace-nowrap">{conv.phone}</span>
                                             </div>
@@ -184,7 +201,10 @@ export default function ConversationsPage() {
                                                     <span className="text-slate-400 text-sm">—</span>
                                                 ) : (
                                                     conv.tags.map((tag: string, i: number) => (
-                                                        <span key={i} className="badge badge-neutral text-[10px] py-0.5 px-1.5">{tag}</span>
+                                                        <span key={i} className={`badge text-[10px] py-0.5 px-1.5 ${tag === 'atencion-requerida' ? 'bg-orange-100 text-orange-700 border border-orange-200' :
+                                                                tag === 'otros-temas' ? 'bg-purple-100 text-purple-700 border border-purple-200' :
+                                                                    'badge-neutral'
+                                                            }`}>{tag}</span>
                                                     ))
                                                 )}
                                             </div>

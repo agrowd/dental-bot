@@ -545,8 +545,19 @@ async function startBot() {
 
             if (!conversation) {
                 const chatContact = await msg.getContact();
-                const selectedFlow = await selectFlow({ isAgendado: chatContact.isMyContact, source: contact.source, phone });
-                if (!selectedFlow) { await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout); return; }
+                let selectedFlow = await selectFlow({ isAgendado: chatContact.isMyContact, source: contact.source, phone });
+
+                // FIX 1: FALLBACK FOR USERS WITH NO MATCHING FLOW RULE
+                // If no flow rule matches (e.g. user wrote a sentence, not a keyword),
+                // use the highest-priority active published flow as the default entry point.
+                if (!selectedFlow) {
+                    selectedFlow = await Flow.findOne({ isActive: true, published: { $ne: null } }).sort({ 'activationRules.priority': -1 });
+                    if (!selectedFlow) {
+                        console.log(`[DEBUG] No fallback flow available for ${phone}. Ignoring.`);
+                        await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout); return;
+                    }
+                    console.log(`[DEBUG] Using fallback flow "${selectedFlow.name}" for new contact ${phone}.`);
+                }
 
                 conversation = await Conversation.create({
                     phone, flowId: selectedFlow._id, flowVersion: selectedFlow.publishedVersion,
@@ -686,6 +697,52 @@ async function startBot() {
 
             if (!flow || conversation.state === 'paused') {
                 console.log(`[TRACE] Flow missing or Bot PAUSED for ${phone}.`);
+                await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout);
+                return;
+            }
+
+            // ============================================================
+            // FREE TEXT CAPTURE INTERCEPTOR (Otros Temas / Consultas Libres)
+            // Triggered when freeTextState.active is true.
+            // ============================================================
+            if (conversation.freeTextState && conversation.freeTextState.active) {
+                const freeInput = (msg.body || '').trim();
+                const chat = await msg.getChat();
+
+                // Allow V/M to cancel
+                const freeInputLow = freeInput.toLowerCase();
+                if (freeInputLow === 'v' || freeInputLow === 'm' || freeInputLow === 'menu' || freeInputLow === 'volver') {
+                    await Conversation.updateOne({ _id: conversation._id }, { $set: { 'freeTextState.active': false } });
+                    await handleStepLogic(client, msg, conversation, flow, contact);
+                    await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout);
+                    return;
+                }
+
+                if (freeInput.length < 3) {
+                    await sendTyping(chat);
+                    await randomDelay(500, 300);
+                    await chat.sendMessage('Por favor escribí tu consulta en detalle 🙏');
+                    await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout);
+                    return;
+                }
+
+                const ackMessage = conversation.freeTextState.ackMessage
+                    || '✅ Recibimos tu consulta. Un integrante del equipo la revisará y te responderá a la brevedad. 🙏\n\n🔹 *M:* Menú principal';
+
+                await Conversation.updateOne({ _id: conversation._id }, {
+                    $set: {
+                        'freeTextState.active': false,
+                        'freeTextState.collectedText': freeInput,
+                        'freeTextState.collectedAt': new Date(),
+                    },
+                    $addToSet: { tags: { $each: ['otros-temas', 'atencion-requerida'] } }
+                });
+
+                await sendTyping(chat);
+                await randomDelay(800, 400);
+                await chat.sendMessage(ackMessage);
+
+                console.log(`[TRACE] 📝 FreeText captured from ${phone}: "${freeInput.substring(0, 60)}..."`);
                 await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout);
                 return;
             }
@@ -843,6 +900,56 @@ async function startBot() {
                 return;
             }
 
+            // --- FREE TEXT TRIGGER ---
+            // Triggered when user selects an option that leads to a step with `collectFreeText: true`
+            const nextFreeTextStep = (() => {
+                const steps = flow?.published?.steps;
+                if (!steps || !conversation.currentStepId) return null;
+                const getStep = (id) => (typeof steps.get === 'function') ? steps.get(id) : steps[id];
+                const currentStep = getStep(conversation.currentStepId);
+                if (!currentStep) return null;
+
+                const input = (msg.body || '').trim().toLowerCase();
+                for (const opt of (currentStep.options || [])) {
+                    const key = (opt.key || '').toLowerCase();
+                    const label = (opt.label || '').toLowerCase();
+                    if (input === key || input === label || (input.length > 3 && label.includes(input))) {
+                        const targetStep = getStep(opt.nextStepId);
+                        if (targetStep && targetStep.actions?.collectFreeText) {
+                            return { id: opt.nextStepId, step: targetStep };
+                        }
+                    }
+                }
+                return null;
+            })();
+
+            if (nextFreeTextStep) {
+                const chat = await msg.getChat();
+                const freeTextPrompt = nextFreeTextStep.step.actions?.freeTextPrompt
+                    || '¡Entendido! Por favor desc ribi tu consulta y un integrante del equipo te responderá a la brevedad. 🙏';
+                const freeTextAck = nextFreeTextStep.step.actions?.freeTextAckMessage
+                    || '✅ Recibimos tu consulta. Un integrante del equipo la revisará y te responderá a la brevedad. 🙏\n\n🔹 *M:* Menú principal';
+
+                // First, send the prompt asking for the free text
+                await Conversation.updateOne({ _id: conversation._id }, {
+                    $set: {
+                        currentStepId: nextFreeTextStep.id,
+                        'freeTextState.active': true,
+                        'freeTextState.ackMessage': freeTextAck,
+                        'loopDetection.currentStepId': nextFreeTextStep.id,
+                        'loopDetection.messagesInCurrentStep': 0,
+                        'loopDetection.lastStepChangeAt': new Date()
+                    }
+                });
+
+                await sendTyping(chat);
+                await randomDelay(600, 300);
+                await chat.sendMessage(freeTextPrompt);
+                console.log(`[TRACE] 📝 FreeText prompt sent to ${phone} for step ${nextFreeTextStep.id}`);
+                await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout);
+                return;
+            }
+
             await handleStepLogic(client, msg, conversation, flow, contact);
 
 
@@ -920,18 +1027,29 @@ async function startBot() {
             // Removed early return to allow immediate back response
         }
 
-        // 1.5 MEDIA DETECTION (Receipts)
+        // 1.5 MEDIA DETECTION (Receipts / Payment Proof)
         if (msg.hasMedia) {
-            console.log(`[TRACE] 📸 Media detected from ${contact.phone}. Assuming receipt/document.`);
+            console.log(`[TRACE] 📸 Media detected from ${contact.phone}.`);
 
+            // FIX 2: PAYMENT GUARD — Only send the comprobante ACK if user is actually in a payment-awaiting step.
+            // Steps that are valid places to receive a payment proof:
+            const PAYMENT_STEPS = ['esperando_pago_reserva', 'esperando_comprobante', 'waiting_payment'];
+            const isInPaymentStep = PAYMENT_STEPS.some(s => conversation.currentStepId?.toLowerCase().includes(s)
+                || conversation.currentStepId === s);
 
+            if (!isInPaymentStep) {
+                console.log(`[TRACE] 🚫 Media received outside payment step (step: ${conversation.currentStepId}). Sending menu fallback.`);
+                const chat = await msg.getChat();
+                await sendTyping(chat);
+                await randomDelay(800, 400);
+                await chat.sendMessage('No pude entender ese archivo. Escribí *M* para volver al menú principal o *V* para volver atrás.');
+                await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout);
+                return;
+            }
 
-            // AUTOPAUSE REMOVED (Per CRM explicit manual request only)
             await Conversation.updateOne(
                 { _id: conversation._id },
-                {
-                    $addToSet: { tags: 'pago-enviado' }
-                }
+                { $addToSet: { tags: 'pago-enviado' } }
             );
 
             const chat = await msg.getChat();
