@@ -1027,6 +1027,25 @@ async function startBot() {
             // Removed early return to allow immediate back response
         }
 
+        // 1.5a VOICE MESSAGE (PTT) DETECTION
+        // Detect voice notes (Audio/PTT) and respond asking user to write text instead
+        if (msg.type === 'ptt' || msg.type === 'audio') {
+            console.log(`[TRACE] 🎤 Voice message (PTT) received from ${contact.phone}. Sending text request.`);
+            const chat = await msg.getChat();
+            await sendTyping(chat);
+            await randomDelay(800, 400);
+
+            const pttMsg = (flow && flow.published && flow.published.msgPttResponse)
+                || '🎤 Por el momento no podemos recibir mensajes de voz. Por favor escribinos tu consulta en texto y te responderemos a la brevedad 🙏\n\n🔹 *M:* Menú principal';
+
+            await chat.sendMessage(pttMsg);
+            await Conversation.updateOne(
+                { _id: conversation._id },
+                { $addToSet: { tags: 'mensaje-de-voz' } }
+            );
+            return;
+        }
+
         // 1.5 MEDIA DETECTION (Receipts / Payment Proof)
         if (msg.hasMedia) {
             console.log(`[TRACE] 📸 Media detected from ${contact.phone}.`);

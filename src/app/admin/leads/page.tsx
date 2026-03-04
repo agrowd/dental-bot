@@ -276,23 +276,35 @@ export default function LeadsPage() {
                 </button>
             </div>
 
+            {/* Search bar — prominent, standalone */}
+            <div className="mb-4">
+                <div className="relative">
+                    <svg className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <input
+                        type="text"
+                        placeholder="Buscar por teléfono, nombre o email..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-12 pr-4 py-3.5 text-base rounded-xl border border-slate-200 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all"
+                    />
+                    {searchQuery && (
+                        <button
+                            onClick={() => setSearchQuery('')}
+                            className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    )}
+                </div>
+            </div>
+
             {/* Filters */}
             <div className="card mb-6">
                 <div className="p-4 flex flex-col sm:flex-row sm:items-center gap-4">
-                    <div className="flex-1">
-                        <div className="relative">
-                            <svg className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                            </svg>
-                            <input
-                                type="text"
-                                placeholder="Buscar por teléfono, nombre o email..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="input pl-10"
-                            />
-                        </div>
-                    </div>
                     <select
                         value={statusFilter}
                         onChange={(e) => setStatusFilter(e.target.value as LeadStatus | 'all')}
@@ -303,6 +315,11 @@ export default function LeadsPage() {
                         <option value="pendiente">Pendiente</option>
                         <option value="no_agendado">No agendado</option>
                     </select>
+                    {searchQuery && (
+                        <span className="text-sm text-blue-600 font-medium">
+                            {filteredLeads.length} resultado{filteredLeads.length !== 1 ? 's' : ''} para "{searchQuery}"
+                        </span>
+                    )}
                 </div>
             </div>
 
@@ -358,11 +375,15 @@ export default function LeadsPage() {
                                         <td>{getSourceBadge(lead.source)}</td>
                                         <td>
                                             <div className="flex flex-wrap gap-1">
-                                                {lead.tags?.length === 0 ? (
+                                                {!lead.tags || lead.tags.length === 0 ? (
                                                     <span className="text-slate-400 text-sm">—</span>
                                                 ) : (
-                                                    lead.tags?.map((tag: string, i: number) => (
-                                                        <span key={i} className="badge badge-neutral">{tag}</span>
+                                                    lead.tags.map((tag: string, i: number) => (
+                                                        <span key={i} className={`badge text-[10px] py-0.5 px-1.5 ${tag === 'atencion-requerida' ? 'bg-orange-100 text-orange-700 border border-orange-200' :
+                                                                tag === 'otros-temas' ? 'bg-purple-100 text-purple-700 border border-purple-200' :
+                                                                    tag === 'pago-enviado' ? 'bg-blue-100 text-blue-700 border border-blue-200' :
+                                                                        'badge-neutral'
+                                                            }`}>{tag}</span>
                                                     ))
                                                 )}
                                             </div>
