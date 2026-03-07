@@ -14,6 +14,8 @@ export default function LeadsPage() {
     const [showForceBotModal, setShowForceBotModal] = useState(false);
     const [forceBotPhone, setForceBotPhone] = useState('');
     const [isForcingBot, setIsForcingBot] = useState(false);
+    const [tagFilter, setTagFilter] = useState<string>('all');
+    const [showLegend, setShowLegend] = useState(false);
     const [stats, setStats] = useState({
         total: 0,
         agendados: 0,
@@ -124,15 +126,22 @@ export default function LeadsPage() {
         setEditingValue(lead[field] || '');
     }
 
+    // Normalize phone/search string for flexible matching
+    const normalizePhone = (s: string) => (s || '').replace(/[\s\-\+]/g, '').replace(/^549/, '');
+
     // Filter leads
     const filteredLeads = leads.filter(lead => {
         const matchesStatus = statusFilter === 'all' || lead.status === statusFilter;
-        const q = searchQuery.toLowerCase();
-        const matchesSearch = !q ||
-            lead.phone?.toLowerCase().includes(q) ||
-            lead.name?.toLowerCase().includes(q) ||
-            lead.email?.toLowerCase().includes(q);
-        return matchesStatus && matchesSearch;
+        const q = normalizePhone(searchQuery).toLowerCase();
+        const qRaw = searchQuery.toLowerCase();
+        const matchesSearch = !searchQuery ||
+            normalizePhone(lead.phone).includes(q) ||
+            (lead.name || '').toLowerCase().includes(qRaw) ||
+            (lead.pushname || '').toLowerCase().includes(qRaw) ||
+            (lead.email || '').toLowerCase().includes(qRaw);
+        const allTags = [...(lead.tags || []), ...(lead.conversationTags || [])];
+        const matchesTag = tagFilter === 'all' || allTags.includes(tagFilter);
+        return matchesStatus && matchesSearch && matchesTag;
     });
 
     const getStatusBadge = (status: LeadStatus) => {
@@ -302,24 +311,79 @@ export default function LeadsPage() {
                 </div>
             </div>
 
+            {/* Tag Legend */}
+            <div className="mb-4">
+                <button
+                    onClick={() => setShowLegend(v => !v)}
+                    className="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1.5 transition-colors"
+                >
+                    <svg className={`w-3.5 h-3.5 transition-transform ${showLegend ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                    🏷️ Ver leyenda de etiquetas automáticas
+                </button>
+                {showLegend && (
+                    <div className="mt-2 card p-4 grid grid-cols-2 md:grid-cols-3 gap-3">
+                        {[
+                            { tag: 'atencion-requerida', color: 'bg-orange-500', label: 'Atención requerida', desc: 'Requiere revisión humana' },
+                            { tag: 'otros-temas', color: 'bg-purple-500', label: 'Otros temas', desc: 'Dejó una consulta libre' },
+                            { tag: 'pago-enviado', color: 'bg-blue-500', label: 'Pago enviado', desc: 'Envió comprobante de pago' },
+                            { tag: 'mensaje-de-voz', color: 'bg-yellow-400', label: 'Mensaje de voz', desc: 'Mandó un audio' },
+                            { tag: 'intervencion-humana', color: 'bg-red-500', label: 'Intervención humana', desc: 'Pidió hablar con asesor' },
+                            { tag: 'fallback-lockout', color: 'bg-slate-400', label: 'Bloqueado', desc: 'Demasiados intentos fallidos' },
+                        ].map(({ tag, color, label, desc }) => (
+                            <div key={tag} className="flex items-start gap-2">
+                                <span className={`mt-1 w-2.5 h-2.5 rounded-full flex-shrink-0 ${color}`}></span>
+                                <div>
+                                    <p className="text-xs font-semibold text-slate-700">{label}</p>
+                                    <p className="text-xs text-slate-400">{desc}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
             {/* Filters */}
             <div className="card mb-6">
-                <div className="p-4 flex flex-col sm:flex-row sm:items-center gap-4">
-                    <select
-                        value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value as LeadStatus | 'all')}
-                        className="input w-auto"
-                    >
-                        <option value="all">Todos los estados</option>
-                        <option value="agendado">Agendado</option>
-                        <option value="pendiente">Pendiente</option>
-                        <option value="no_agendado">No agendado</option>
-                    </select>
-                    {searchQuery && (
-                        <span className="text-sm text-blue-600 font-medium">
-                            {filteredLeads.length} resultado{filteredLeads.length !== 1 ? 's' : ''} para "{searchQuery}"
-                        </span>
-                    )}
+                <div className="p-4 flex flex-col gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
+                        <select
+                            value={statusFilter}
+                            onChange={(e) => setStatusFilter(e.target.value as LeadStatus | 'all')}
+                            className="input w-auto"
+                        >
+                            <option value="all">Todos los estados</option>
+                            <option value="agendado">Agendado</option>
+                            <option value="pendiente">Pendiente</option>
+                            <option value="no_agendado">No agendado</option>
+                        </select>
+                        {(searchQuery || tagFilter !== 'all') && (
+                            <span className="text-sm text-blue-600 font-medium">
+                                {filteredLeads.length} resultado{filteredLeads.length !== 1 ? 's' : ''}
+                            </span>
+                        )}
+                    </div>
+                    {/* Tag filter pills */}
+                    <div className="flex flex-wrap gap-2">
+                        <span className="text-xs text-slate-400 self-center mr-1">Filtrar por etiqueta:</span>
+                        {[
+                            { tag: 'all', label: 'Todas', cls: 'bg-slate-100 text-slate-600 hover:bg-slate-200' },
+                            { tag: 'atencion-requerida', label: '🟠 Atención', cls: 'bg-orange-100 text-orange-700 hover:bg-orange-200' },
+                            { tag: 'pago-enviado', label: '🟦 Pago', cls: 'bg-blue-100 text-blue-700 hover:bg-blue-200' },
+                            { tag: 'otros-temas', label: '🟣 Otros temas', cls: 'bg-purple-100 text-purple-700 hover:bg-purple-200' },
+                            { tag: 'mensaje-de-voz', label: '🟡 Audio', cls: 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' },
+                            { tag: 'intervencion-humana', label: '🔴 Asesor', cls: 'bg-red-100 text-red-700 hover:bg-red-200' },
+                        ].map(({ tag, label, cls }) => (
+                            <button
+                                key={tag}
+                                onClick={() => setTagFilter(tag)}
+                                className={`px-2.5 py-1 text-xs rounded-full font-medium transition-all ${cls} ${tagFilter === tag ? 'ring-2 ring-offset-1 ring-current' : ''}`}
+                            >
+                                {label}
+                            </button>
+                        ))}
+                    </div>
                 </div>
             </div>
 
@@ -357,12 +421,24 @@ export default function LeadsPage() {
                                     <tr key={lead._id || lead.id} className="group">
                                         <td className="sticky left-0 bg-white group-hover:bg-slate-50 shadow-[1px_0_0_0_#e2e8f0] z-10 transition-colors">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
+                                                <div className="relative w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
                                                     <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                                                     </svg>
+                                                    <span
+                                                        className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${lead.conversationState === 'active' ? 'bg-green-500' :
+                                                                lead.conversationState === 'paused' ? 'bg-yellow-400' :
+                                                                    'bg-slate-300'
+                                                            }`}
+                                                        title={lead.conversationState === 'active' ? 'Bot activo' : lead.conversationState === 'paused' ? 'Pausado' : 'Sin conversación'}
+                                                    />
                                                 </div>
-                                                <span className="font-medium">{lead.phone}</span>
+                                                <div className="min-w-0">
+                                                    <span className="font-medium block">{lead.phone}</span>
+                                                    {!lead.name && lead.pushname && (
+                                                        <span className="text-xs text-slate-400 block truncate">{lead.pushname}</span>
+                                                    )}
+                                                </div>
                                             </div>
                                         </td>
                                         <td style={{ minWidth: '140px' }}>
@@ -380,9 +456,9 @@ export default function LeadsPage() {
                                                 ) : (
                                                     lead.tags.map((tag: string, i: number) => (
                                                         <span key={i} className={`badge text-[10px] py-0.5 px-1.5 ${tag === 'atencion-requerida' ? 'bg-orange-100 text-orange-700 border border-orange-200' :
-                                                                tag === 'otros-temas' ? 'bg-purple-100 text-purple-700 border border-purple-200' :
-                                                                    tag === 'pago-enviado' ? 'bg-blue-100 text-blue-700 border border-blue-200' :
-                                                                        'badge-neutral'
+                                                            tag === 'otros-temas' ? 'bg-purple-100 text-purple-700 border border-purple-200' :
+                                                                tag === 'pago-enviado' ? 'bg-blue-100 text-blue-700 border border-blue-200' :
+                                                                    'badge-neutral'
                                                             }`}>{tag}</span>
                                                     ))
                                                 )}

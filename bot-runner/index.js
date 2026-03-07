@@ -516,11 +516,22 @@ async function startBot() {
             let contact = await Contact.findOne({ phone });
             if (!contact) {
                 contact = await Contact.create({
-                    phone, status: 'pendiente', source: 'organic',
+                    phone,
+                    name: msg.pushname || '',
+                    pushname: msg.pushname || '',
+                    status: 'pendiente', source: 'organic',
                     firstSeenAt: new Date(), lastSeenAt: new Date(), tags: [], meta: {}
                 });
+                console.log(`[TRACE] 👤 New contact created: ${phone} (pushname: "${msg.pushname || 'none'}")`);
             } else {
-                await Contact.updateOne({ _id: contact._id }, { $set: { lastSeenAt: new Date() } });
+                const contactUpdate = { lastSeenAt: new Date() };
+                // Save pushname always (may change). If no real name, use pushname as display name too.
+                if (msg.pushname) {
+                    contactUpdate.pushname = msg.pushname;
+                    if (!contact.name) contactUpdate.name = msg.pushname;
+                }
+                await Contact.updateOne({ _id: contact._id }, { $set: contactUpdate });
+                if (msg.pushname && !contact.name) contact.name = msg.pushname;
             }
 
             // Find active or paused conversation - SORT BY UPDATED AT
@@ -951,7 +962,6 @@ async function startBot() {
             }
 
             await handleStepLogic(client, msg, conversation, flow, contact);
-
 
             // FINAL CLEANUP
             if (lockTimeout) clearTimeout(lockTimeout);

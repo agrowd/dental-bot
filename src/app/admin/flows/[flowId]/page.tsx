@@ -49,6 +49,7 @@ export default function FlowEditorPage() {
     const [msgNavigationBack, setMsgNavigationBack] = useState('_(Si te equivocaste, escribí *V* para volver)_');
     const [msgMediaAck, setMsgMediaAck] = useState('✅ ¡Recibimos tu archivo! Un administrador lo revisará en breve para confirmar tu pago y turno. ¡Gracias! 👤');
     const [showNavigationOnMediaAck, setShowNavigationOnMediaAck] = useState(true);
+    const [msgPttResponse, setMsgPttResponse] = useState('🎤 Por el momento preferimos comunicarnos por texto para organizarnos mejor. Por favor escribinos tu consulta 🙏\n\n🔹 *M:* Menú principal');
     const [steps, setSteps] = useState<Record<string, FlowStep>>({});
     const [selectedStepId, setSelectedStepId] = useState<string>('');
     const [entryStepId, setEntryStepId] = useState<string>('');
@@ -94,6 +95,7 @@ export default function FlowEditorPage() {
             setMsgNavigationBack(sourceData.msgNavigationBack || '_(Si te equivocaste, escribí *V* para volver)_');
             setMsgMediaAck(sourceData.msgMediaAck || '✅ ¡Recibimos tu archivo! Un administrador lo revisará en breve para confirmar tu pago y turno. ¡Gracias! 👤');
             setShowNavigationOnMediaAck(sourceData.showNavigationOnMediaAck ?? true);
+            setMsgPttResponse(sourceData.msgPttResponse || '🎤 Por el momento preferimos comunicarnos por texto para organizarnos mejor. Por favor escribinos tu consulta 🙏\n\n🔹 *M:* Menú principal');
             setSteps(sourceData.steps || {});
             setEntryStepId(sourceData.entryStepId || '');
             setSelectedStepId(sourceData.entryStepId || (sourceData.steps ? Object.keys(sourceData.steps)[0] : '') || '');
@@ -260,7 +262,7 @@ export default function FlowEditorPage() {
             name: flowName,
             description: flowDescription,
             activationRules, // Check if this is correct
-            draft: { steps, entryStepId, fallbackMessage, msgFallback, msgFallbackLockout, fallbackMaxAttempts, msgNavigationMenu, msgNavigationBack, msgMediaAck, showNavigationOnMediaAck },
+            draft: { steps, entryStepId, fallbackMessage, msgFallback, msgFallbackLockout, fallbackMaxAttempts, msgNavigationMenu, msgNavigationBack, msgMediaAck, showNavigationOnMediaAck, msgPttResponse },
             isActive
         };
         console.log('[DEBUG-FRONTEND] Saving flow payload:', JSON.stringify(payload, null, 2));
@@ -553,6 +555,20 @@ export default function FlowEditorPage() {
                                     <span className="text-sm font-medium text-slate-800">Agregar M/V (Volver Atrás / Menú Principal) al final de este mensaje</span>
                                 </label>
                             </div>
+                        </div>
+
+                        {/* Voice Message (PTT) Response Setting */}
+                        <div className="card p-4">
+                            <h3 className="font-medium text-slate-900 mb-2">🎤 Mensaje al recibir audios / mensajes de voz</h3>
+                            <p className="text-xs text-slate-500 mb-3">
+                                Respuesta automática cuando el usuario manda un audio. Evitá mencionar limitaciones técnicas; en cambio, redirigí al texto amablemente.
+                            </p>
+                            <textarea
+                                value={msgPttResponse}
+                                onChange={(e) => { setMsgPttResponse(e.target.value); setHasChanges(true); }}
+                                className="input min-h-[80px] w-full text-sm"
+                                placeholder="Ej: 🎤 Preferimos comunicarnos por texto..."
+                            />
                         </div>
 
                         {/* Per-Step Navigation Toggle */}
