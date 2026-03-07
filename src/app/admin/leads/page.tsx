@@ -328,6 +328,7 @@ export default function LeadsPage() {
                             { tag: 'atencion-requerida', color: 'bg-orange-500', label: 'Atención requerida', desc: 'Requiere revisión humana' },
                             { tag: 'otros-temas', color: 'bg-purple-500', label: 'Otros temas', desc: 'Dejó una consulta libre' },
                             { tag: 'pago-enviado', color: 'bg-blue-500', label: 'Pago enviado', desc: 'Envió comprobante de pago' },
+                            { tag: 'intento-pagar', color: 'bg-emerald-500', label: 'Intentó pagar', desc: 'Llegó al paso de pago / pidió link' },
                             { tag: 'mensaje-de-voz', color: 'bg-yellow-400', label: 'Mensaje de voz', desc: 'Mandó un audio' },
                             { tag: 'intervencion-humana', color: 'bg-red-500', label: 'Intervención humana', desc: 'Pidió hablar con asesor' },
                             { tag: 'fallback-lockout', color: 'bg-slate-400', label: 'Bloqueado', desc: 'Demasiados intentos fallidos' },
@@ -370,7 +371,8 @@ export default function LeadsPage() {
                         {[
                             { tag: 'all', label: 'Todas', cls: 'bg-slate-100 text-slate-600 hover:bg-slate-200' },
                             { tag: 'atencion-requerida', label: '🟠 Atención', cls: 'bg-orange-100 text-orange-700 hover:bg-orange-200' },
-                            { tag: 'pago-enviado', label: '🟦 Pago', cls: 'bg-blue-100 text-blue-700 hover:bg-blue-200' },
+                            { tag: 'pago-enviado', label: '🟦 Pago enviado', cls: 'bg-blue-100 text-blue-700 hover:bg-blue-200' },
+                            { tag: 'intento-pagar', label: '🟢 Quiso pagar', cls: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' },
                             { tag: 'otros-temas', label: '🟣 Otros temas', cls: 'bg-purple-100 text-purple-700 hover:bg-purple-200' },
                             { tag: 'mensaje-de-voz', label: '🟡 Audio', cls: 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' },
                             { tag: 'intervencion-humana', label: '🔴 Asesor', cls: 'bg-red-100 text-red-700 hover:bg-red-200' },
@@ -427,8 +429,8 @@ export default function LeadsPage() {
                                                     </svg>
                                                     <span
                                                         className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${lead.conversationState === 'active' ? 'bg-green-500' :
-                                                                lead.conversationState === 'paused' ? 'bg-yellow-400' :
-                                                                    'bg-slate-300'
+                                                            lead.conversationState === 'paused' ? 'bg-yellow-400' :
+                                                                'bg-slate-300'
                                                             }`}
                                                         title={lead.conversationState === 'active' ? 'Bot activo' : lead.conversationState === 'paused' ? 'Pausado' : 'Sin conversación'}
                                                     />

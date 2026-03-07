@@ -1151,6 +1151,17 @@ async function startBot() {
                 );
                 conversation.loopDetection.messagesInCurrentStep = 1;
 
+                // AUTO-TAG: if entering a payment step for the first time, tag as 'intento-pagar'
+                const PAYMENT_KEYWORDS = ['pago', 'reserva', 'turno', 'payment', 'link_pago', 'link-pago'];
+                const isPaymentStep = PAYMENT_KEYWORDS.some(k => (currentStep.id || '').toLowerCase().includes(k));
+                if (isPaymentStep) {
+                    await Conversation.updateOne(
+                        { _id: conversation._id },
+                        { $addToSet: { tags: 'intento-pagar' } }
+                    );
+                    console.log(`[TRACE][${conversation._id}] 💳 Auto-tagged 'intento-pagar' for step ${currentStep.id}`);
+                }
+
                 const response = formatMessage(currentStep, flow);
                 const chat = await msg.getChat();
 
