@@ -3,7 +3,7 @@ import { requireAuth } from '@/lib/auth';
 import { dbConnect } from '@/lib/db';
 import Conversation from '@/lib/models/Conversation';
 
-const ATTENTION_TAGS = ['atencion-requerida', 'otros-temas'];
+const ATTENTION_TAGS = ['atencion-requerida'];
 
 // GET /api/attention-count — returns number of conversations needing human attention
 export async function GET(req: NextRequest) {

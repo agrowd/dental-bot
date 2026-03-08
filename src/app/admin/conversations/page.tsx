@@ -2,20 +2,19 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
 import { ConversationState } from '@/lib/types';
 
 export default function ConversationsPage() {
-    const searchParams = useSearchParams();
-    const [stateFilter, setStateFilter] = useState<ConversationState | 'all' | 'attention'>(() => {
-        // Auto-activate attention filter if linked from the sidebar badge
-        return (searchParams.get('filter') as any) || 'all';
-    });
+    const [stateFilter, setStateFilter] = useState<ConversationState | 'all' | 'attention'>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [conversations, setConversations] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        // Read ?filter=attention from URL without useSearchParams (avoids Suspense requirement)
+        const params = new URLSearchParams(window.location.search);
+        const filter = params.get('filter');
+        if (filter === 'attention') setStateFilter('attention');
         fetchConversations();
     }, []);
 
@@ -31,7 +30,7 @@ export default function ConversationsPage() {
         }
     }
 
-    const ATTENTION_TAGS = ['atencion-requerida', 'otros-temas'];
+    const ATTENTION_TAGS = ['atencion-requerida'];
 
     // Filter conversations
     const filteredConversations = conversations.filter(conv => {
