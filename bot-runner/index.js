@@ -1045,8 +1045,10 @@ async function startBot() {
             await sendTyping(chat);
             await randomDelay(800, 400);
 
+            // NOTE: This field is set in Flow Builder → Reglas → "Mensaje al recibir audios".
+            // The flow must be PUBLISHED (not just saved) for changes to take effect.
             const pttMsg = (flow && flow.published && flow.published.msgPttResponse)
-                || '🎤 Por el momento no podemos recibir mensajes de voz. Por favor escribinos tu consulta en texto y te responderemos a la brevedad 🙏\n\n🔹 *M:* Menú principal';
+                || '🎤 Por el momento preferimos comunicarnos por texto para organizarnos mejor. Por favor escribinos tu consulta 🙏\n\n🔹 *M:* Menú principal';
 
             await chat.sendMessage(pttMsg);
             await Conversation.updateOne(

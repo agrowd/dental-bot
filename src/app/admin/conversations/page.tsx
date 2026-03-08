@@ -2,10 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { ConversationState } from '@/lib/types';
 
 export default function ConversationsPage() {
-    const [stateFilter, setStateFilter] = useState<ConversationState | 'all' | 'attention'>('all');
+    const searchParams = useSearchParams();
+    const [stateFilter, setStateFilter] = useState<ConversationState | 'all' | 'attention'>(() => {
+        // Auto-activate attention filter if linked from the sidebar badge
+        return (searchParams.get('filter') as any) || 'all';
+    });
     const [searchQuery, setSearchQuery] = useState('');
     const [conversations, setConversations] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -68,7 +73,18 @@ export default function ConversationsPage() {
             paused: '👤 Derivado con Personal',
             closed: 'Cerrado'
         };
-        return <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${badges[state]} whitespace-nowrap`}>{labels[state]}</span>;
+        const tooltips: Partial<Record<ConversationState, string>> = {
+            paused: 'Bot pausado: el paciente puede escribir pero NO recibirá respuesta automática. Respondé vos manualmente. Para reactivar el bot, usá el botón Reanudar.',
+            active: 'Bot activo: el paciente recibe respuestas automáticas del bot.',
+        };
+        return (
+            <span
+                className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${badges[state]} whitespace-nowrap cursor-help`}
+                title={tooltips[state] || ''}
+            >
+                {labels[state]}
+            </span>
+        );
     };
 
     if (loading) {
@@ -202,8 +218,8 @@ export default function ConversationsPage() {
                                                 ) : (
                                                     conv.tags.map((tag: string, i: number) => (
                                                         <span key={i} className={`badge text-[10px] py-0.5 px-1.5 ${tag === 'atencion-requerida' ? 'bg-orange-100 text-orange-700 border border-orange-200' :
-                                                                tag === 'otros-temas' ? 'bg-purple-100 text-purple-700 border border-purple-200' :
-                                                                    'badge-neutral'
+                                                            tag === 'otros-temas' ? 'bg-purple-100 text-purple-700 border border-purple-200' :
+                                                                'badge-neutral'
                                                             }`}>{tag}</span>
                                                     ))
                                                 )}

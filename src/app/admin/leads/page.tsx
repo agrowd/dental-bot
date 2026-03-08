@@ -414,8 +414,22 @@ export default function LeadsPage() {
                         <tbody>
                             {filteredLeads.length === 0 ? (
                                 <tr>
-                                    <td colSpan={8} className="text-center py-12 text-slate-500">
-                                        No se encontraron leads
+                                    <td colSpan={8} className="py-16">
+                                        <div className="flex flex-col items-center justify-center gap-3 text-slate-400">
+                                            <svg className="w-10 h-10 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                            </svg>
+                                            {searchQuery ? (
+                                                <div className="text-center">
+                                                    <p className="font-medium text-slate-500">Sin resultados para <span className="font-bold text-slate-700">"{searchQuery}"</span></p>
+                                                    <p className="text-sm mt-1">Probá con otro formato: con o sin +54, con o sin guion</p>
+                                                </div>
+                                            ) : tagFilter !== 'all' ? (
+                                                <p className="font-medium text-slate-500">No hay leads con la etiqueta <span className="font-bold text-slate-700">{tagFilter}</span></p>
+                                            ) : (
+                                                <p className="font-medium text-slate-500">No se encontraron leads</p>
+                                            )}
+                                        </div>
                                     </td>
                                 </tr>
                             ) : (
