@@ -753,6 +753,10 @@ async function startBot() {
                 await randomDelay(800, 400);
                 await chat.sendMessage(ackMessage);
 
+                // Mark unread + WA label so Salvador sees it immediately
+                try { await chat.markUnread(); } catch(e) { console.error('[WA] markUnread error:', e.message); }
+                await syncWhatsAppLabel(chat, 'Consulta Libre');
+
                 console.log(`[TRACE] 📝 FreeText captured from ${phone}: "${freeInput.substring(0, 60)}..."`);
                 await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout);
                 return;
@@ -859,6 +863,11 @@ async function startBot() {
                     conversation.currentStepId = pendingStepId;
                     conversation.formState.active = false;
                     conversation.loopDetection.messagesInCurrentStep = 0;
+
+                    // Mark unread + WA label so Salvador sees it immediately
+                    try { await chat.markUnread(); } catch(e) { console.error('[WA] markUnread error:', e.message); }
+                    await syncWhatsAppLabel(chat, 'Dejó Sus Datos');
+
                     await handleStepLogic(client, msg, conversation, flow, contact);
                     if (lockTimeout) clearTimeout(lockTimeout);
                     await releaseLock();
@@ -1055,6 +1064,8 @@ async function startBot() {
                 { _id: conversation._id },
                 { $addToSet: { tags: 'mensaje-de-voz' } }
             );
+            // Mark unread so Salvador sees the audio in his inbox
+            try { await chat.markUnread(); } catch(e) { console.error('[WA] markUnread error:', e.message); }
             return;
         }
 
@@ -1084,6 +1095,10 @@ async function startBot() {
             );
 
             const chat = await msg.getChat();
+            // Mark unread + WA label — Salvador needs to verify this payment
+            try { await chat.markUnread(); } catch(e) { console.error('[WA] markUnread error:', e.message); }
+            await syncWhatsAppLabel(chat, 'Pago Enviado');
+
             await sendTyping(chat);
             await randomDelay(1000, 500);
 
@@ -1131,7 +1146,9 @@ async function startBot() {
                     ops.$set = { state: 'paused' };
                     conversation.state = 'paused';
                     const chat = await msg.getChat();
-                    await syncWhatsAppLabel(chat, 'Derivado con Personal');
+                    await syncWhatsAppLabel(chat, 'Quiso Hablar Asesor');
+                    // Mark unread — requires human attention now
+                    try { await chat.markUnread(); } catch(e) { console.error('[WA] markUnread error:', e.message); }
                 }
                 if (currentStep.actions.addTags && Array.isArray(currentStep.actions.addTags)) {
                     ops.$addToSet = { tags: { $each: currentStep.actions.addTags } };
