@@ -326,6 +326,7 @@ export default function LeadsPage() {
                     <div className="mt-2 card p-4 grid grid-cols-2 md:grid-cols-3 gap-3">
                         {[
                             { tag: 'atencion-requerida', color: 'bg-orange-500', label: 'Atención requerida', desc: 'Requiere revisión humana' },
+                            { tag: 'solicito-info', color: 'bg-indigo-500', label: 'Solicitó info', desc: 'Recibió links de tienda o PDFs' },
                             { tag: 'otros-temas', color: 'bg-purple-500', label: 'Otros temas', desc: 'Dejó una consulta libre' },
                             { tag: 'pago-enviado', color: 'bg-blue-500', label: 'Pago enviado', desc: 'Envió comprobante de pago' },
                             { tag: 'intento-pagar', color: 'bg-emerald-500', label: 'Intentó pagar', desc: 'Llegó al paso de pago / pidió link' },
@@ -371,6 +372,7 @@ export default function LeadsPage() {
                         {[
                             { tag: 'all', label: 'Todas', cls: 'bg-slate-100 text-slate-600 hover:bg-slate-200' },
                             { tag: 'atencion-requerida', label: '🟠 Atención', cls: 'bg-orange-100 text-orange-700 hover:bg-orange-200' },
+                            { tag: 'solicito-info', label: 'ℹ️ Solicitó info', cls: 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200' },
                             { tag: 'pago-enviado', label: '🟦 Pago enviado', cls: 'bg-blue-100 text-blue-700 hover:bg-blue-200' },
                             { tag: 'intento-pagar', label: '🟢 Quiso pagar', cls: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' },
                             { tag: 'otros-temas', label: '🟣 Otros temas', cls: 'bg-purple-100 text-purple-700 hover:bg-purple-200' },

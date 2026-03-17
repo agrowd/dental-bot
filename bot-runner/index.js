@@ -211,6 +211,19 @@ const sendTyping = async (chat) => {
     }
 };
 
+// Helper: Mark as unread with delay to win the race against WA auto-read
+const markUnreadWithDelay = (chat, delayMs = 2500) => {
+    if (!chat) return;
+    setTimeout(async () => {
+        try {
+            await chat.markUnread();
+            // console.log(`[WA] Chat marked as unread after ${delayMs}ms delay`);
+        } catch (e) {
+            // console.error('[WA] markUnread error:', e.message);
+        }
+    }, delayMs);
+};
+
 // Start WhatsApp client
 async function startBot() {
     botState = 'connecting';
@@ -754,7 +767,7 @@ async function startBot() {
                 await chat.sendMessage(ackMessage);
 
                 // Mark unread + WA label so Salvador sees it immediately
-                try { await chat.markUnread(); } catch(e) { console.error('[WA] markUnread error:', e.message); }
+                markUnreadWithDelay(chat);
                 await syncWhatsAppLabel(chat, 'Consulta Libre');
 
                 console.log(`[TRACE] 📝 FreeText captured from ${phone}: "${freeInput.substring(0, 60)}..."`);
@@ -865,7 +878,7 @@ async function startBot() {
                     conversation.loopDetection.messagesInCurrentStep = 0;
 
                     // Mark unread + WA label so Salvador sees it immediately
-                    try { await chat.markUnread(); } catch(e) { console.error('[WA] markUnread error:', e.message); }
+                    markUnreadWithDelay(chat);
                     await syncWhatsAppLabel(chat, 'Dejó Sus Datos');
 
                     await handleStepLogic(client, msg, conversation, flow, contact);
@@ -972,6 +985,11 @@ async function startBot() {
 
             await handleStepLogic(client, msg, conversation, flow, contact);
 
+            // GLOBAL: Always mark as unread after bot has finished its turn.
+            // This ensures Salvador sees the unread notification for every incoming message.
+            const chat = await msg.getChat();
+            markUnreadWithDelay(chat);
+
             // FINAL CLEANUP
             if (lockTimeout) clearTimeout(lockTimeout);
             await releaseLock();
@@ -1065,7 +1083,7 @@ async function startBot() {
                 { $addToSet: { tags: 'mensaje-de-voz' } }
             );
             // Mark unread so Salvador sees the audio in his inbox
-            try { await chat.markUnread(); } catch(e) { console.error('[WA] markUnread error:', e.message); }
+            markUnreadWithDelay(chat);
             return;
         }
 
@@ -1089,6 +1107,7 @@ async function startBot() {
                 return;
             }
 
+            await Contact.updateOne({ phone }, { $addToSet: { tags: 'pago-enviado' } });
             await Conversation.updateOne(
                 { _id: conversation._id },
                 { $addToSet: { tags: 'pago-enviado' } }
@@ -1096,7 +1115,7 @@ async function startBot() {
 
             const chat = await msg.getChat();
             // Mark unread + WA label — Salvador needs to verify this payment
-            try { await chat.markUnread(); } catch(e) { console.error('[WA] markUnread error:', e.message); }
+            markUnreadWithDelay(chat);
             await syncWhatsAppLabel(chat, 'Pago Enviado');
 
             await sendTyping(chat);
@@ -1148,7 +1167,7 @@ async function startBot() {
                     const chat = await msg.getChat();
                     await syncWhatsAppLabel(chat, 'Quiso Hablar Asesor');
                     // Mark unread — requires human attention now
-                    try { await chat.markUnread(); } catch(e) { console.error('[WA] markUnread error:', e.message); }
+                    markUnreadWithDelay(chat);
                 }
                 if (currentStep.actions.addTags && Array.isArray(currentStep.actions.addTags)) {
                     ops.$addToSet = { tags: { $each: currentStep.actions.addTags } };
@@ -1183,6 +1202,22 @@ async function startBot() {
 
                 const response = formatMessage(currentStep, flow);
                 const chat = await msg.getChat();
+
+                // AUTO-TAG: if step contains info-rich content, tag as 'solicito-info'
+                const INFO_KEYWORDS = ['tienda.rad-implantes.com.ar', '.pdf', 'protesis', 'implante', 'presupuesto', 'informe'];
+                const isInfoStep = INFO_KEYWORDS.some(k => response.toLowerCase().includes(k) || (currentStep.id || '').toLowerCase().includes(k));
+                if (isInfoStep) {
+                    await Contact.updateOne({ phone }, { $addToSet: { tags: 'solicito-info' } });
+                    await Conversation.updateOne(
+                        { _id: conversation._id },
+                        { $addToSet: { tags: 'solicito-info' } }
+                    );
+                    console.log(`[TRACE][${conversation._id}] ℹ️ Auto-tagged 'solicito-info' for step ${currentStep.id}`);
+                    
+                    // Also sync label in WA and mark as unread immediately
+                    await syncWhatsAppLabel(chat, 'ℹ️ SOLICITÓ INFO');
+                    markUnreadWithDelay(chat);
+                }
 
                 try {
                     await sendTyping(chat);
