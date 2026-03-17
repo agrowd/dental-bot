@@ -526,25 +526,31 @@ async function startBot() {
             }
 
             // 3. CONTACT & CONVERSATION
+            const chatContact = await msg.getContact(); // Get full WPP contact info
             let contact = await Contact.findOne({ phone });
             if (!contact) {
                 contact = await Contact.create({
                     phone,
-                    name: msg.pushname || '',
+                    name: chatContact.name || msg.pushname || '', // Prefer Address Book name
                     pushname: msg.pushname || '',
                     status: 'pendiente', source: 'organic',
                     firstSeenAt: new Date(), lastSeenAt: new Date(), tags: [], meta: {}
                 });
-                console.log(`[TRACE] 👤 New contact created: ${phone} (pushname: "${msg.pushname || 'none'}")`);
+                console.log(`[TRACE] 👤 New contact created: ${phone} (name: "${contact.name}", pushname: "${msg.pushname || 'none'}")`);
             } else {
                 const contactUpdate = { lastSeenAt: new Date() };
-                // Save pushname always (may change). If no real name, use pushname as display name too.
-                if (msg.pushname) {
-                    contactUpdate.pushname = msg.pushname;
-                    if (!contact.name) contactUpdate.name = msg.pushname;
+                if (msg.pushname) contactUpdate.pushname = msg.pushname;
+                
+                // Prioritize Address Book name if available and contact doesn't have a specific manual name
+                if (chatContact.name && (!contact.name || contact.name === contact.pushname)) {
+                    contactUpdate.name = chatContact.name;
+                    contact.name = chatContact.name;
+                } else if (msg.pushname && !contact.name) {
+                    contactUpdate.name = msg.pushname;
+                    contact.name = msg.pushname;
                 }
+
                 await Contact.updateOne({ _id: contact._id }, { $set: contactUpdate });
-                if (msg.pushname && !contact.name) contact.name = msg.pushname;
             }
 
             // Find active or paused conversation - SORT BY UPDATED AT
@@ -1258,6 +1264,19 @@ async function startBot() {
                     } else {
                         console.log(`[TRACE][${conversation._id}] 📤 Sending[${currentStep.id}]: "${response.replace(/\n/g, ' ')}"`);
                         await chat.sendMessage(response);
+                    }
+
+                    // --- REMARKETING CLOSURE ---
+                    // If this is a terminal step (no options) and was tagged as solicito-info,
+                    // send a final amigable closure to avoid the flow feeling 'truncated'.
+                    const isTerminal = !currentStep.options || currentStep.options.length === 0;
+                    const isInfoFlow = (conversation.tags || []).includes('solicito-info');
+                    
+                    if (isTerminal && isInfoFlow && conversation.state !== 'paused') {
+                        await randomDelay(1500, 500);
+                        const farewellMsg = "¡Esperamos que esta información te sea de gran utilidad! 😊\n\nSi tenés alguna otra duda, podés escribir *M* para volver al menú o simplemente aguardar a que un integrante del equipo te contacte a la brevedad. ¡Que tengas un excelente día! 🙏";
+                        console.log(`[TRACE][${conversation._id}] 👋 Sending remarketing closure msg.`);
+                        await chat.sendMessage(farewellMsg);
                     }
 
                     // --- TERMINAL PAUSE ---

@@ -7,3 +7,10 @@
 - **Bug Fix (Force Start):** El lead forzado (ej. `5491133640291`) se inyectaba solo como Conversation y no como Contact. Se agregó la lógica en `POST /bot/force-start` para asegurar la creación del documento *Contact* inmediatamente, visibilizándolo al instante en la lista de Leads del CRM.
 
 > Se pusheó todo a GitHub (commit `30c5378`).
+
+### 17/03/2026 - Notificaciones WhatsApp y Auto-Tagging
+- **Bot-Runner (Sticky Unread)**: Se implementó un delay de 2.5s para `markUnread()` tras la respuesta del bot. Esto soluciona el problema de que el chat se marcaba como leído instantáneamente al enviar el bot su mensaje (D-06).
+- **Bot-Runner (Auto-Tagging Info)**: Se agregó un detector de palabras clave (tienda, pdf, prótesis) que etiqueta automáticamente al lead como `solicito-info` en el CRM y le pone la etiqueta WA `ℹ️ SOLICITÓ INFO`.
+- **CRM Leads UI**: Se actualizó la leyenda de etiquetas y se añadió el filtro rápido para la nueva etiqueta `solicito-info`.
+
+> Se pusheó todo a GitHub (commit `4d4d6e6`).
