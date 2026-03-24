@@ -485,15 +485,31 @@ async function startBot() {
                 throw err;
             }
 
-            lockTimeout = setTimeout(releaseLock, 30000);
+            lockTimeout = setTimeout(releaseLock, 60000); // 60s safety timeout
 
             // SILENT FILTERS
             if (msg.from === 'status@broadcast') { await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout); return; }
             if (msg.from.endsWith('@g.us')) { await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout); return; }
 
+            // P1 FIX: Ignore system/notification messages (phone number changes, security code changes, etc.)
+            // These are NOT real user messages and should never trigger the bot.
+            const ALLOWED_MSG_TYPES = ['chat', 'image', 'ptt', 'audio', 'video', 'document', 'sticker', 'location', 'vcard', 'multi_vcard', 'order', 'list_response', 'buttons_response'];
+            if (!ALLOWED_MSG_TYPES.includes(msg.type)) {
+                console.log(`[TRACE] 🚫 Ignoring system message type "${msg.type}" from ${msg.from}`);
+                await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout);
+                return;
+            }
+
+            // Also ignore messages with completely empty body and no media (system-generated ghosts)
+            if (!msg.body && !msg.hasMedia) {
+                console.log(`[TRACE] 🚫 Ignoring empty message from ${msg.from} (likely system event)`);
+                await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout);
+                return;
+            }
+
             const sender = msg.from;
             const body = msg.body;
-            console.log(`[TRACE][${INSTANCE_ID}] 📨 PROCESSING: "${body}" from ${sender}`);
+            console.log(`[TRACE][${INSTANCE_ID}] 📨 PROCESSING: "${body}" from ${sender} (type: ${msg.type})`);
 
             // 2. SESSION TIME FILTER
             const msgDate = new Date(msg.timestamp * 1000);
@@ -851,7 +867,15 @@ async function startBot() {
                             conversation.currentStepId = pendingStepId;
                             conversation.formState.active = false;
                             conversation.loopDetection.messagesInCurrentStep = 0;
-                            await handleStepLogic(client, msg, conversation, flow, contact);
+                            conversation.loopDetection.currentStepId = pendingStepId;
+                            // P2 FIX: Refresh from DB before recursive call
+                            const freshConv2 = await Conversation.findById(conversation._id);
+                            if (freshConv2) {
+                                freshConv2.loopDetection.messagesInCurrentStep = 0;
+                                await handleStepLogic(client, msg, freshConv2, flow, contact);
+                            } else {
+                                await handleStepLogic(client, msg, conversation, flow, contact);
+                            }
                             if (lockTimeout) clearTimeout(lockTimeout);
                             await releaseLock();
                             return;
@@ -882,12 +906,21 @@ async function startBot() {
                     conversation.currentStepId = pendingStepId;
                     conversation.formState.active = false;
                     conversation.loopDetection.messagesInCurrentStep = 0;
+                    conversation.loopDetection.currentStepId = pendingStepId;
 
                     // Mark unread + WA label so Salvador sees it immediately
                     markUnreadWithDelay(chat);
                     await syncWhatsAppLabel(chat, 'Dejó Sus Datos');
 
-                    await handleStepLogic(client, msg, conversation, flow, contact);
+                    // P2 FIX: Force-refresh the conversation object from DB before recursive call
+                    // to ensure handleStepLogic sees the correct state
+                    const freshConv = await Conversation.findById(conversation._id);
+                    if (freshConv) {
+                        freshConv.loopDetection.messagesInCurrentStep = 0;
+                        await handleStepLogic(client, msg, freshConv, flow, contact);
+                    } else {
+                        await handleStepLogic(client, msg, conversation, flow, contact);
+                    }
                     if (lockTimeout) clearTimeout(lockTimeout);
                     await releaseLock();
                     return;
