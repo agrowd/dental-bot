@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { LeadStatus } from '@/lib/types';
 
 export default function LeadsPage() {
-    const [statusFilter, setStatusFilter] = useState<LeadStatus | 'all'>('all');
+    const [statusFilter, setStatusFilter] = useState<LeadStatus | 'all' | 'paused'>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [leads, setLeads] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -131,7 +131,13 @@ export default function LeadsPage() {
 
     // Filter leads
     const filteredLeads = leads.filter(lead => {
-        const matchesStatus = statusFilter === 'all' || lead.status === statusFilter;
+        // 'paused' is a special filter that checks conversationState, not lead status
+        let matchesStatus = true;
+        if (statusFilter === 'paused') {
+            matchesStatus = lead.conversationState === 'paused';
+        } else if (statusFilter !== 'all') {
+            matchesStatus = lead.status === statusFilter;
+        }
         const q = normalizePhone(searchQuery).toLowerCase();
         const qRaw = searchQuery.toLowerCase();
         const matchesSearch = !searchQuery ||
@@ -254,7 +260,7 @@ export default function LeadsPage() {
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
                 <button
                     onClick={() => setStatusFilter('all')}
                     className={`card p-4 text-left transition-all ${statusFilter === 'all' ? 'ring-2 ring-blue-500' : 'hover:shadow-md'}`}
@@ -282,6 +288,13 @@ export default function LeadsPage() {
                 >
                     <p className="text-sm text-red-600">No agendados</p>
                     <p className="text-2xl font-bold text-red-600">{stats.noAgendados}</p>
+                </button>
+                <button
+                    onClick={() => setStatusFilter('paused')}
+                    className={`card p-4 text-left transition-all ${statusFilter === 'paused' ? 'ring-2 ring-orange-500' : 'hover:shadow-md'}`}
+                >
+                    <p className="text-sm text-orange-600">👤 Pausados (Derivados)</p>
+                    <p className="text-2xl font-bold text-orange-600">{leads.filter(l => l.conversationState === 'paused').length}</p>
                 </button>
             </div>
 

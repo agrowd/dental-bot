@@ -447,6 +447,23 @@ async function startBot() {
                 text: msg.body || (msg.hasMedia ? '[Archivo Multimedia]' : ''),
                 timestamp: new Date(msg.timestamp * 1000)
             });
+
+            // PERSISTENT UNREAD: After EVERY bot message, re-mark as unread if forceUnread is true
+            // This is the centralized, DB-driven approach — guarantees unread persists until human clears it
+            if (msg.fromMe) {
+                try {
+                    const conv = await Conversation.findOne({ phone, state: { $in: ['active', 'paused'] } });
+                    if (conv && conv.forceUnread !== false) {
+                        // Default behavior: mark as unread (forceUnread defaults to true)
+                        setTimeout(async () => {
+                            try {
+                                const chat = await msg.getChat();
+                                await chat.markUnread();
+                            } catch (e) { /* silently fail */ }
+                        }, 3000); // 3s delay to win race against WA auto-read
+                    }
+                } catch (e) { /* silently fail */ }
+            }
         } catch (e) {
             console.error('[ERROR] Global message logger failed:', e);
         }

@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
         const phones = contacts.map(c => c.phone);
         const conversations = await Conversation.find(
             { phone: { $in: phones }, state: { $in: ['active', 'paused'] } },
-            { phone: 1, state: 1, tags: 1, currentStepId: 1 }
+            { phone: 1, state: 1, tags: 1, currentStepId: 1, forceUnread: 1 }
         ).sort({ updatedAt: -1 });
 
         // Build a map: phone -> latest conversation

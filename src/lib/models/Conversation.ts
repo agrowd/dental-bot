@@ -11,6 +11,7 @@ interface IConversationDoc extends Omit<IConversation, 'id'>, Document {
     history: string[]; // Stack of step IDs visited
     visitedMediaSteps: string[]; // Steps where media was already sent (skip on revisit)
     handoffAckSent: boolean; // True after the first "ack" message is sent in a paused/handoff state
+    forceUnread: boolean; // When true, bot re-marks chat as unread after every interaction until human clears it
     formState: {
         active: boolean;      // Currently collecting data
         pendingStepId: string; // Step to go to after form completes
@@ -44,6 +45,7 @@ const ConversationSchema = new Schema<IConversationDoc>({
     history: { type: [String], default: [] },
     visitedMediaSteps: { type: [String], default: [] },
     handoffAckSent: { type: Boolean, default: false },
+    forceUnread: { type: Boolean, default: true }, // Default: always mark as unread until human reads
     formState: {
         active: { type: Boolean, default: false },
         pendingStepId: { type: String, default: '' },
