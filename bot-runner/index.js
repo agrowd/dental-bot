@@ -628,8 +628,18 @@ async function startBot() {
 
             if (isNav) {
                 console.log(`[TRACE] 🔓 Universal Navigation command detected from ${phone}: "${inputRaw}"`);
-                // If there's an existing conversation, unpause it in DB
-                await Conversation.updateMany({ phone, state: { $in: ['active', 'paused'] } }, { $set: { state: 'active' } });
+                // If there's an existing conversation, unpause it in DB and CLEAR ALL PENDING FORM/FREE-TEXT MODES
+                await Conversation.updateMany(
+                    { phone, state: { $in: ['active', 'paused'] } }, 
+                    { 
+                        $set: { 
+                            state: 'active', 
+                            'formState.active': false,
+                            'freeTextState.active': false,
+                            handoffAckSent: false
+                        } 
+                    }
+                );
             }
 
             // 3. CONTACT & CONVERSATION
@@ -749,9 +759,20 @@ async function startBot() {
             if (conversation.state === 'paused' && isEmergencyNav) {
                 console.log(`[TRACE] 🔓 Emergency Escape Command executed by ${phone}. Unpausing!`);
                 conversation.state = 'active';
+                if (conversation.formState) conversation.formState.active = false;
+                if (conversation.freeTextState) conversation.freeTextState.active = false;
+                conversation.handoffAckSent = false;
+                
                 await Conversation.updateOne(
                     { _id: conversation._id },
-                    { $set: { state: 'active' } }
+                    { 
+                        $set: { 
+                            state: 'active',
+                            'formState.active': false,
+                            'freeTextState.active': false,
+                            handoffAckSent: false
+                        } 
+                    }
                 );
             }
 
@@ -917,6 +938,7 @@ async function startBot() {
                 const formInputLow = formInput.toLowerCase();
                 if (formInputLow === 'v' || formInputLow === 'm' || formInputLow === 'menu' || formInputLow === 'volver') {
                     await Conversation.updateOne({ _id: conversation._id }, { $set: { 'formState.active': false } });
+                    conversation.formState.active = false; // UPDATE LOCAL OBJECT too
                     await handleStepLogic(client, msg, conversation, flow, contact);
                     if (lockTimeout) clearTimeout(lockTimeout);
                     await releaseLock();
@@ -1564,9 +1586,31 @@ async function startBot() {
                 }
             );
 
-            // Update local object for recursion
-            conversation.currentStepId = targetOption.nextStepId;
-            conversation.loopDetection.messagesInCurrentStep = 0;
+            // Recursive next step - P3.1: If the NEW step is a capture step, trigger form logic directly
+            const steps = flow?.published?.steps;
+            const nextStep = (typeof steps.get === 'function') ? steps.get(targetOption.nextStepId) : steps[targetOption.nextStepId];
+            
+            if (nextStep?.actions?.collectLeadData && (!contact.name || !contact.email)) {
+                console.log(`[TRACE] 📋 Next step ${nextStep.id} requires capture. Triggering form immediately.`);
+                const namePrompt = nextStep.actions?.leadDataNamePrompt || '¡Perfecto! Antes de continuar necesito un par de datos 😊\n\n¿Cuál es tu *nombre y apellido*?';
+                const chat = await msg.getChat();
+                
+                await Conversation.updateOne({ _id: conversation._id }, {
+                    $set: {
+                        'formState.active': true,
+                        'formState.pendingStepId': nextStep.id,
+                        'formState.currentField': 'name',
+                        'formState.name': '',
+                        'formState.email': '',
+                        'formState.attempts': 0,
+                    }
+                });
+                await sendTyping(chat);
+                await randomDelay(600, 300);
+                await chat.sendMessage(namePrompt);
+                return;
+            }
+
             await handleStepLogic(client, msg, conversation, flow, contact); // Recursive next step
             return;
         }
