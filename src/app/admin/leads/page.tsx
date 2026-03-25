@@ -284,16 +284,22 @@ export default function LeadsPage() {
                 </button>
                 <button
                     onClick={() => setStatusFilter('no_agendado')}
-                    className={`card p-4 text-left transition-all ${statusFilter === 'no_agendado' ? 'ring-2 ring-red-500' : 'hover:shadow-md'}`}
+                    className={`card p-4 text-left transition-all bg-white border ${statusFilter === 'no_agendado' ? 'ring-2 ring-red-500 border-red-200' : 'border-slate-100 hover:shadow-md'}`}
                 >
                     <p className="text-sm text-red-600">No agendados</p>
-                    <p className="text-2xl font-bold text-red-600">{stats.noAgendados}</p>
+                    <p className="text-2xl font-bold text-slate-900">{stats.noAgendados}</p>
                 </button>
                 <button
                     onClick={() => setStatusFilter('paused')}
-                    className={`card p-4 text-left transition-all ${statusFilter === 'paused' ? 'ring-2 ring-orange-500' : 'hover:shadow-md'}`}
+                    className={`card p-4 text-left transition-all bg-white border ${statusFilter === 'paused' ? 'ring-2 ring-orange-500 border-orange-200' : 'border-slate-100 hover:shadow-md'}`}
                 >
-                    <p className="text-sm text-orange-600">👤 Pausados (Derivados)</p>
+                    <div className="flex items-center gap-1.5 mb-1">
+                        <svg className="w-4 h-4 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                        </svg>
+                        <p className="text-sm text-orange-600">Pausados</p>
+                    </div>
+                    <p className="text-sm text-orange-600 mb-1">(Derivados)</p>
                     <p className="text-2xl font-bold text-orange-600">{leads.filter(l => l.conversationState === 'paused').length}</p>
                 </button>
             </div>
@@ -489,6 +495,9 @@ export default function LeadsPage() {
                                                         <span key={i} className={`badge text-[10px] py-0.5 px-1.5 ${tag === 'atencion-requerida' ? 'bg-orange-100 text-orange-700 border border-orange-200' :
                                                             tag === 'otros-temas' ? 'bg-purple-100 text-purple-700 border border-purple-200' :
                                                                 tag === 'pago-enviado' ? 'bg-blue-100 text-blue-700 border border-blue-200' :
+                                                                tag === 'intento-pagar' ? 'bg-indigo-100 text-indigo-700 border border-indigo-200' :
+                                                                tag === 'solicito-info' ? 'bg-teal-100 text-teal-700 border border-teal-200' :
+                                                                tag === 'datos-completos' ? 'bg-green-100 text-green-700 border border-green-200 font-medium' :
                                                                     'badge-neutral'
                                                             }`}>{tag}</span>
                                                     ))

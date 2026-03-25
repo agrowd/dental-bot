@@ -148,18 +148,22 @@ app.post('/bot/force-start', async (req, res) => {
             return res.status(400).json({ error: 'No hay un flujo activo configurado.' });
         }
 
+        // Track previous states for potential rollback
+        const prevStates = await Conversation.find({ phone: cleanPhone, state: { $in: ['active', 'paused'] } });
         await Conversation.updateMany({ phone: cleanPhone, state: { $in: ['active', 'paused'] } }, { $set: { state: 'closed' } });
 
         let contact = await Contact.findOne({ phone: cleanPhone });
         if (!contact) {
+            // Can't reliably infer isMyContact without an incoming message check, so default to no_agendado
             await Contact.create({
                 phone: cleanPhone,
-                status: 'pendiente',
+                status: 'no_agendado',
                 source: 'organic',
                 firstSeenAt: new Date(),
                 lastSeenAt: new Date(),
                 tags: ['forced-start'],
-                meta: {}
+                meta: {},
+                events: [{ event: 'Creado mediante Forzar Bot', date: new Date() }]
             });
         }
 
@@ -186,11 +190,21 @@ app.post('/bot/force-start', async (req, res) => {
         }
 
         const msgText = formatMessage(firstStep, flow);
-        await client.sendMessage(chatId, msgText);
-
-        console.log(`[FORCE START] 🚀 Bot manually injected for ${cleanPhone}`);
-
-        res.json({ success: true, message: 'Bot iniciado exitosamente.' });
+        
+        try {
+            await client.sendMessage(chatId, msgText);
+            console.log(`[FORCE START] 🚀 Bot manually injected for ${cleanPhone}`);
+            res.json({ success: true, message: 'Bot iniciado exitosamente.' });
+        } catch (sendError) {
+            console.error(`[FORCE START ERROR] ❌ Failed to inject for ${cleanPhone}:`, sendError.message);
+            // Rollback newly created conversation
+            await Conversation.deleteOne({ _id: conversation._id });
+            // Rollback previous states
+            for (const prev of prevStates) {
+                await Conversation.updateOne({ _id: prev._id }, { $set: { state: prev.state } });
+            }
+            res.status(400).json({ error: 'El número de WhatsApp es inválido o no tiene cuenta de WhatsApp.' });
+        }
     } catch (error) {
         console.error('[FORCE START ERROR]', error);
         res.status(500).json({ error: error.message });
@@ -560,16 +574,19 @@ async function startBot() {
 
             // 3. CONTACT & CONVERSATION
             const chatContact = await msg.getContact(); // Get full WPP contact info
+            const currentStatus = chatContact.isMyContact ? 'agendado' : 'no_agendado';
+            
             let contact = await Contact.findOne({ phone });
             if (!contact) {
                 contact = await Contact.create({
                     phone,
                     name: chatContact.name || msg.pushname || '', // Prefer Address Book name
                     pushname: msg.pushname || '',
-                    status: 'pendiente', source: 'organic',
-                    firstSeenAt: new Date(), lastSeenAt: new Date(), tags: [], meta: {}
+                    status: currentStatus, source: 'organic',
+                    firstSeenAt: new Date(), lastSeenAt: new Date(), tags: [], meta: {},
+                    events: [{ event: `Contacto creado. Estado inicial: ${currentStatus}`, date: new Date() }]
                 });
-                console.log(`[TRACE] 👤 New contact created: ${phone} (name: "${contact.name}", pushname: "${msg.pushname || 'none'}")`);
+                console.log(`[TRACE] 👤 New contact created: ${phone} (name: "${contact.name}", pushname: "${msg.pushname || 'none'}", status: ${currentStatus})`);
             } else {
                 const contactUpdate = { lastSeenAt: new Date() };
                 if (msg.pushname) contactUpdate.pushname = msg.pushname;
@@ -583,7 +600,19 @@ async function startBot() {
                     contact.name = msg.pushname;
                 }
 
-                await Contact.updateOne({ _id: contact._id }, { $set: contactUpdate });
+                // Check for status change (e.g. they got added to contacts)
+                if (contact.status !== currentStatus) {
+                    contactUpdate.status = currentStatus;
+                    await Contact.updateOne(
+                        { _id: contact._id },
+                        {
+                            $set: contactUpdate,
+                            $push: { events: { event: `Estado comercial actualizado a: ${currentStatus}`, date: new Date() } }
+                        }
+                    );
+                } else {
+                    await Contact.updateOne({ _id: contact._id }, { $set: contactUpdate });
+                }
             }
 
             // Find active or paused conversation - SORT BY UPDATED AT
@@ -1163,7 +1192,13 @@ async function startBot() {
                 return;
             }
 
-            await Contact.updateOne({ phone }, { $addToSet: { tags: 'pago-enviado' } });
+            await Contact.updateOne(
+                { phone }, 
+                { 
+                    $addToSet: { tags: 'pago-enviado' },
+                    $push: { events: { event: 'Etiqueta agregada: pago-enviado', date: new Date() } }
+                }
+            );
             await Conversation.updateOne(
                 { _id: conversation._id },
                 { $addToSet: { tags: 'pago-enviado' } }
@@ -1253,6 +1288,13 @@ async function startBot() {
                         { _id: conversation._id },
                         { $addToSet: { tags: 'intento-pagar' } }
                     );
+                    await Contact.updateOne(
+                        { phone }, 
+                        { 
+                            $addToSet: { tags: 'intento-pagar' },
+                            $push: { events: { event: 'Etiqueta agregada: intento-pagar', date: new Date() } }
+                        }
+                    );
                     console.log(`[TRACE][${conversation._id}] 💳 Auto-tagged 'intento-pagar' for step ${currentStep.id}`);
                 }
 
@@ -1263,7 +1305,13 @@ async function startBot() {
                 const INFO_KEYWORDS = ['tienda.rad-implantes.com.ar', '.pdf', 'protesis', 'implante', 'presupuesto', 'informe'];
                 const isInfoStep = INFO_KEYWORDS.some(k => response.toLowerCase().includes(k) || (currentStep.id || '').toLowerCase().includes(k));
                 if (isInfoStep) {
-                    await Contact.updateOne({ phone }, { $addToSet: { tags: 'solicito-info' } });
+                    await Contact.updateOne(
+                        { phone }, 
+                        { 
+                            $addToSet: { tags: 'solicito-info' },
+                            $push: { events: { event: 'Etiqueta agregada: solicito-info', date: new Date() } }
+                        }
+                    );
                     await Conversation.updateOne(
                         { _id: conversation._id },
                         { $addToSet: { tags: 'solicito-info' } }
