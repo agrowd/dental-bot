@@ -211,6 +211,66 @@ app.post('/bot/force-start', async (req, res) => {
     }
 });
 
+// POST /bot/retry-step
+app.post('/bot/retry-step', async (req, res) => {
+    try {
+        if (!client || botState !== 'connected') {
+            return res.status(400).json({ error: 'El bot no está conectado a WhatsApp.' });
+        }
+
+        let { phone } = req.body;
+        if (!phone) return res.status(400).json({ error: 'Número de teléfono requerido.' });
+
+        const cleanPhone = phone.replace(/\D/g, '');
+        const chatId = `${cleanPhone}@c.us`;
+
+        const conversation = await Conversation.findOne({ phone: cleanPhone, state: { $in: ['active', 'paused'] } });
+        if (!conversation) {
+            return res.status(400).json({ error: 'No hay ninguna conversación activa o pausada para destrabar.' });
+        }
+
+        const flow = await Flow.findOne({ _id: conversation.flowId });
+        if (!flow || !flow.published || !flow.published.steps) {
+            return res.status(400).json({ error: 'El flujo activo no se encontró.' });
+        }
+
+        const steps = flow.published.steps;
+        const getStep = (id) => (typeof steps.get === 'function') ? steps.get(id) : steps[id];
+        const currentStep = getStep(conversation.currentStepId);
+
+        if (!currentStep) {
+            return res.status(400).json({ error: 'Paso actual no encontrado en el flujo.' });
+        }
+
+        const msgText = formatMessage(currentStep, flow);
+        
+        try {
+            await client.sendMessage(chatId, msgText);
+            console.log(`[RETRY STEP] 🚀 Re-sending step ${currentStep.id} to ${cleanPhone}`);
+            
+            // Unpause and reset attempts
+            await Conversation.updateOne({ _id: conversation._id }, {
+                $set: { 
+                    state: 'active',
+                    "loopDetection.messagesInCurrentStep": 1 
+                }
+            });
+            
+            await Contact.updateOne({ phone: cleanPhone }, {
+                $push: { events: { event: `Botón Destrabar usado en el paso: ${currentStep.id}`, date: new Date() } }
+            });
+
+            res.json({ success: true, message: 'Botón Destrabar ejecutado exitosamente.' });
+        } catch (sendError) {
+            console.error(`[RETRY STEP ERROR] ❌ Failed to send for ${cleanPhone}:`, sendError.message);
+            res.status(400).json({ error: 'El número de WhatsApp rechazó el mensaje.' });
+        }
+    } catch (error) {
+        console.error('[RETRY STEP ERROR]', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Helper: Random delay (10-15 seconds)
 const randomDelay = (baseMs = 10000, rangeMs = 5000) => {
     return new Promise(resolve => setTimeout(resolve, baseMs + Math.random() * rangeMs));

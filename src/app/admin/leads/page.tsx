@@ -121,6 +121,28 @@ export default function LeadsPage() {
         }
     }
 
+    async function handleRetryStep(phone: string) {
+        if (!confirm(`¿Destrabar el bot para ${phone}? Se reenviará el mensaje del paso en el que se trabó.`)) return;
+
+        try {
+            const res = await fetch('/api/bot/retry-step', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                alert('Bot destrabado exitosamente.');
+                fetchLeads(); // refresh
+            } else {
+                alert('Error: ' + data.error);
+            }
+        } catch (e) {
+            console.error('Error in retry-step:', e);
+            alert('Error de conexión');
+        }
+    }
+
     function startEdit(lead: any, field: 'name' | 'email') {
         setEditingCell({ id: lead._id || lead.id, field });
         setEditingValue(lead[field] || '');
@@ -528,6 +550,13 @@ export default function LeadsPage() {
                                                     disabled={isForcingBot}
                                                 >
                                                     ▶️
+                                                </button>
+                                                <button
+                                                    onClick={() => handleRetryStep(lead.phone)}
+                                                    className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                                                    title="Destrabar / reintentar paso actual"
+                                                >
+                                                    🔄
                                                 </button>
                                                 <a
                                                     href={`/admin/conversations/${encodeURIComponent(lead.phone)}`}
