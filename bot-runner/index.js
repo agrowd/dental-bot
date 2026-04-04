@@ -1663,6 +1663,7 @@ async function startBot() {
             );
 
             // Sync memory object before recursion to prevent infinite looping on the old step
+            if (!conversation.history) conversation.history = [];
             conversation.history.push(conversation.currentStepId);
             conversation.currentStepId = targetOption.nextStepId;
             conversation.loopDetection.messagesInCurrentStep = 0;
