@@ -1662,6 +1662,12 @@ async function startBot() {
                 }
             );
 
+            // Sync memory object before recursion to prevent infinite looping on the old step
+            conversation.history.push(conversation.currentStepId);
+            conversation.currentStepId = targetOption.nextStepId;
+            conversation.loopDetection.messagesInCurrentStep = 0;
+            conversation.loopDetection.currentStepId = targetOption.nextStepId;
+
             // Recursive next step - P3.1: If the NEW step is a capture step, trigger form logic directly
             const steps = flow?.published?.steps;
             const nextStep = (typeof steps.get === 'function') ? steps.get(targetOption.nextStepId) : steps[targetOption.nextStepId];
