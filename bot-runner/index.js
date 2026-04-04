@@ -1447,7 +1447,7 @@ async function startBot() {
                         { $addToSet: { tags: 'intento-pagar' } }
                     );
                     await Contact.updateOne(
-                        { phone }, 
+                        { phone: contact.phone }, 
                         { 
                             $addToSet: { tags: 'intento-pagar' },
                             $push: { events: { event: 'Etiqueta agregada: intento-pagar', date: new Date() } }
@@ -1464,7 +1464,7 @@ async function startBot() {
                 const isInfoStep = INFO_KEYWORDS.some(k => response.toLowerCase().includes(k) || (currentStep.id || '').toLowerCase().includes(k));
                 if (isInfoStep) {
                     await Contact.updateOne(
-                        { phone }, 
+                        { phone: contact.phone }, 
                         { 
                             $addToSet: { tags: 'solicito-info' },
                             $push: { events: { event: 'Etiqueta agregada: solicito-info', date: new Date() } }
