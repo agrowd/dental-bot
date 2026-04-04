@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/auth';
 import { dbConnect } from '@/lib/db';
 import Conversation from '@/lib/models/Conversation';
 import Message from '@/lib/models/Message';
+import Flow from '@/lib/models/Flow';
 
 interface RouteParams {
     params: Promise<{
@@ -29,12 +30,26 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
         // Fetch messages for this phone
         const messages = await Message.find({ phone }).sort({ timestamp: 1 });
 
+        // Fetch flow to get the current step configuration (for the Force Options UI)
+        let currentStepConfig = null;
+        if (conversation.flowId && conversation.currentStepId) {
+            const flow = await Flow.findById(conversation.flowId);
+            if (flow && flow.published && flow.published.steps) {
+                const steps = flow.published.steps;
+                // If it's a Map, use .get, otherwise use direct access
+                currentStepConfig = (typeof steps.get === 'function') 
+                    ? steps.get(conversation.currentStepId) 
+                    : steps[conversation.currentStepId];
+            }
+        }
+
         return NextResponse.json({
             conversation: {
                 id: conversation._id.toString(),
                 phone: conversation.phone,
                 flowVersion: conversation.flowVersion,
                 currentStepId: conversation.currentStepId,
+                currentStepConfig, // Added this field
                 state: conversation.state,
                 tags: conversation.tags,
                 createdAt: conversation.createdAt,

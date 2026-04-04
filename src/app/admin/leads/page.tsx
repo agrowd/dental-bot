@@ -24,13 +24,17 @@ export default function LeadsPage() {
     });
 
     useEffect(() => {
-        fetchLeads();
-    }, []);
+        const handler = setTimeout(() => {
+            fetchLeads();
+        }, 500);
+        return () => clearTimeout(handler);
+    }, [searchQuery]);
 
     async function fetchLeads() {
         try {
             setLoading(true);
-            const res = await fetch('/api/contacts');
+            const queryParam = searchQuery ? `?search=${encodeURIComponent(searchQuery)}` : '';
+            const res = await fetch(`/api/contacts${queryParam}`);
             const data = await res.json();
 
             if (data.contacts) {

@@ -15,12 +15,19 @@ export default function ConversationsPage() {
         const params = new URLSearchParams(window.location.search);
         const filter = params.get('filter');
         if (filter === 'attention') setStateFilter('attention');
-        fetchConversations();
     }, []);
+
+    useEffect(() => {
+        const handler = setTimeout(() => {
+            fetchConversations();
+        }, 500);
+        return () => clearTimeout(handler);
+    }, [searchQuery]);
 
     async function fetchConversations() {
         try {
-            const res = await fetch('/api/conversations');
+            const queryParam = searchQuery ? `?search=${encodeURIComponent(searchQuery)}` : '';
+            const res = await fetch(`/api/conversations${queryParam}`);
             const data = await res.json();
             setConversations(data.conversations || []);
         } catch (error) {

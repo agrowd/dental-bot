@@ -12,11 +12,23 @@ export async function GET(req: NextRequest) {
 
         const { searchParams } = new URL(req.url);
         const status = searchParams.get('status');
+        const search = searchParams.get('search');
 
         const query: any = {};
-        if (status) query.status = status;
+        if (status && status !== 'all' && status !== 'paused') query.status = status;
+        
+        if (search) {
+            const cleanSearch = search.trim().replace(/[\-\+]/g, '');
+            const regex = new RegExp(cleanSearch, 'i');
+            query.$or = [
+                { phone: regex },
+                { name: regex },
+                { pushname: regex },
+                { email: regex }
+            ];
+        }
 
-        const contacts = await Contact.find(query).sort({ lastSeenAt: -1 }).limit(200);
+        const contacts = await Contact.find(query).sort({ lastSeenAt: -1 }).limit(search ? 500 : 200);
 
         // Fetch latest active/paused conversation for each contact in one query
         const phones = contacts.map(c => c.phone);

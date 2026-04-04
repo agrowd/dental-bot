@@ -271,6 +271,82 @@ app.post('/bot/retry-step', async (req, res) => {
     }
 });
 
+// POST /bot/force-transition
+app.post('/bot/force-transition', async (req, res) => {
+    try {
+        if (!client || botState !== 'connected') {
+            return res.status(400).json({ error: 'El bot no está conectado a WhatsApp.' });
+        }
+
+        let { phone, targetStepId } = req.body;
+        if (!phone || !targetStepId) return res.status(400).json({ error: 'Número de teléfono y targetStepId requeridos.' });
+
+        const cleanPhone = phone.replace(/\D/g, '');
+        const chatId = `${cleanPhone}@c.us`;
+
+        const conversation = await Conversation.findOne({ phone: cleanPhone, state: { $in: ['active', 'paused', 'attention'] } });
+        if (!conversation) {
+            return res.status(400).json({ error: 'No hay ninguna conversación disponible para forzar la ruta.' });
+        }
+
+        const flow = await Flow.findOne({ _id: conversation.flowId });
+        if (!flow || !flow.published || !flow.published.steps) {
+            return res.status(400).json({ error: 'El flujo activo no se encontró.' });
+        }
+
+        const steps = flow.published.steps;
+        const targetStep = (typeof steps.get === 'function') ? steps.get(targetStepId) : steps[targetStepId];
+        if (!targetStep) {
+            return res.status(400).json({ error: 'El paso seleccionado no existe en el flujo.' });
+        }
+
+        console.log(`[FORCE TRANSITION] 🚀 Simulating step ${targetStepId} for ${cleanPhone}`);
+        
+        // Setup state to enter the targetStep cleanly
+        conversation.currentStepId = targetStepId;
+        conversation.state = 'active';
+        conversation.loopDetection.currentStepId = targetStepId;
+        conversation.loopDetection.messagesInCurrentStep = 0;
+        if (conversation.formState) conversation.formState.active = false;
+        if (conversation.freeTextState) conversation.freeTextState.active = false;
+
+        await Conversation.updateOne({ _id: conversation._id }, {
+            $set: { 
+                state: 'active',
+                currentStepId: targetStepId,
+                "loopDetection.currentStepId": targetStepId,
+                "loopDetection.messagesInCurrentStep": 0,
+                "formState.active": false,
+                "freeTextState.active": false
+            }
+        });
+
+        await Contact.updateOne({ phone: cleanPhone }, {
+            $push: { events: { event: `Ruta forzada por admin hacia la opción: ${targetStepId}`, date: new Date() } }
+        });
+
+        const contact = await Contact.findOne({ phone: cleanPhone });
+        
+        // Mock WhatsApp message layout enough to pass the .getChat() calls
+        const fakeMsg = {
+            body: '',
+            hasMedia: false,
+            from: chatId,
+            timestamp: Math.floor(Date.now() / 1000),
+            getChat: async () => await client.getChatById(chatId),
+            getContact: async () => await client.getContactById(chatId)
+        };
+
+        // Bypass lock manually
+        await handleStepLogic(client, fakeMsg, conversation, flow, contact);
+
+        res.json({ success: true, message: 'Salto ejecutado exitosamente.' });
+    } catch (error) {
+        console.error('[FORCE TRANSITION ERROR]', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Helper: Random delay (10-15 seconds)
 const randomDelay = (baseMs = 10000, rangeMs = 5000) => {
     return new Promise(resolve => setTimeout(resolve, baseMs + Math.random() * rangeMs));

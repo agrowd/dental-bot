@@ -147,6 +147,30 @@ export default function ConversationDetailPage() {
         }
     };
 
+    const handleForceTransition = async (targetStepId: string) => {
+        if (!confirm(`¿Simular que el usuario eligió esta opción? El bot avanzará a: ${targetStepId}`)) return;
+        
+        try {
+            setSending(true);
+            const res = await fetch('/api/bot/force-transition', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone, targetStepId })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                await fetchData();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        } catch (e) {
+            console.error('Error forcing transition:', e);
+            alert('Error al conectar con el servidor');
+        } finally {
+            setSending(false);
+        }
+    };
+
     const handleDelete = async () => {
         if (!confirm('¿Estás seguro de eliminar esta conversación y todo su historial?')) return;
 
@@ -325,6 +349,32 @@ export default function ConversationDetailPage() {
                             </div>
                         </div>
                     </div>
+
+                    {/* Acciones de Bot (Simular Opciones) */}
+                    {conversation.currentStepConfig?.options && conversation.currentStepConfig.options.length > 0 && (
+                        <div className="card p-4 border-l-4 border-indigo-500">
+                            <h3 className="font-semibold text-slate-900 mb-2 flex items-center gap-2">
+                                <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                </svg>
+                                Forzar Respuesta del Bot
+                            </h3>
+                            <p className="text-xs text-slate-500 mb-3">Si el usuario no contesta bien, podés simular que eligió una de estas opciones para avanzar el flujo:</p>
+                            <div className="space-y-2">
+                                {conversation.currentStepConfig.options.map((opt: any, i: number) => (
+                                    <button
+                                        key={i}
+                                        onClick={() => handleForceTransition(opt.nextStepId)}
+                                        disabled={sending}
+                                        className="w-full text-left p-2 rounded border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 text-sm transition-colors flex justify-between items-center group"
+                                    >
+                                        <span className="font-medium text-slate-700 group-hover:text-indigo-700">Opción &quot;{opt.key}&quot;</span>
+                                        <span className="text-xs text-slate-400 group-hover:text-indigo-500">→ {opt.nextStepId}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Tags — Editable */}
                     <div className="card p-4">

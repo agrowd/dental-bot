@@ -9,8 +9,20 @@ export async function GET(req: NextRequest) {
         await requireAuth(req);
         await dbConnect();
 
+        const { searchParams } = new URL(req.url);
+        const search = searchParams.get('search');
+        const matchStage: any = {};
+        
+        if (search) {
+            const cleanSearch = search.trim().replace(/[\-\+]/g, '');
+            matchStage.phone = new RegExp(cleanSearch, 'i');
+        }
+
         // Use aggregation to group by phone and get the most recent conversation for each
-        const conversations = await Conversation.aggregate([
+        const pipeline: any[] = [];
+        if (search) pipeline.push({ $match: matchStage });
+        
+        pipeline.push(
             { $sort: { updatedAt: -1 } },
             {
                 $group: {
@@ -20,8 +32,10 @@ export async function GET(req: NextRequest) {
             },
             { $replaceRoot: { newRoot: "$doc" } },
             { $sort: { updatedAt: -1 } },
-            { $limit: 100 }
-        ]);
+            { $limit: search ? 500 : 100 }
+        );
+
+        const conversations = await Conversation.aggregate(pipeline);
 
         return NextResponse.json({
             conversations: conversations.map(c => ({
