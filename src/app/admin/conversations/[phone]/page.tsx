@@ -122,15 +122,15 @@ export default function ConversationDetailPage() {
         setEditingTag(null);
     };
 
-    const handleForceBot = async () => {
-        if (!confirm(`¿Estás seguro de forzar el inicio del bot para el número ${phone}? Esto interrumpirá la conversación actual.`)) return;
+    const handleForceBot = async (targetStepId?: string) => {
+        if (!confirm(targetStepId ? `¿Estás seguro de forzar el bot al paso: ${targetStepId}?` : `¿Estás seguro de forzar el inicio del bot (Menú Principal) para el número ${phone}? Esto interrumpirá la conversación actual.`)) return;
 
         try {
             setSending(true);
             const res = await fetch('/api/bot/force-start', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phone })
+                body: JSON.stringify({ phone, targetStepId })
             });
             const data = await res.json();
             if (res.ok) {
@@ -259,12 +259,29 @@ export default function ConversationDetailPage() {
                         </button>
                     )}
                     <button
-                        onClick={handleForceBot}
+                        onClick={() => handleForceBot()}
                         disabled={sending}
                         className="btn bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-200"
                     >
-                        ▶️ Reiniciar Bot
+                        ▶️ Forzar Menú Principal
                     </button>
+                    {conversation?.allSteps && conversation.allSteps.length > 0 && (
+                        <select
+                            onChange={(e) => {
+                                if (e.target.value) {
+                                    handleForceBot(e.target.value);
+                                    e.target.value = ""; 
+                                }
+                            }}
+                            className="input px-2 py-1 text-sm bg-indigo-50 text-indigo-700 border-indigo-200 font-medium"
+                            disabled={sending}
+                        >
+                            <option value="">⚡ Inyectar en paso específico...</option>
+                            {conversation.allSteps.map((s: {id: string, name: string}) => (
+                                <option key={s.id} value={s.id}>{s.name} ({s.id})</option>
+                            ))}
+                        </select>
+                    )}
                     <button
                         onClick={handleDelete}
                         disabled={sending}

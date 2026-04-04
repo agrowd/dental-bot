@@ -32,6 +32,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 
         // Fetch flow to get the current step configuration (for the Force Options UI)
         let currentStepConfig = null;
+        let allSteps = [];
         if (conversation.flowId && conversation.currentStepId) {
             const flow = await Flow.findById(conversation.flowId);
             if (flow && flow.published && flow.published.steps) {
@@ -40,6 +41,17 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
                 currentStepConfig = (typeof steps.get === 'function') 
                     ? steps.get(conversation.currentStepId) 
                     : steps[conversation.currentStepId];
+
+                // Build allSteps array for UI dropdowns
+                if (typeof steps.entries === 'function') {
+                    for (const [key, val] of steps.entries()) {
+                        allSteps.push({ id: key, name: val.name || key });
+                    }
+                } else {
+                    for (const key of Object.keys(steps)) {
+                        allSteps.push({ id: key, name: steps[key].name || key });
+                    }
+                }
             }
         }
 
@@ -50,6 +62,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
                 flowVersion: conversation.flowVersion,
                 currentStepId: conversation.currentStepId,
                 currentStepConfig, // Added this field
+                allSteps, // Added allSteps to allow targeted injecting
                 state: conversation.state,
                 tags: conversation.tags,
                 createdAt: conversation.createdAt,

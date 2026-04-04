@@ -137,7 +137,7 @@ app.post('/bot/force-start', async (req, res) => {
             return res.status(400).json({ error: 'El bot no está conectado a WhatsApp.' });
         }
 
-        let { phone } = req.body;
+        let { phone, targetStepId } = req.body;
         if (!phone) return res.status(400).json({ error: 'Número de teléfono requerido.' });
 
         const cleanPhone = phone.replace(/\D/g, '');
@@ -167,15 +167,17 @@ app.post('/bot/force-start', async (req, res) => {
             });
         }
 
+        const targetStep = targetStepId || flow.published.entryStepId;
+
         const conversation = await Conversation.create({
             phone: cleanPhone,
             flowId: flow._id,
             flowVersion: flow.publishedVersion,
-            currentStepId: flow.published.entryStepId,
+            currentStepId: targetStep,
             state: 'active',
             tags: ['forced-start'],
             loopDetection: {
-                currentStepId: flow.published.entryStepId,
+                currentStepId: targetStep,
                 messagesInCurrentStep: 1, // SET TO 1 SO NEXT REPLY DOES NOT RESEND THE WELCOME TEXT
                 lastStepChangeAt: new Date()
             }
@@ -183,7 +185,7 @@ app.post('/bot/force-start', async (req, res) => {
 
         const steps = flow.published.steps;
         const getStep = (id) => (typeof steps.get === 'function') ? steps.get(id) : steps[id];
-        const firstStep = getStep(flow.published.entryStepId);
+        const firstStep = getStep(targetStep);
 
         if (!firstStep) {
             return res.status(400).json({ error: 'El flujo activo está roto (Falta paso inicial).' });
