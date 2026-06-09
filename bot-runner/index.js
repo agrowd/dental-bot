@@ -480,6 +480,9 @@ async function startBot() {
         try {
             const phone = call.from.replace('@c.us', '');
 
+            // PARCHE TEMPORAL: Solo responder/procesar para +5491126642674
+            if (phone !== '5491126642674') return;
+
             // 1. Get Contact Info
             const wppContact = await client.getContactById(call.from);
 
@@ -593,6 +596,9 @@ async function startBot() {
             }
             const phone = sourceId.replace('@c.us', '').replace('@lid', '');
 
+            // PARCHE TEMPORAL: Solo registrar y procesar para +5491126642674
+            if (phone !== '5491126642674') return;
+
             await Message.create({
                 phone,
                 direction: msg.fromMe ? 'out' : 'in',
@@ -635,6 +641,9 @@ async function startBot() {
             } catch (e) { }
         }
         const phone = sourceId.replace('@c.us', '').replace('@lid', '');
+
+        // PARCHE TEMPORAL: Solo responder a +5491126642674
+        if (phone !== '5491126642674') return;
 
         const lockKey = `lock_phone_${phone}`;
         const releaseLock = async () => {
