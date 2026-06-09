@@ -137,3 +137,15 @@ Se solucionó el problema crítico reportado por el cliente por el cual los lead
     *   Actualiza en cascada las colecciones de `Contact`, `Conversation` y `Message`.
 
 
+
+## 🛠️ Corrección de Pegado en Modal e Información de LIDs (09/06/2026)
+
+### 1. Habilitación de Pegado en "Forzar Inicio de Bot"
+Se corrigió la imposibilidad de pegar texto en el input del modal "Forzar Inicio del Bot" en [page.tsx](file:///c:/Users/Try%20Hard/Desktop/Nexte/dental-response/src/app/admin/leads/page.tsx).
+- **Controlador de Pegado Directo**: Se añadió un listener `onPaste` al input para interceptar el evento de pegado y actualizar directamente el estado de React con el texto sin formato del portapapeles.
+- **Botón Auxiliar de Pegado**: Se incorporó un botón "📋 Pegar" interactivo que utiliza la API `navigator.clipboard.readText()`. Si el navegador bloquea la lectura automática (por ejemplo, debido a que el sitio corre sobre un canal HTTP inseguro), muestra una advertencia guiando al usuario para que use los atajos estándar del sistema (Ctrl+V / clic derecho).
+
+### 2. Aclaración del Comportamiento de LIDs con Teléfonos Temporales
+Se explicó la razón técnica de por qué la consulta de prueba sobre el LID `/bot/test-lid?lid=200497797542048` con el teléfono temporal retorna `null`:
+- **Modelo de Privacidad de WhatsApp**: Los LIDs (Linked Device IDs) son identificadores privados generados de manera local para cada sesión. Una cuenta de WhatsApp de prueba conectada de forma temporal no tiene en su libreta de direcciones ni en su historial de chat ningún registro del contacto referenciado por ese LID. Por ende, los servidores de WhatsApp rechazan resolver el número real para esta cuenta temporal.
+- **Resolución al Conectar el Teléfono Real**: Al conectar la cuenta de WhatsApp oficial de la clínica, esta cuenta sí posee las claves criptográficas, historiales compartidos y contactos vinculados a esos LIDs. Esto permitirá que tanto el middleware dinámico de mensajes como la rutina de migración automática `runLidMigration` resuelvan, unifiquen y migren todos los LIDs del CRM a sus números telefónicos reales en MongoDB.

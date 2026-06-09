@@ -622,14 +622,37 @@ export default function LeadsPage() {
                             </p>
                             <div>
                                 <label className="label">Teléfono</label>
-                                <input
-                                    type="text"
-                                    value={forceBotPhone}
-                                    onChange={(e) => setForceBotPhone(e.target.value)}
-                                    placeholder="549..."
-                                    className="input w-full"
-                                    autoFocus
-                                />
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={forceBotPhone}
+                                        onChange={(e) => setForceBotPhone(e.target.value)}
+                                        onPaste={(e) => {
+                                            const pastedText = e.clipboardData.getData('text');
+                                            setForceBotPhone(pastedText);
+                                        }}
+                                        placeholder="549..."
+                                        className="input w-full"
+                                        autoFocus
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={async () => {
+                                            try {
+                                                const text = await navigator.clipboard.readText();
+                                                if (text) {
+                                                    setForceBotPhone(text);
+                                                }
+                                            } catch (err) {
+                                                alert("Para pegar automáticamente se requiere HTTPS o dar permiso. Por favor, usa Ctrl+V o botón derecho del mouse para pegar directamente.");
+                                            }
+                                        }}
+                                        className="btn btn-secondary px-3 py-2 flex items-center justify-center text-sm"
+                                        title="Pegar del portapapeles"
+                                    >
+                                        📋 Pegar
+                                    </button>
+                                </div>
                             </div>
                         </div>
                         <div className="p-4 bg-slate-50 border-t border-[var(--border)] flex justify-end gap-2">
