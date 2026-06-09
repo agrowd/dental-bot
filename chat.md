@@ -112,3 +112,23 @@ Para inyectar o actualizar datos de configuración directamente en MongoDB Atlas
 *   Ver logs de la aplicación Next.js: `docker-compose logs -f nextjs`
 *   Ver uso de recursos (RAM/CPU): `docker stats`
 *   Reiniciar un servicio específico: `docker-compose restart bot-runner`
+
+---
+
+## 🛠️ Corrección de Búsqueda de Leads y Mapeo LID (09/06/2026)
+
+Se solucionó el problema crítico reportado por el cliente por el cual los leads se registraban con identificadores LID aleatorios (ej: `167954796826725`) en lugar de sus números reales, rompiendo la búsqueda en el CRM.
+
+### Implementación en `bot-runner/index.js`:
+1.  **Helper `resolveLidToPhone`**: Resuelve cualquier ID que contenga `@lid` a su número telefónico real JID (`@c.us`) mediante la llamada interna `client.getContactLidAndPhone` (y con un fallback a `client.getContactById` si falla).
+2.  **Listeners Modificados**:
+    *   `call`: Resuelve el número de llamada para llamadas no agendadas.
+    *   `message_create`: Normaliza el identificador de los logs de mensajes que van a la base de datos.
+    *   `message`: Procesa el número limpio antes de los locks de concurrencia y de interactuar con el Flow Builder.
+3.  **Rutina de Migración (`runLidMigration`)**:
+    *   Se ejecuta asíncronamente cuando el bot se conecta (`client.on('ready')`).
+    *   Filtra contactos con IDs de longitud >= 14 o terminados en `@lid` (excluyendo newsletters).
+    *   Resuelve el teléfono real vía WhatsApp Web y actualiza los registros en base de datos.
+    *   **Fusión de Duplicados**: Si ya existe una ficha con el número de teléfono limpio, fusiona etiquetas, eventos e historiales, y elimina el registro huérfano de LID.
+    *   Actualiza en cascada las colecciones de `Contact`, `Conversation` y `Message`.
+

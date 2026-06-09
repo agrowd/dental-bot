@@ -454,12 +454,17 @@ async function startBot() {
     });
 
     // Ready handler
-    client.on('ready', () => {
+    client.on('ready', async () => {
         console.log('✅ WhatsApp bot is ready!');
         botState = 'connected';
         currentQR = null;
         sessionStartTime = new Date(); // Record activation time
         if (qrTimeout) clearTimeout(qrTimeout);
+
+        // Run the background database migration for LID contacts
+        runLidMigration(client).catch(err => {
+            console.error('[MIGRATION] Error in runLidMigration:', err);
+        });
     });
 
     // Disconnected handler
@@ -478,7 +483,8 @@ async function startBot() {
     client.on('call', async (call) => {
         console.log('[TRACE] 📞 Incoming call from:', call.from);
         try {
-            const phone = call.from.replace('@c.us', '');
+            const sourceId = await resolveLidToPhone(client, call.from);
+            const phone = sourceId.replace('@c.us', '').replace('@lid', '');
 
             // 1. Get Contact Info
             const wppContact = await client.getContactById(call.from);
@@ -585,12 +591,7 @@ async function startBot() {
             if (msg.from.endsWith('@g.us') || msg.to.endsWith('@g.us')) return;
 
             let sourceId = msg.fromMe ? msg.to : msg.from;
-            if (sourceId.includes('@lid')) {
-                try {
-                    const wppContact = await client.getContactById(sourceId);
-                    if (wppContact && wppContact.number) sourceId = wppContact.number;
-                } catch (e) { }
-            }
+            sourceId = await resolveLidToPhone(client, sourceId);
             const phone = sourceId.replace('@c.us', '').replace('@lid', '');
 
             await Message.create({
@@ -628,12 +629,7 @@ async function startBot() {
         processedMessages.add(messageId);
 
         let sourceId = msg.from;
-        if (sourceId.includes('@lid')) {
-            try {
-                const wppContact = await client.getContactById(sourceId);
-                if (wppContact && wppContact.number) sourceId = wppContact.number;
-            } catch (e) { }
-        }
+        sourceId = await resolveLidToPhone(client, sourceId);
         const phone = sourceId.replace('@c.us', '').replace('@lid', '');
 
         const lockKey = `lock_phone_${phone}`;
@@ -1910,6 +1906,125 @@ async function triggerAutoHandoff(conversation, contact, currentStep) {
     }
 
     console.log('Auto-handoff triggered for:', conversation.phone);
+}
+
+// Helper to resolve LID to real JID
+async function resolveLidToPhone(client, sourceId) {
+    if (!sourceId || !sourceId.includes('@lid')) return sourceId;
+    try {
+        const mapping = await client.getContactLidAndPhone(sourceId);
+        if (mapping && mapping[0] && mapping[0].pn) {
+            return mapping[0].pn;
+        }
+    } catch (e) {
+        console.log(`[TRACE] getContactLidAndPhone failed for ${sourceId}:`, e.message);
+    }
+    try {
+        const wppContact = await client.getContactById(sourceId);
+        if (wppContact && wppContact.number && wppContact.number.length <= 13) {
+            return wppContact.number + '@c.us';
+        }
+    } catch (e) { }
+    return sourceId;
+}
+
+// Background database migration script to resolve historical LID records
+async function runLidMigration(client) {
+    console.log('[MIGRATION] Starting database LID-to-Phone migration...');
+    try {
+        const contacts = await Contact.find({});
+        console.log(`[MIGRATION] Scanning ${contacts.length} database contacts...`);
+        let migratedCount = 0;
+
+        for (const c of contacts) {
+            const phone = c.phone || '';
+            const isLid = (phone.includes('@lid') || (/^\d+$/.test(phone) && phone.length >= 14)) && !phone.includes('@newsletter');
+            if (!isLid) continue;
+
+            console.log(`[MIGRATION] Found LID contact: phone=${phone}, name=${c.name}`);
+            const lidJid = phone.includes('@lid') ? phone : `${phone}@lid`;
+            let realPhone = null;
+
+            try {
+                const mapping = await client.getContactLidAndPhone(lidJid);
+                if (mapping && mapping[0] && mapping[0].pn) {
+                    realPhone = mapping[0].pn.replace('@c.us', '');
+                }
+            } catch (err) {
+                console.log(`[MIGRATION] getContactLidAndPhone failed for ${lidJid}:`, err.message);
+            }
+
+            if (!realPhone) {
+                try {
+                    const wppContact = await client.getContactById(lidJid);
+                    if (wppContact && wppContact.number && wppContact.number.length <= 13) {
+                        realPhone = wppContact.number;
+                    }
+                } catch (err) {
+                    console.log(`[MIGRATION] Fallback getContactById failed for ${lidJid}:`, err.message);
+                }
+            }
+
+            if (!realPhone) {
+                console.log(`[MIGRATION] ⚠️ Could not resolve real phone number for ${phone}`);
+                continue;
+            }
+
+            console.log(`[MIGRATION] ✅ Resolved LID ${phone} to Phone Number: ${realPhone}`);
+
+            const oldPhone = c.phone;
+
+            // 1. Merge or update contact
+            const existingContact = await Contact.findOne({ phone: realPhone });
+            if (existingContact) {
+                console.log(`[MIGRATION] Merge contact: ${oldPhone} into existing ${realPhone}`);
+                if (c.tags && c.tags.length > 0) {
+                    const mergedTags = Array.from(new Set([...(existingContact.tags || []), ...c.tags]));
+                    existingContact.tags = mergedTags;
+                }
+                if (c.name && (!existingContact.name || existingContact.name === existingContact.pushname)) {
+                    existingContact.name = c.name;
+                }
+                if (c.events && c.events.length > 0) {
+                    existingContact.events = [...(existingContact.events || []), ...c.events];
+                }
+                await existingContact.save();
+                await Contact.deleteOne({ _id: c._id });
+            } else {
+                console.log(`[MIGRATION] Update contact phone: ${oldPhone} -> ${realPhone}`);
+                c.phone = realPhone;
+                // Clean @lid from name if it matches phone
+                if (c.name && c.name.includes('@lid')) {
+                    c.name = '';
+                }
+                await c.save();
+            }
+
+            // 2. Update Conversations
+            const convs = await Conversation.find({ phone: oldPhone });
+            for (const conv of convs) {
+                const existingConv = await Conversation.findOne({ phone: realPhone, state: conv.state });
+                if (existingConv) {
+                    console.log(`[MIGRATION] Delete duplicate conversation for ${realPhone}`);
+                    await Conversation.deleteOne({ _id: conv._id });
+                } else {
+                    console.log(`[MIGRATION] Update conversation phone: ${oldPhone} -> ${realPhone}`);
+                    conv.phone = realPhone;
+                    await conv.save();
+                }
+            }
+
+            // 3. Update Messages
+            console.log(`[MIGRATION] Update messages for phone: ${oldPhone} -> ${realPhone}`);
+            await Message.updateMany({ phone: oldPhone }, { $set: { phone: realPhone } });
+
+            migratedCount++;
+        }
+
+        console.log(`[MIGRATION] Database LID-to-Phone migration finished. Total migrated: ${migratedCount}`);
+    } catch (error) {
+        console.error('[MIGRATION] Fatal migration error:', error);
+    }
 }
 
 // Start Express server
