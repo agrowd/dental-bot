@@ -130,6 +130,92 @@ app.get('/bot/info', async (req, res) => {
     }
 });
 
+// GET /bot/test-lid
+app.get('/bot/test-lid', async (req, res) => {
+    if (botState !== 'connected' || !client) {
+        return res.status(404).json({ error: 'Bot not connected' });
+    }
+    const { lid } = req.query;
+    if (!lid) {
+        return res.status(400).json({ error: 'Parameter "lid" is required' });
+    }
+    const lidJid = lid.includes('@lid') ? lid : `${lid}@lid`;
+    const results = {};
+
+    try {
+        // Method 1: enforceLidAndPnRetrieval (cached/direct check)
+        results.enforceLidAndPnRetrieval = await client.pupPage.evaluate(async (jid) => {
+            try {
+                if (window.WWebJS && window.WWebJS.enforceLidAndPnRetrieval) {
+                    const r = await window.WWebJS.enforceLidAndPnRetrieval(jid);
+                    return {
+                        lid: r.lid ? r.lid._serialized : null,
+                        phone: r.phone ? r.phone._serialized : null
+                    };
+                }
+            } catch (e) {
+                return { error: e.message };
+            }
+            return null;
+        }, lidJid);
+
+        // Method 2: LidUtils.getPhoneNumber directly
+        results.getPhoneNumberDirectly = await client.pupPage.evaluate((jid) => {
+            try {
+                if (window.Store && window.Store.WidFactory && window.Store.LidUtils) {
+                    const wid = window.Store.WidFactory.createWid(jid);
+                    const pnWid = window.Store.LidUtils.getPhoneNumber(wid);
+                    return pnWid ? pnWid._serialized : null;
+                }
+            } catch (e) {
+                return { error: e.message };
+            }
+            return null;
+        }, lidJid);
+
+        // Method 3: Load Contact via Store.Contact.find, then check getPhoneNumber
+        results.contactFindThenGetPhoneNumber = await client.pupPage.evaluate(async (jid) => {
+            try {
+                if (window.Store && window.Store.WidFactory && window.Store.Contact && window.Store.LidUtils) {
+                    const wid = window.Store.WidFactory.createWid(jid);
+                    const contact = await window.Store.Contact.find(wid);
+                    const pnWid = window.Store.LidUtils.getPhoneNumber(wid);
+                    return {
+                        contactId: contact.id ? contact.id._serialized : null,
+                        phoneNumberProp: contact.phoneNumber ? (typeof contact.phoneNumber === 'object' ? contact.phoneNumber._serialized : contact.phoneNumber) : null,
+                        pnWid: pnWid ? pnWid._serialized : null
+                    };
+                }
+            } catch (e) {
+                return { error: e.message };
+            }
+            return null;
+        }, lidJid);
+
+        // Method 4: Load Chat via Store.Chat.find, then check getPhoneNumber
+        results.chatFindThenGetPhoneNumber = await client.pupPage.evaluate(async (jid) => {
+            try {
+                if (window.Store && window.Store.WidFactory && window.Store.Chat && window.Store.LidUtils) {
+                    const wid = window.Store.WidFactory.createWid(jid);
+                    const chat = await window.Store.Chat.find(wid);
+                    const pnWid = window.Store.LidUtils.getPhoneNumber(wid);
+                    return {
+                        chatId: chat.id ? chat.id._serialized : null,
+                        pnWid: pnWid ? pnWid._serialized : null
+                    };
+                }
+            } catch (e) {
+                return { error: e.message };
+            }
+            return null;
+        }, lidJid);
+
+        res.json({ lidJid, results });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // POST /bot/force-start
 app.post('/bot/force-start', async (req, res) => {
     try {
