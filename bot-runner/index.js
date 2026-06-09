@@ -1911,20 +1911,55 @@ async function triggerAutoHandoff(conversation, contact, currentStep) {
 // Helper to resolve LID to real JID
 async function resolveLidToPhone(client, sourceId) {
     if (!sourceId || !sourceId.includes('@lid')) return sourceId;
+    
+    // 1. Try resolving via LidUtils in page context (extremely reliable in multi-device)
     try {
-        const mapping = await client.getContactLidAndPhone(sourceId);
-        if (mapping && mapping[0] && mapping[0].pn) {
-            return mapping[0].pn;
+        const resolvedJid = await client.pupPage.evaluate((lid) => {
+            try {
+                if (window.Store && window.Store.WidFactory && window.Store.LidUtils) {
+                    const wid = window.Store.WidFactory.createWid(lid);
+                    const pnWid = window.Store.LidUtils.getPhoneNumber(wid);
+                    if (pnWid && pnWid._serialized) {
+                        return pnWid._serialized;
+                    }
+                }
+            } catch (err) {
+                console.error('LidUtils resolution failed in page context:', err);
+            }
+            return null;
+        }, sourceId);
+
+        if (resolvedJid) {
+            console.log(`[TRACE] Resolved LID ${sourceId} to phone JID ${resolvedJid} via LidUtils`);
+            return resolvedJid;
+        }
+    } catch (e) {
+        console.log(`[TRACE] LidUtils resolution failed for ${sourceId}:`, e.message);
+    }
+
+    // 2. Try getContactLidAndPhone if it exists (for compatibility with other versions)
+    try {
+        if (typeof client.getContactLidAndPhone === 'function') {
+            const mapping = await client.getContactLidAndPhone(sourceId);
+            if (mapping && mapping[0] && mapping[0].pn) {
+                return mapping[0].pn;
+            }
         }
     } catch (e) {
         console.log(`[TRACE] getContactLidAndPhone failed for ${sourceId}:`, e.message);
     }
+
+    // 3. Fallback: getContactById check if it returns JID or phone number
     try {
         const wppContact = await client.getContactById(sourceId);
+        if (wppContact && wppContact.id && wppContact.id._serialized && wppContact.id._serialized.endsWith('@c.us')) {
+            return wppContact.id._serialized;
+        }
         if (wppContact && wppContact.number && wppContact.number.length <= 13) {
             return wppContact.number + '@c.us';
         }
     } catch (e) { }
+
     return sourceId;
 }
 
@@ -1945,19 +1980,49 @@ async function runLidMigration(client) {
             const lidJid = phone.includes('@lid') ? phone : `${phone}@lid`;
             let realPhone = null;
 
+            // 1. Try LidUtils first in page context
             try {
-                const mapping = await client.getContactLidAndPhone(lidJid);
-                if (mapping && mapping[0] && mapping[0].pn) {
-                    realPhone = mapping[0].pn.replace('@c.us', '');
+                const resolvedJid = await client.pupPage.evaluate((lid) => {
+                    try {
+                        if (window.Store && window.Store.WidFactory && window.Store.LidUtils) {
+                            const wid = window.Store.WidFactory.createWid(lid);
+                            const pnWid = window.Store.LidUtils.getPhoneNumber(wid);
+                            if (pnWid && pnWid._serialized) {
+                                return pnWid._serialized;
+                            }
+                        }
+                    } catch (err) {}
+                    return null;
+                }, lidJid);
+
+                if (resolvedJid) {
+                    realPhone = resolvedJid.replace('@c.us', '');
                 }
             } catch (err) {
-                console.log(`[MIGRATION] getContactLidAndPhone failed for ${lidJid}:`, err.message);
+                console.log(`[MIGRATION] LidUtils resolution failed for ${lidJid}:`, err.message);
             }
 
+            // 2. Try getContactLidAndPhone
+            if (!realPhone) {
+                try {
+                    if (typeof client.getContactLidAndPhone === 'function') {
+                        const mapping = await client.getContactLidAndPhone(lidJid);
+                        if (mapping && mapping[0] && mapping[0].pn) {
+                            realPhone = mapping[0].pn.replace('@c.us', '');
+                        }
+                    }
+                } catch (err) {
+                    console.log(`[MIGRATION] getContactLidAndPhone failed for ${lidJid}:`, err.message);
+                }
+            }
+
+            // 3. Fallback: getContactById JID check
             if (!realPhone) {
                 try {
                     const wppContact = await client.getContactById(lidJid);
-                    if (wppContact && wppContact.number && wppContact.number.length <= 13) {
+                    if (wppContact && wppContact.id && wppContact.id._serialized && wppContact.id._serialized.endsWith('@c.us')) {
+                        realPhone = wppContact.id._serialized.replace('@c.us', '');
+                    } else if (wppContact && wppContact.number && wppContact.number.length <= 13) {
                         realPhone = wppContact.number;
                     }
                 } catch (err) {
