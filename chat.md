@@ -119,8 +119,11 @@ Para inyectar o actualizar datos de configuración directamente en MongoDB Atlas
 
 Se solucionó el problema crítico reportado por el cliente por el cual los leads se registraban con identificadores LID aleatorios (ej: `167954796826725`) en lugar de sus números reales, rompiendo la búsqueda en el CRM.
 
-### Implementación en `bot-runner/index.js`:
-1.  **Helper `resolveLidToPhone`**: Resuelve cualquier ID que contenga `@lid` a su número telefónico real JID (`@c.us`) mediante la llamada interna `client.getContactLidAndPhone` (y con un fallback a `client.getContactById` si falla).
+### Implementación Final en `bot-runner/index.js` (09/06/2026):
+1.  **Helper `resolveLidToPhone`**:
+    *   **Paso 1 (LidUtils)**: Intenta resolver el número evaluando `window.Store.LidUtils.getPhoneNumber(wid)` dentro del contexto del navegador (Puppeteer). Esto es extremadamente confiable ya que utiliza las APIs internas de WhatsApp Web para mapear LIDs a JIDs telefónicos.
+    *   **Paso 2 (getContactLidAndPhone)**: Si el método de biblioteca está disponible, lo usa de respaldo.
+    *   **Paso 3 (getContactById)**: Si el objeto de contacto ya posee la propiedad deserializada de número telefónico limpio, la retorna.
 2.  **Listeners Modificados**:
     *   `call`: Resuelve el número de llamada para llamadas no agendadas.
     *   `message_create`: Normaliza el identificador de los logs de mensajes que van a la base de datos.
@@ -128,7 +131,8 @@ Se solucionó el problema crítico reportado por el cliente por el cual los lead
 3.  **Rutina de Migración (`runLidMigration`)**:
     *   Se ejecuta asíncronamente cuando el bot se conecta (`client.on('ready')`).
     *   Filtra contactos con IDs de longitud >= 14 o terminados en `@lid` (excluyendo newsletters).
-    *   Resuelve el teléfono real vía WhatsApp Web y actualiza los registros en base de datos.
+    *   Resuelve el teléfono real a través de los tres métodos anteriores y actualiza los registros en base de datos.
     *   **Fusión de Duplicados**: Si ya existe una ficha con el número de teléfono limpio, fusiona etiquetas, eventos e historiales, y elimina el registro huérfano de LID.
     *   Actualiza en cascada las colecciones de `Contact`, `Conversation` y `Message`.
+
 
