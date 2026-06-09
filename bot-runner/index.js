@@ -1912,7 +1912,31 @@ async function triggerAutoHandoff(conversation, contact, currentStep) {
 async function resolveLidToPhone(client, sourceId) {
     if (!sourceId || !sourceId.includes('@lid')) return sourceId;
     
-    // 1. Try resolving via LidUtils in page context (extremely reliable in multi-device)
+    // 1. Try enforceLidAndPnRetrieval in page context (extremely reliable, queries server if not cached)
+    try {
+        const resolvedJid = await client.pupPage.evaluate(async (lid) => {
+            try {
+                if (window.WWebJS && window.WWebJS.enforceLidAndPnRetrieval) {
+                    const res = await window.WWebJS.enforceLidAndPnRetrieval(lid);
+                    if (res && res.phone && res.phone._serialized) {
+                        return res.phone._serialized;
+                    }
+                }
+            } catch (err) {
+                console.error('enforceLidAndPnRetrieval failed in page context:', err);
+            }
+            return null;
+        }, sourceId);
+
+        if (resolvedJid) {
+            console.log(`[TRACE] Resolved LID ${sourceId} to phone JID ${resolvedJid} via enforceLidAndPnRetrieval`);
+            return resolvedJid;
+        }
+    } catch (e) {
+        console.log(`[TRACE] enforceLidAndPnRetrieval failed for ${sourceId}:`, e.message);
+    }
+
+    // 2. Try resolving via LidUtils in page context (local cache check fallback)
     try {
         const resolvedJid = await client.pupPage.evaluate((lid) => {
             try {
@@ -1937,7 +1961,7 @@ async function resolveLidToPhone(client, sourceId) {
         console.log(`[TRACE] LidUtils resolution failed for ${sourceId}:`, e.message);
     }
 
-    // 2. Try getContactLidAndPhone if it exists (for compatibility with other versions)
+    // 3. Try getContactLidAndPhone if it exists (for compatibility with other versions)
     try {
         if (typeof client.getContactLidAndPhone === 'function') {
             const mapping = await client.getContactLidAndPhone(sourceId);
@@ -1949,7 +1973,7 @@ async function resolveLidToPhone(client, sourceId) {
         console.log(`[TRACE] getContactLidAndPhone failed for ${sourceId}:`, e.message);
     }
 
-    // 3. Fallback: getContactById check if it returns JID or phone number
+    // 4. Fallback: getContactById check if it returns JID or phone number
     try {
         const wppContact = await client.getContactById(sourceId);
         if (wppContact && wppContact.id && wppContact.id._serialized && wppContact.id._serialized.endsWith('@c.us')) {
@@ -1980,15 +2004,14 @@ async function runLidMigration(client) {
             const lidJid = phone.includes('@lid') ? phone : `${phone}@lid`;
             let realPhone = null;
 
-            // 1. Try LidUtils first in page context
+            // 1. Try enforceLidAndPnRetrieval first in page context (queries server if not cached)
             try {
-                const resolvedJid = await client.pupPage.evaluate((lid) => {
+                const resolvedJid = await client.pupPage.evaluate(async (lid) => {
                     try {
-                        if (window.Store && window.Store.WidFactory && window.Store.LidUtils) {
-                            const wid = window.Store.WidFactory.createWid(lid);
-                            const pnWid = window.Store.LidUtils.getPhoneNumber(wid);
-                            if (pnWid && pnWid._serialized) {
-                                return pnWid._serialized;
+                        if (window.WWebJS && window.WWebJS.enforceLidAndPnRetrieval) {
+                            const res = await window.WWebJS.enforceLidAndPnRetrieval(lid);
+                            if (res && res.phone && res.phone._serialized) {
+                                return res.phone._serialized;
                             }
                         }
                     } catch (err) {}
@@ -1999,10 +2022,34 @@ async function runLidMigration(client) {
                     realPhone = resolvedJid.replace('@c.us', '');
                 }
             } catch (err) {
-                console.log(`[MIGRATION] LidUtils resolution failed for ${lidJid}:`, err.message);
+                console.log(`[MIGRATION] enforceLidAndPnRetrieval failed for ${lidJid}:`, err.message);
             }
 
-            // 2. Try getContactLidAndPhone
+            // 2. Try LidUtils next in page context (local cache fallback)
+            if (!realPhone) {
+                try {
+                    const resolvedJid = await client.pupPage.evaluate((lid) => {
+                        try {
+                            if (window.Store && window.Store.WidFactory && window.Store.LidUtils) {
+                                const wid = window.Store.WidFactory.createWid(lid);
+                                const pnWid = window.Store.LidUtils.getPhoneNumber(wid);
+                                if (pnWid && pnWid._serialized) {
+                                    return pnWid._serialized;
+                                }
+                            }
+                        } catch (err) {}
+                        return null;
+                    }, lidJid);
+
+                    if (resolvedJid) {
+                        realPhone = resolvedJid.replace('@c.us', '');
+                    }
+                } catch (err) {
+                    console.log(`[MIGRATION] LidUtils resolution failed for ${lidJid}:`, err.message);
+                }
+            }
+
+            // 3. Try getContactLidAndPhone
             if (!realPhone) {
                 try {
                     if (typeof client.getContactLidAndPhone === 'function') {
@@ -2016,7 +2063,7 @@ async function runLidMigration(client) {
                 }
             }
 
-            // 3. Fallback: getContactById JID check
+            // 4. Fallback: getContactById JID check
             if (!realPhone) {
                 try {
                     const wppContact = await client.getContactById(lidJid);

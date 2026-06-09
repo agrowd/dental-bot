@@ -121,9 +121,10 @@ Se solucionó el problema crítico reportado por el cliente por el cual los lead
 
 ### Implementación Final en `bot-runner/index.js` (09/06/2026):
 1.  **Helper `resolveLidToPhone`**:
-    *   **Paso 1 (LidUtils)**: Intenta resolver el número evaluando `window.Store.LidUtils.getPhoneNumber(wid)` dentro del contexto del navegador (Puppeteer). Esto es extremadamente confiable ya que utiliza las APIs internas de WhatsApp Web para mapear LIDs a JIDs telefónicos.
-    *   **Paso 2 (getContactLidAndPhone)**: Si el método de biblioteca está disponible, lo usa de respaldo.
-    *   **Paso 3 (getContactById)**: Si el objeto de contacto ya posee la propiedad deserializada de número telefónico limpio, la retorna.
+    *   **Paso 1 (enforceLidAndPnRetrieval)**: Utiliza `window.WWebJS.enforceLidAndPnRetrieval` que llama internamente a `window.Store.QueryExist(wid)` en el navegador, consultando a los servidores de WhatsApp para mapear y traer el número telefónico real del usuario, incluso si no está guardado o en la caché local.
+    *   **Paso 2 (LidUtils)**: Busca en la caché local del navegador evaluando `window.Store.LidUtils.getPhoneNumber(wid)`.
+    *   **Paso 3 (getContactLidAndPhone)**: Si el método de la biblioteca está disponible, lo usa de respaldo.
+    *   **Paso 4 (getContactById)**: Si el objeto de contacto ya posee la propiedad deserializada de número telefónico limpio, la retorna.
 2.  **Listeners Modificados**:
     *   `call`: Resuelve el número de llamada para llamadas no agendadas.
     *   `message_create`: Normaliza el identificador de los logs de mensajes que van a la base de datos.
@@ -131,7 +132,7 @@ Se solucionó el problema crítico reportado por el cliente por el cual los lead
 3.  **Rutina de Migración (`runLidMigration`)**:
     *   Se ejecuta asíncronamente cuando el bot se conecta (`client.on('ready')`).
     *   Filtra contactos con IDs de longitud >= 14 o terminados en `@lid` (excluyendo newsletters).
-    *   Resuelve el teléfono real a través de los tres métodos anteriores y actualiza los registros en base de datos.
+    *   Resuelve el teléfono real a través de los cuatro métodos anteriores (consultando el servidor de WhatsApp de ser necesario) y actualiza los registros en base de datos.
     *   **Fusión de Duplicados**: Si ya existe una ficha con el número de teléfono limpio, fusiona etiquetas, eventos e historiales, y elimina el registro huérfano de LID.
     *   Actualiza en cascada las colecciones de `Contact`, `Conversation` y `Message`.
 
