@@ -10,9 +10,17 @@ export DOCKER_BUILDKIT=0
 export COMPOSE_DOCKER_CLI_BUILD=0
 echo "✅ Modo compatibilidad activado"
 
+# Detectar comando docker compose
+if command -v docker-compose &> /dev/null; then
+    DOCKER_COMPOSE="docker-compose"
+else
+    DOCKER_COMPOSE="docker compose"
+fi
+echo "✅ Comando detectado: $DOCKER_COMPOSE"
+
 # 2. Limpieza Agresiva (Safe Mode)
 echo "🧹 Limpiando contenedores y procesos previos..."
-docker-compose down --remove-orphans || true
+$DOCKER_COMPOSE down --remove-orphans || true
 docker system prune -f || true
 echo "✅ Limpieza completada"
 
@@ -22,7 +30,7 @@ git pull
 
 # 4. Reconstruir y Levantar
 echo "🏗️  Construyendo y levantando servicios..."
-docker-compose up -d --build
+$DOCKER_COMPOSE up -d --build
 
 # 5. Verificación
 echo "✅ Despliegue completado."
