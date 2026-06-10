@@ -20,10 +20,31 @@ export async function GET(req: NextRequest) {
         if (search) {
             const cleanSearch = search.trim().replace(/[\-\+]/g, '');
             const cleanPhoneSearch = search.trim().replace(/[\s\-\+]/g, '');
+            
+            // Normalize Argentine prefixes and other local search formats (strip leading 549, 54, 0, 15)
+            let prefixStrippedPhone = cleanPhoneSearch;
+            if (prefixStrippedPhone.startsWith('549')) {
+                prefixStrippedPhone = prefixStrippedPhone.substring(3);
+            } else if (prefixStrippedPhone.startsWith('54')) {
+                prefixStrippedPhone = prefixStrippedPhone.substring(2);
+                if (prefixStrippedPhone.startsWith('9')) {
+                    prefixStrippedPhone = prefixStrippedPhone.substring(1);
+                }
+            }
+            if (prefixStrippedPhone.startsWith('0')) {
+                prefixStrippedPhone = prefixStrippedPhone.substring(1);
+            }
+            if (prefixStrippedPhone.startsWith('15')) {
+                prefixStrippedPhone = prefixStrippedPhone.substring(2);
+            }
+
             const regex = new RegExp(cleanSearch, 'i');
             const phoneRegex = new RegExp(cleanPhoneSearch, 'i');
+            const strippedPhoneRegex = new RegExp(prefixStrippedPhone, 'i');
+            
             query.$or = [
                 { phone: phoneRegex },
+                { phone: strippedPhoneRegex },
                 { name: regex },
                 { pushname: regex },
                 { email: regex }

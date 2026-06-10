@@ -15,7 +15,28 @@ export async function GET(req: NextRequest) {
         
         if (search) {
             const cleanSearch = search.trim().replace(/[\s\-\+]/g, '');
-            matchStage.phone = new RegExp(cleanSearch, 'i');
+            
+            // Normalize Argentine prefixes and other local search formats (strip leading 549, 54, 0, 15)
+            let prefixStrippedPhone = cleanSearch;
+            if (prefixStrippedPhone.startsWith('549')) {
+                prefixStrippedPhone = prefixStrippedPhone.substring(3);
+            } else if (prefixStrippedPhone.startsWith('54')) {
+                prefixStrippedPhone = prefixStrippedPhone.substring(2);
+                if (prefixStrippedPhone.startsWith('9')) {
+                    prefixStrippedPhone = prefixStrippedPhone.substring(1);
+                }
+            }
+            if (prefixStrippedPhone.startsWith('0')) {
+                prefixStrippedPhone = prefixStrippedPhone.substring(1);
+            }
+            if (prefixStrippedPhone.startsWith('15')) {
+                prefixStrippedPhone = prefixStrippedPhone.substring(2);
+            }
+
+            matchStage.$or = [
+                { phone: new RegExp(cleanSearch, 'i') },
+                { phone: new RegExp(prefixStrippedPhone, 'i') }
+            ];
         }
 
         // Use aggregation to group by phone and get the most recent conversation for each
