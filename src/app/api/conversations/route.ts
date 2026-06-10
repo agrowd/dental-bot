@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
         const matchStage: any = {};
         
         if (search) {
-            const cleanSearch = search.trim().replace(/[\-\+]/g, '');
+            const cleanSearch = search.trim().replace(/[\s\-\+]/g, '');
             matchStage.phone = new RegExp(cleanSearch, 'i');
         }
 

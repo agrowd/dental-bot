@@ -19,9 +19,11 @@ export async function GET(req: NextRequest) {
         
         if (search) {
             const cleanSearch = search.trim().replace(/[\-\+]/g, '');
+            const cleanPhoneSearch = search.trim().replace(/[\s\-\+]/g, '');
             const regex = new RegExp(cleanSearch, 'i');
+            const phoneRegex = new RegExp(cleanPhoneSearch, 'i');
             query.$or = [
-                { phone: regex },
+                { phone: phoneRegex },
                 { name: regex },
                 { pushname: regex },
                 { email: regex }

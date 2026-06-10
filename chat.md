@@ -169,3 +169,9 @@ El cliente reportó la necesidad de poder copiar y pegar directamente números c
 Se analizó el término "Jenny" en base a las grabaciones históricas de audio (`conversaciones_analizar/audio_captura_13.txt`).
 - **Significado**: "Jenny" hace referencia a un segmento específico de clientes/pacientes minoristas que son muy sensibles a la falta de respuesta y propensos a dejar malas calificaciones en redes si el bot se cuelga. Salvador copia números de este chat de soporte para introducirlos en el CRM y forzar la reanudación o inicio del bot.
 
+### 4. Búsqueda Tolerante a Formato (Spaces/Hyphens/Plus)
+El cliente reportó que buscar números copiados de WhatsApp con espacios (ej. `+54 9 11 4411-8569`) no retornaba resultados.
+- **Implementación**:
+  - En la API de contactos ([api/contacts/route.ts](file:///c:/Users/Try%20Hard/Desktop/Nexte/dental-response/src/app/api/contacts/route.ts)), se separó la sanitización telefónica para remover también espacios (`\s`). Las búsquedas de nombres preservan los espacios de forma natural.
+  - En la API de conversaciones ([api/conversations/route.ts](file:///c:/Users/Try%20Hard/Desktop/Nexte/dental-response/src/app/api/conversations/route.ts)), se removieron los espacios de la sanitización del query telefónico.
+  - En la vista frontend de conversaciones ([conversations/page.tsx](file:///c:/Users/Try%20Hard/Desktop/Nexte/dental-response/src/app/admin/conversations/page.tsx)), se normalizó la query del buscador eliminando caracteres especiales antes de filtrar del lado del cliente, garantizando concordancia con el número sin espacios de la base de datos.

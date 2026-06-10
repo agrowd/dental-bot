@@ -44,7 +44,8 @@ export default function ConversationsPage() {
         const matchesState = stateFilter === 'all'
             || (stateFilter === 'attention' ? (conv.tags || []).some((t: string) => ATTENTION_TAGS.includes(t))
                 : conv.state === stateFilter);
-        const matchesSearch = conv.phone.includes(searchQuery);
+        const cleanQuery = searchQuery.replace(/[\s\-\+]/g, '');
+        const matchesSearch = !searchQuery || conv.phone.includes(cleanQuery);
         return matchesState && matchesSearch;
     });
 
