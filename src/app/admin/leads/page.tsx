@@ -75,7 +75,7 @@ export default function LeadsPage() {
     }
 
     async function handleForceBot(customPhone?: string) {
-        const phoneToUse = customPhone || forceBotPhone;
+        const phoneToUse = (customPhone || forceBotPhone || '').replace(/\D/g, '');
         if (!phoneToUse) {
             alert('Ingresa un número de teléfono válido.');
             return;
@@ -107,9 +107,10 @@ export default function LeadsPage() {
     }
 
     async function handlePauseBot(phone: string) {
-        if (!confirm(`¿Pausar el bot para el número ${phone}?`)) return;
+        const cleanPhone = phone.replace(/\D/g, '');
+        if (!confirm(`¿Pausar el bot para el número ${cleanPhone}?`)) return;
         try {
-            const res = await fetch(`/api/conversations/${encodeURIComponent(phone)}`, {
+            const res = await fetch(`/api/conversations/${encodeURIComponent(cleanPhone)}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ state: 'paused' })
@@ -126,13 +127,14 @@ export default function LeadsPage() {
     }
 
     async function handleRetryStep(phone: string) {
-        if (!confirm(`¿Destrabar el bot para ${phone}? Se reenviará el mensaje del paso en el que se trabó.`)) return;
+        const cleanPhone = phone.replace(/\D/g, '');
+        if (!confirm(`¿Destrabar el bot para ${cleanPhone}? Se reenviará el mensaje del paso en el que se trabó.`)) return;
 
         try {
             const res = await fetch('/api/bot/retry-step', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phone })
+                body: JSON.stringify({ phone: cleanPhone })
             });
             const data = await res.json();
             if (res.ok) {
@@ -626,10 +628,11 @@ export default function LeadsPage() {
                                     <input
                                         type="text"
                                         value={forceBotPhone}
-                                        onChange={(e) => setForceBotPhone(e.target.value)}
+                                        onChange={(e) => setForceBotPhone(e.target.value.replace(/\D/g, ''))}
                                         onPaste={(e) => {
+                                            e.preventDefault();
                                             const pastedText = e.clipboardData.getData('text');
-                                            setForceBotPhone(pastedText);
+                                            setForceBotPhone(pastedText.replace(/\D/g, ''));
                                         }}
                                         placeholder="549..."
                                         className="input w-full"
@@ -641,7 +644,7 @@ export default function LeadsPage() {
                                             try {
                                                 const text = await navigator.clipboard.readText();
                                                 if (text) {
-                                                    setForceBotPhone(text);
+                                                    setForceBotPhone(text.replace(/\D/g, ''));
                                                 }
                                             } catch (err) {
                                                 alert("Para pegar automáticamente se requiere HTTPS o dar permiso. Por favor, usa Ctrl+V o botón derecho del mouse para pegar directamente.");

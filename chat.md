@@ -149,3 +149,23 @@ Se corrigió la imposibilidad de pegar texto en el input del modal "Forzar Inici
 Se explicó la razón técnica de por qué la consulta de prueba sobre el LID `/bot/test-lid?lid=200497797542048` con el teléfono temporal retorna `null`:
 - **Modelo de Privacidad de WhatsApp**: Los LIDs (Linked Device IDs) son identificadores privados generados de manera local para cada sesión. Una cuenta de WhatsApp de prueba conectada de forma temporal no tiene en su libreta de direcciones ni en su historial de chat ningún registro del contacto referenciado por ese LID. Por ende, los servidores de WhatsApp rechazan resolver el número real para esta cuenta temporal.
 - **Resolución al Conectar el Teléfono Real**: Al conectar la cuenta de WhatsApp oficial de la clínica, esta cuenta sí posee las claves criptográficas, historiales compartidos y contactos vinculados a esos LIDs. Esto permitirá que tanto el middleware dinámico de mensajes como la rutina de migración automática `runLidMigration` resuelvan, unifiquen y migren todos los LIDs del CRM a sus números telefónicos reales en MongoDB.
+
+---
+
+## 🛠️ Corrección de Duplicados en Pegado y Sanitización de Teléfonos (10/06/2026)
+
+### 1. Solución de Duplicado de Pegado
+Se identificó que al pegar texto en el input del modal "Forzar Inicio del Bot", el número se ingresaba por duplicado. Esto ocurría porque el navegador realizaba su acción de pegado nativa además de ejecutarse nuestra lógica de React. 
+- **Solución**: Se agregó un `e.preventDefault()` en el handler `onPaste` de [leads/page.tsx](file:///c:/Users/Try%20Hard/Desktop/Nexte/dental-response/src/app/admin/leads/page.tsx) para prevenir la inserción nativa y permitir que React gestione el texto de manera exclusiva y limpia.
+
+### 2. Sanitización Automática de Formatos de WhatsApp
+El cliente reportó la necesidad de poder copiar y pegar directamente números con formatos complejos de WhatsApp (ej. `+54 9 11 2342-7295`).
+- **Implementación**:
+  - Se modificaron los controladores `onChange`, `onPaste` y el botón "📋 Pegar" del modal de fuerza de bot para aplicar una expresión regular `.replace(/\D/g, '')`. Esto elimina automáticamente espacios, guiones, símbolos de más (`+`) y cualquier otro caracter no numérico en tiempo real.
+  - Se añadieron sanitizaciones redundantes en las llamadas del cliente a las APIs de backend (`handleForceBot`, `handlePauseBot`, `handleRetryStep`).
+  - Se actualizó la obtención de parámetros de ruta en [conversations/page.tsx](file:///c:/Users/Try%20Hard/Desktop/Nexte/dental-response/src/app/admin/conversations/%5Bphone%5D/page.tsx) para limpiar el número telefónico obtenido de la URL del navegador.
+
+### 3. Aclaración de "Jenny" en el Contexto del Proyecto
+Se analizó el término "Jenny" en base a las grabaciones históricas de audio (`conversaciones_analizar/audio_captura_13.txt`).
+- **Significado**: "Jenny" hace referencia a un segmento específico de clientes/pacientes minoristas que son muy sensibles a la falta de respuesta y propensos a dejar malas calificaciones en redes si el bot se cuelga. Salvador copia números de este chat de soporte para introducirlos en el CRM y forzar la reanudación o inicio del bot.
+

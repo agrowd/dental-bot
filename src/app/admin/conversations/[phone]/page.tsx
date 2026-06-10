@@ -7,7 +7,7 @@ import Link from 'next/link';
 export default function ConversationDetailPage() {
     const params = useParams();
     const router = useRouter();
-    const phone = decodeURIComponent(params.phone as string);
+    const phone = decodeURIComponent(params.phone as string).replace(/\D/g, '');
 
     const [conversation, setConversation] = useState<any>(null);
     const [messages, setMessages] = useState<any[]>([]);
