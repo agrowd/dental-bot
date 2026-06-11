@@ -148,17 +148,41 @@ export default function ConversationsPage() {
             <div className="card mb-6">
                 <div className="p-4 flex flex-col sm:flex-row items-center gap-4">
                     <div className="flex-1 w-full">
-                        <div className="relative">
-                            <svg className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                            </svg>
-                            <input
-                                type="text"
-                                placeholder="Buscar por teléfono..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="input pl-10"
-                            />
+                        <div className="flex gap-2">
+                            <div className="relative flex-1">
+                                <svg className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                                <input
+                                    type="text"
+                                    placeholder="Buscar por teléfono..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    onPaste={(e) => {
+                                        e.preventDefault();
+                                        const pastedText = e.clipboardData.getData('text');
+                                        setSearchQuery(pastedText);
+                                    }}
+                                    className="input pl-10"
+                                />
+                            </div>
+                            <button
+                                type="button"
+                                onClick={async () => {
+                                    try {
+                                        const text = await navigator.clipboard.readText();
+                                        if (text) {
+                                            setSearchQuery(text);
+                                        }
+                                    } catch (err) {
+                                        alert("Para pegar automáticamente se requiere HTTPS o dar permiso. Por favor, usa Ctrl+V o botón derecho del mouse para pegar directamente.");
+                                    }
+                                }}
+                                className="btn btn-secondary px-3 py-2 flex items-center justify-center text-sm"
+                                title="Pegar del portapapeles"
+                            >
+                                📋 Pegar
+                            </button>
                         </div>
                     </div>
                     <select

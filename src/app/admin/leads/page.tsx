@@ -334,27 +334,51 @@ export default function LeadsPage() {
 
             {/* Search bar — prominent, standalone */}
             <div className="mb-4">
-                <div className="relative">
-                    <svg className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                    <input
-                        type="text"
-                        placeholder="Buscar por teléfono, nombre o email..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-12 pr-4 py-3.5 text-base rounded-xl border border-slate-200 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all"
-                    />
-                    {searchQuery && (
-                        <button
-                            onClick={() => setSearchQuery('')}
-                            className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                        >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
-                    )}
+                <div className="flex gap-2">
+                    <div className="relative flex-1">
+                        <svg className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        <input
+                            type="text"
+                            placeholder="Buscar por teléfono, nombre o email..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onPaste={(e) => {
+                                e.preventDefault();
+                                const pastedText = e.clipboardData.getData('text');
+                                setSearchQuery(pastedText);
+                            }}
+                            className="w-full pl-12 pr-12 py-3.5 text-base rounded-xl border border-slate-200 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all"
+                        />
+                        {searchQuery && (
+                            <button
+                                onClick={() => setSearchQuery('')}
+                                className="absolute right-12 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        )}
+                    </div>
+                    <button
+                        type="button"
+                        onClick={async () => {
+                            try {
+                                const text = await navigator.clipboard.readText();
+                                if (text) {
+                                    setSearchQuery(text);
+                                }
+                            } catch (err) {
+                                alert("Para pegar automáticamente se requiere HTTPS o dar permiso. Por favor, usa Ctrl+V o botón derecho del mouse para pegar directamente.");
+                            }
+                        }}
+                        className="btn btn-secondary px-4 py-3.5 rounded-xl flex items-center justify-center text-sm shadow-sm"
+                        title="Pegar del portapapeles"
+                    >
+                        📋 Pegar
+                    </button>
                 </div>
             </div>
 

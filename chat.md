@@ -177,3 +177,15 @@ El cliente reportó que buscar números copiados de WhatsApp con espacios (ej. `
   - En la vista frontend de conversaciones ([conversations/page.tsx](file:///c:/Users/Try%20Hard/Desktop/Nexte/dental-response/src/app/admin/conversations/page.tsx)), se normalizó la query del buscador eliminando caracteres especiales antes de filtrar del lado del cliente, garantizando concordancia con el número sin espacios de la base de datos.
   - **Normalización de Prefijos (549, 54, 0, 15)**: Se agregó un algoritmo de normalización en ambas APIs de consulta de MongoDB. Si el número a buscar comienza con prefijos internacionales o locales comunes de Argentina (como `549`, `54`, `0`, `15`), el backend genera una búsqueda con dichos prefijos removidos. Esto permite buscar tanto el número completo con prefijos variados como el número de celular local significativo de 10 dígitos, retornando siempre la coincidencia correcta almacenada en base de datos.
 
+---
+
+## 🛠️ Corrección de Pegado en Buscadores Principales (11/06/2026)
+
+### 1. Habilitación de Pegado en los Inputs de Búsqueda
+El usuario indicó que en ciertos navegadores/sistemas el buscador principal de Leads tampoco permitía pegar los números de teléfono.
+- **Implementación**:
+  - En la página de Leads ([leads/page.tsx](file:///c:/Users/Try%20Hard/Desktop/Nexte/dental-response/src/app/admin/leads/page.tsx)), se añadió el handler `onPaste` al input de búsqueda principal para asegurar la compatibilidad con atajos de teclado y clics.
+  - En la página de Conversaciones ([conversations/page.tsx](file:///c:/Users/Try%20Hard/Desktop/Nexte/dental-response/src/app/admin/conversations/page.tsx)), se añadió homólogamente el handler `onPaste` al buscador de chats.
+  - Se incorporó un botón "📋 Pegar" interactivo al lado de ambos inputs con fallback seguro para la lectura de clipboard, permitiendo pegar directamente con un solo clic.
+
+
