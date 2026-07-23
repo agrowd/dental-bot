@@ -79,13 +79,14 @@ app.post('/bot/start', async (req, res) => {
         return res.status(429).json({ error: `Cooldown active. Wait ${remaining}s` });
     }
 
-    // Check retry limit (3 per hour)
+    // Check retry limit (5 per hour)
     if (retryCount >= 5) {
         return res.status(429).json({ error: 'Max retries exceeded. Wait 1 hour.' });
     }
 
     try {
-        await startBot();
+        const forceClean = req.body?.forceClean === true;
+        await startBot(forceClean);
         retryCount++;
         lastRetryTime = now;
         setTimeout(() => { retryCount = 0; }, 60 * 60 * 1000); // Reset after 1 hour
@@ -107,6 +108,15 @@ app.post('/bot/logout', async (req, res) => {
         }
         botState = 'disconnected';
         currentQR = null;
+
+        // Wipe session directory on explicit logout
+        const sessionName = process.env.SESSION_NAME || '.wwebjs_auth';
+        const authPath = path.join(process.cwd(), sessionName);
+        if (fs.existsSync(authPath)) {
+            console.log('[LOGOUT] Removing session directory on explicit logout...');
+            fs.rmSync(authPath, { recursive: true, force: true });
+        }
+
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -463,22 +473,25 @@ const markUnreadWithDelay = (chat, delayMs = 2500) => {
 };
 
 // Start WhatsApp client
-async function startBot() {
+async function startBot(forceClean = false) {
     botState = 'connecting';
     currentQR = null;
 
-    // CLEANUP: Nuclear cleanup of session directory to prevent "Code: 21"
     const sessionName = process.env.SESSION_NAME || '.wwebjs_auth';
     const authPath = path.join(process.cwd(), sessionName);
 
-    try {
-        if (fs.existsSync(authPath)) {
-            console.log(`[INIT] Removing existing session directory: ${sessionName}...`);
-            fs.rmSync(authPath, { recursive: true, force: true });
-            console.log('[INIT] Session directory removed.');
+    if (forceClean) {
+        try {
+            if (fs.existsSync(authPath)) {
+                console.log(`[INIT] Removing existing session directory: ${sessionName}...`);
+                fs.rmSync(authPath, { recursive: true, force: true });
+                console.log('[INIT] Session directory removed.');
+            }
+        } catch (e) {
+            console.warn('[INIT] Warning during cleanup:', e.message);
         }
-    } catch (e) {
-        console.warn('[INIT] Warning during cleanup:', e.message);
+    } else {
+        console.log(`[INIT] Preserving session directory (${sessionName}) to allow auto-login without QR re-scan.`);
     }
 
     // CLEANUP: Destroy old client if it exists
@@ -533,6 +546,14 @@ async function startBot() {
 
     client.on('auth_failure', msg => {
         console.error('[INIT] AUTHENTICATION FAILURE', msg);
+        botState = 'disconnected';
+        currentQR = null;
+        try {
+            if (fs.existsSync(authPath)) {
+                console.log('[INIT] Removing invalid session directory after auth_failure...');
+                fs.rmSync(authPath, { recursive: true, force: true });
+            }
+        } catch (e) { }
     });
 
     client.on('loading_screen', (percent, message) => {
@@ -558,12 +579,94 @@ async function startBot() {
         console.log('Bot disconnected:', reason);
         botState = 'disconnected';
         currentQR = null;
+
+        // Auto-reconnect if session files exist
+        if (fs.existsSync(authPath)) {
+            console.log('[WATCHDOG] ⚡ Disconnected event fired. Triggering automatic reconnection in 5s...');
+            setTimeout(() => {
+                autoRecoverBot('disconnected_event');
+            }, 5000);
+        }
     });
 
     // Heartbeat log to confirm process is alive
     setInterval(() => {
         console.log(`[HEARTBEAT] Bot runner alive. State: ${botState}. Memory: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB`);
     }, 20 * 60 * 1000); // Every 20 minutes
+
+    // Start client initialization
+    await client.initialize();
+}
+
+// --- AUTOMATIC WATCHDOG & SELF-HEALING ENGINE ---
+let isRecovering = false;
+
+const autoRecoverBot = async (reason) => {
+    if (isRecovering) return;
+    isRecovering = true;
+    console.log(`[WATCHDOG] 🔄 Auto-recovering bot runner (Reason: ${reason})...`);
+
+    try {
+        botState = 'connecting';
+        if (client) {
+            try {
+                await client.destroy();
+            } catch (e) {
+                console.warn('[WATCHDOG] Error destroying client:', e.message);
+            }
+            client = null;
+        }
+
+        await new Promise(r => setTimeout(r, 3000));
+
+        // Re-start bot preserving saved session
+        await startBot(false);
+        console.log('[WATCHDOG] ✅ Auto-recovery restart triggered successfully.');
+    } catch (err) {
+        console.error('[WATCHDOG] ❌ Auto-recovery failed:', err.message);
+        botState = 'disconnected';
+    } finally {
+        isRecovering = false;
+    }
+};
+
+const runWatchdogCheck = async () => {
+    if (isRecovering) return;
+
+    const sessionName = process.env.SESSION_NAME || '.wwebjs_auth';
+    const authPath = path.join(process.cwd(), sessionName);
+
+    // 1. If state claims connected, verify Puppeteer & WhatsApp page responsiveness
+    if (botState === 'connected' && client) {
+        let isAlive = false;
+        try {
+            const statePromise = client.getState();
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Health state check timeout')), 10000)
+            );
+
+            const state = await Promise.race([statePromise, timeoutPromise]);
+            if (state === 'CONNECTED' || state === 'PAIRING') {
+                isAlive = true;
+            }
+        } catch (err) {
+            console.warn('[WATCHDOG] ⚠️ Health check ping failed:', err.message);
+            isAlive = false;
+        }
+
+        if (!isAlive) {
+            console.error('[WATCHDOG] 🚨 Bot is FROZEN or UNRESPONSIVE! Initiating self-healing restart...');
+            await autoRecoverBot('frozen_unresponsive');
+        }
+    } else if (botState === 'disconnected' && fs.existsSync(authPath)) {
+        // Auto-reconnect if session exists but state is disconnected
+        console.log('[WATCHDOG] ⚡ Disconnected state with valid session detected. Re-triggering bot...');
+        await autoRecoverBot('disconnected_state_recovery');
+    }
+};
+
+// Run watchdog health check every 2 minutes
+setInterval(runWatchdogCheck, 2 * 60 * 1000);
 
     // Call Handler (New Implementation)
     client.on('call', async (call) => {
@@ -2230,5 +2333,16 @@ const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
     console.log(`Bot API running on port ${PORT}`);
     console.log('Bot state:', botState);
-    console.log('To start bot, go to the admin panel → WhatsApp → Activar Bot');
+
+    // Auto-start bot on container boot if saved session exists
+    const sessionName = process.env.SESSION_NAME || '.wwebjs_auth';
+    const authPath = path.join(process.cwd(), sessionName);
+    if (fs.existsSync(authPath)) {
+        console.log('[BOOT] 🚀 Existing WhatsApp session found. Auto-starting bot...');
+        startBot(false).catch(err => {
+            console.error('[BOOT] Error auto-starting bot:', err);
+        });
+    } else {
+        console.log('To start bot, go to the admin panel → WhatsApp → Activar Bot');
+    }
 });

@@ -179,13 +179,17 @@ El cliente reportó que buscar números copiados de WhatsApp con espacios (ej. `
 
 ---
 
-## 🛠️ Corrección de Pegado en Buscadores Principales (11/06/2026)
+---
 
-### 1. Habilitación de Pegado en los Inputs de Búsqueda
-El usuario indicó que en ciertos navegadores/sistemas el buscador principal de Leads tampoco permitía pegar los números de teléfono.
-- **Implementación**:
-  - En la página de Leads ([leads/page.tsx](file:///c:/Users/Try%20Hard/Desktop/Nexte/dental-response/src/app/admin/leads/page.tsx)), se añadió el handler `onPaste` al input de búsqueda principal para asegurar la compatibilidad con atajos de teclado y clics.
-  - En la página de Conversaciones ([conversations/page.tsx](file:///c:/Users/Try%20Hard/Desktop/Nexte/dental-response/src/app/admin/conversations/page.tsx)), se añadió homólogamente el handler `onPaste` al buscador de chats.
-  - Se incorporó un botón "📋 Pegar" interactivo al lado de ambos inputs con fallback seguro para la lectura de clipboard, permitiendo pegar directamente con un solo clic.
+## 🛠️ Implementación de Watchdog, Autorecuperación y Preservación de Sesión QR (23/07/2026)
 
+### 1. Eliminación del Re-escaneo Continuo de QR (`.wwebjs_auth`)
+- **Causa Raíz de Re-escaneo**: Se detectó que `startBot()` ejecutaba `fs.rmSync(authPath)` en cada inicio, borrando las credenciales de WhatsApp guardadas. Por esa razón, Salvador tenía que escanear el QR cada vez que se reiniciaba el bot o el servidor.
+- **Solución**: Se actualizó `startBot(forceClean = false)` en [bot-runner/index.js](file:///c:/Users/Try%20Hard/Desktop/Nexte/dental-response/bot-runner/index.js) para preservar la carpeta de sesión `.wwebjs_auth`. El bot ahora reutiliza la sesión guardada de manera permanente. El borrado de sesión solo ocurre si se hace un `/bot/logout` explícito o ante un evento `auth_failure`.
 
+### 2. Guardián Automático y Auto-Descongelador (`Watchdog Engine`)
+- Se implementó un algoritmo de monitoreo activo (`runWatchdogCheck`) que pingea a la instancia de Puppeteer cada 2 minutos.
+- Si el navegador o socket de WhatsApp Web se congela o deja de responder a `getState()` en 10 segundos:
+  - Dispara `autoRecoverBot('frozen_unresponsive')`.
+  - Destruye la instancia colgada y reconecta en 3 segundos **sin perder la sesión y sin pedir código QR**.
+- Si el contenedor se reinicia o el VPS se enciende, el bot detecta la sesión previa e inicia automáticamente en segundo plano.
