@@ -1886,10 +1886,6 @@ setInterval(runWatchdogCheck, 2 * 60 * 1000);
         }
     } // End of handleStepLogic
 
-    await client.initialize();
-    console.log('[INIT] Client initialized inside startBot');
-} // End of startBot
-
 // Format message with options and dynamic variables
 function formatMessage(step, flow) {
     let messageBody = step.message;
