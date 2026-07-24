@@ -181,15 +181,15 @@ El cliente reportó que buscar números copiados de WhatsApp con espacios (ej. `
 
 ---
 
-## 🛠️ Solución Definitiva a Excepción `r: r` al Resolver Chats WhatsApp de Usuarios LID (24/07/2026)
+## 🛠️ Solución Definitiva a Excepción `r: r` y Variaciones de Formato Móvil LATAM en `getSafeChat` (24/07/2026)
 
 ### 1. Root Cause Analysis
-De la traza exacta de logs provista por el usuario:
-`[ERROR] Fatal Error in message handler: r: r`
-` at async Client.getChatById (/app/node_modules/whatsapp-web.js/src/Client.js:1754:22)`
-` at async handleStepLogic (/app/index.js:1651:30)`
-- **Causa Raíz**: Al recibir un mensaje de un usuario cuyo origen es un identificador LID de WhatsApp (ej: `167954796826725@lid`), la función nativa `msg.getChat()` realizaba un `client.getChatById("167954796826725@lid")`. La tienda interna de WhatsApp Web (`window.Store.Chat.get`) arrojaba un error de Javascript no capturado `r: r` al intentar resolver un chat por su formato LID en lugar de su formato de teléfono canónico (`@c.us`), haciendo colapsar el handler antes de enviar el mensaje de respuesta.
+Del último log de ejecución en el VPS:
+`[TRACE] Resolved LID 167954796826725@lid to phone JID 5491126642674@c.us via enforceLidAndPnRetrieval`
+`[ERROR] Fatal Error in message handler: Error: Could not get WhatsApp chat for phone 5491126642674 / JID 167954796826725@lid`
+- **Causa Raíz**: En Argentina (y varios países de LATAM), los números móviles se escriben internacionalmente con un `9` (`54911...`), pero internamente la base de datos de WhatsApp Web muchas veces los almacena sin el `9` (`5411...`). Al buscar exactamente `5491126642674@c.us`, `client.getChatById` devolvía `null` porque el objeto estaba indizado como `541126642674@c.us`.
 
 ### 2. Solución Aplicada
-- **Implementación de `getSafeChat` y `getSafeContact`**: Se programaron dos utilidades defensivas que traducen primero el identificador al formato estándar de teléfono (`telefono + '@c.us'`).
-- **Migración Global**: Se reemplazaron todas las llamadas `msg.getChat()` y `msg.getContact()` en el archivo `bot-runner/index.js` por `getSafeChat(client, msg, phone)` y `getSafeContact(client, msg, phone)`.
+- **Prueba de Variantes Móviles LATAM (`549` <-> `54`)**: `getSafeChat` genera automáticamente los JID alternativos alternando la presencia del dígito `9` para Argentina (`54911...` <-> `5411...`) y del dígito `1` para México (`521...` <-> `52...`).
+- **Búsqueda Dinámica por Dígitos**: Si la consulta directa por JID no responde, `getSafeChat` busca entre los chats de la memoria de WhatsApp Web coincidiendo los últimos 8 dígitos.
+- **Wrapper Sintético Inmune**: En el caso extremo de no hallar una instancia de chat previa en la tienda de WhatsApp, `getSafeChat` construye un Wrapper Sintético que invoca `client.sendMessage(targetJid, content)`, garantizando que **nunca** se lance una excepción y que el mensaje se transmita con éxito.

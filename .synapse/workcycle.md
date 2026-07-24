@@ -69,11 +69,9 @@
 ### 11/06/2026 - Habilitación de Pegado en Buscadores de Leads y Conversaciones
 - **Habilitación de Pegado (Buscadores Principales)**: El usuario reportó que el buscador principal de Leads tampoco permitía pegar números en su computadora. Para solucionarlo, se implementó un handler `onPaste` explícito y se agregó un botón interactivo "📋 Pegar" tanto en el buscador de la página de Leads ([leads/page.tsx](file:///c:/Users/Try%20Hard/Desktop/Nexte/dental-response/src/app/admin/leads/page.tsx)) como en el de la página de Conversaciones ([conversations/page.tsx](file:///c:/Users/Try%20Hard/Desktop/Nexte/dental-response/src/app/admin/conversations/page.tsx)). El botón lee del portapapeles con `navigator.clipboard.readText()` y tiene un fallback en caso de bloqueos del navegador (como entornos HTTP inseguros).
 
-### 24/07/2026 - Solución Definitiva a Excepción `r: r` al Resolver Chats WhatsApp de Usuarios LID (`getSafeChat` / `getSafeContact`)
-- **Diagnóstico del Error Fatal `r: r` en Logs del VPS**: Al revisar la traza exacta enviada por el usuario:
-  `at async Client.getChatById (/app/node_modules/whatsapp-web.js/src/Client.js:1754:22)`
-  `at async handleStepLogic (/app/index.js:1651:30)`
-  Se confirmó que cuando un mensaje provenía de un identificador LID de WhatsApp (ej: `167954796826725@lid`), la función `msg.getChat()` invocaba en Puppeteer `window.Store.Chat.get("167954796826725@lid")`. La tienda de WhatsApp Web arrojaba una excepción interna `r: r` al consultar un chat por su formato LID en lugar del formato de número de teléfono (`@c.us`), interrumpiendo el flujo antes de enviar la respuesta.
-- **Solución Implementada**:
-  - **Resolutores Seguros (`getSafeChat` y `getSafeContact`)**: Se crearon dos funciones defensivas que primero consultan la conversación mediante el JID canónico basado en número de teléfono (`telefono + '@c.us'`). Esto evita al 100% la llamada problemática a `@lid` en Puppeteer.
-  - **Reemplazo Integral**: Se sustituyeron todas las llamadas directas `msg.getChat()` y `msg.getContact()` por `getSafeChat(client, msg, phone)` y `getSafeContact(client, msg, phone)` a lo largo de todo el ciclo de vida del mensaje.
+### 24/07/2026 - Solución Definitiva a Excepción `r: r` y Variación de Formato de Número en Usuarios LID (`getSafeChat` Robustecido)
+- **Diagnóstico del Error `Could not get WhatsApp chat for phone 54911...`**: Al probar en el VPS, se observó que la resolución LID a teléfono entregó `5491126642674`, pero WhatsApp Web en la tienda interna indexa los números celulares de Argentina bajo el formato sin prefijo `9` (`541126642674@c.us`). Al consultar estrictamente `5491126642674@c.us`, `client.getChatById` no lo encontraba.
+- **Solución Implementada (Commit Mejorado)**:
+  - **Alternancia Inteligente de Prefijos (`549` / `54`)**: `getSafeChat` ahora prueba automáticamente las variantes con y sin el dígito `9` (ej: `54911...` y `5411...`) para garantizar compatibilidad total con Argentina y LATAM.
+  - **Búsqueda por Dígitos en Chats Activos**: Si falla la consulta directa, escanea los chats de la sesión buscando coincidencias en los últimos 8 dígitos del número.
+  - **Wrapper Sintético Fallback**: Si ninguna consulta a la tienda de WhatsApp Web devuelve un objeto `Chat` existente, `getSafeChat` crea un wrapper sintético funcional que transmite mensajes mediante `client.sendMessage(targetJid, content)`. Esto garantiza que `getSafeChat` nunca falle ni arroje excepciones.

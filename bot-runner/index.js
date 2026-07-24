@@ -474,20 +474,44 @@ const markUnreadWithDelay = (chat, delayMs = 2500) => {
 async function getSafeChat(client, msg, phone) {
     if (!client) return null;
 
-    // 1. Prefer phone + '@c.us' first as @c.us JIDs work 100% reliably in WhatsApp Web Store
-    if (phone) {
+    const jidsToTry = [];
+    let cleanPhone = phone ? String(phone).replace(/[^0-9]/g, '') : '';
+
+    if (cleanPhone) {
+        // 1. Direct phone + @c.us
+        jidsToTry.push(cleanPhone + '@c.us');
+
+        // 2. Argentina 9 toggle (54911... <-> 5411...)
+        if (cleanPhone.startsWith('549') && cleanPhone.length >= 12) {
+            jidsToTry.push('54' + cleanPhone.substring(3) + '@c.us');
+        } else if (cleanPhone.startsWith('54') && !cleanPhone.startsWith('549') && cleanPhone.length >= 11) {
+            jidsToTry.push('549' + cleanPhone.substring(2) + '@c.us');
+        }
+
+        // 3. Mexico 1 toggle (521... <-> 52...)
+        if (cleanPhone.startsWith('521') && cleanPhone.length >= 12) {
+            jidsToTry.push('52' + cleanPhone.substring(3) + '@c.us');
+        } else if (cleanPhone.startsWith('52') && !cleanPhone.startsWith('521') && cleanPhone.length >= 11) {
+            jidsToTry.push('521' + cleanPhone.substring(2) + '@c.us');
+        }
+    }
+
+    if (msg?.from) jidsToTry.push(msg.from);
+    if (msg?.to) jidsToTry.push(msg.to);
+    if (msg?.author) jidsToTry.push(msg.author);
+
+    // Try getChatById for candidate JIDs
+    for (const jid of jidsToTry) {
+        if (!jid) continue;
         try {
-            const cleanPhone = String(phone).replace('@c.us', '').replace('@lid', '').trim();
-            if (cleanPhone) {
-                const chat = await client.getChatById(cleanPhone + '@c.us');
-                if (chat) return chat;
-            }
+            const chat = await client.getChatById(jid);
+            if (chat) return chat;
         } catch (e) {
             // Silently fall back
         }
     }
 
-    // 2. Try msg.getChat()
+    // Try msg.getChat() as fallback
     if (msg && typeof msg.getChat === 'function') {
         try {
             const chat = await msg.getChat();
@@ -497,20 +521,50 @@ async function getSafeChat(client, msg, phone) {
         }
     }
 
-    // 3. Try msg.from if available
-    if (msg && msg.from) {
+    // Search existing active chats in client.getChats() by matching phone digits
+    if (cleanPhone && cleanPhone.length >= 8) {
         try {
-            const chat = await client.getChatById(msg.from);
-            if (chat) return chat;
-        } catch (e) { }
+            const lastDigits = cleanPhone.slice(-8);
+            const chats = await client.getChats();
+            const matchedChat = chats.find(c => {
+                const cUser = c.id?.user || '';
+                return cUser.endsWith(lastDigits) || cleanPhone.endsWith(cUser);
+            });
+            if (matchedChat) {
+                console.log(`[TRACE] 🔍 getSafeChat matched phone ${cleanPhone} to chat ${matchedChat.id._serialized} via digit search`);
+                return matchedChat;
+            }
+        } catch (e) {
+            console.warn('[TRACE] getSafeChat digit search failed:', e.message);
+        }
     }
 
-    // 4. Try msg.to if available (outgoing)
-    if (msg && msg.to) {
-        try {
-            const chat = await client.getChatById(msg.to);
-            if (chat) return chat;
-        } catch (e) { }
+    // Synthetic Fallback Chat wrapper — guarantees getSafeChat never throws and always permits sending
+    const targetJid = jidsToTry.find(j => j.endsWith('@c.us')) || (cleanPhone ? `${cleanPhone}@c.us` : msg?.from);
+    if (targetJid) {
+        console.log(`[TRACE] 🛠️ getSafeChat creating synthetic Chat wrapper for JID: ${targetJid}`);
+        return {
+            id: { _serialized: targetJid, user: targetJid.replace('@c.us', '').replace('@lid', '') },
+            sendMessage: async (content, options) => {
+                return await client.sendMessage(targetJid, content, options);
+            },
+            sendStateTyping: async () => {
+                try {
+                    const chat = await client.getChatById(targetJid);
+                    if (chat && typeof chat.sendStateTyping === 'function') {
+                        return await chat.sendStateTyping();
+                    }
+                } catch (e) { }
+            },
+            markUnread: async () => {
+                try {
+                    const chat = await client.getChatById(targetJid);
+                    if (chat && typeof chat.markUnread === 'function') {
+                        return await chat.markUnread();
+                    }
+                } catch (e) { }
+            }
+        };
     }
 
     throw new Error(`Could not get WhatsApp chat for phone ${phone} / JID ${msg?.from}`);
@@ -520,13 +574,25 @@ async function getSafeChat(client, msg, phone) {
 async function getSafeContact(client, msg, phone) {
     if (!client) return { isMyContact: false, name: msg?.pushname || '', pushname: msg?.pushname || '' };
 
-    if (phone) {
+    const jidsToTry = [];
+    let cleanPhone = phone ? String(phone).replace(/[^0-9]/g, '') : '';
+
+    if (cleanPhone) {
+        jidsToTry.push(cleanPhone + '@c.us');
+        if (cleanPhone.startsWith('549') && cleanPhone.length >= 12) {
+            jidsToTry.push('54' + cleanPhone.substring(3) + '@c.us');
+        } else if (cleanPhone.startsWith('54') && !cleanPhone.startsWith('549') && cleanPhone.length >= 11) {
+            jidsToTry.push('549' + cleanPhone.substring(2) + '@c.us');
+        }
+    }
+
+    if (msg?.from) jidsToTry.push(msg.from);
+
+    for (const jid of jidsToTry) {
+        if (!jid) continue;
         try {
-            const cleanPhone = String(phone).replace('@c.us', '').replace('@lid', '').trim();
-            if (cleanPhone) {
-                const contact = await client.getContactById(cleanPhone + '@c.us');
-                if (contact) return contact;
-            }
+            const contact = await client.getContactById(jid);
+            if (contact) return contact;
         } catch (e) { }
     }
 
