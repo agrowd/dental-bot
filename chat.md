@@ -181,12 +181,13 @@ El cliente reportó que buscar números copiados de WhatsApp con espacios (ej. `
 
 ---
 
-## 🛠️ Solución a Bloqueo de Mensajes Rápido (Lock No Bloqueante) y Reconocimiento de Saludos / Menú (24/07/2026)
+## 🛠️ Solución a la Continuidad de Opciones en el Flujo (Evaluador Multiformato de Opciones) (24/07/2026)
 
 ### 1. Root Cause Analysis
-- **Causa Raíz 1 (Mensajes Rápido Descartados)**: Cuando el usuario enviaba un mensaje (ej: `hola`) y rápidamente enviaba `m`, `m`, `m` a los 1-2 segundos, el candado atómico `lock_phone_` estaba activo procesando `hola`. Al recibir los mensajes `m`, el sistema los descartaba inmediatamente con el mensaje de traza `Phone is BUSY` sin procesarlos jamás.
-- **Causa Raíz 2 (Reconocimiento de Saludos y Menú)**: Saludos informales (`hola`, `buenas`, `buen dia`) no estaban mapeados para resetear y mostrar el menú principal cuando la conversación ya estaba en estado `active`, lo que provocaba que cayeran en la evaluación de opciones numéricas y mostraran el mensaje de fallback.
+- **Causa Raíz (Respuesta `a` no avanzaba el flujo)**: La función de evaluación de opciones en `handleStepLogic` hacía una comparación directa estricta entre lo que escribía el usuario (`a`) y las propiedades de las opciones en MongoDB. Como el texto mostrado al usuario decía `A) Quiero Info...` (con paréntesis), la letra simple `a` no coincidía exactamente con la clave guardada ni con la etiqueta completa. Por ende, el bot no detectaba la opción elegida y no avanzaba al siguiente paso.
 
 ### 2. Solución Aplicada
-- **Candado No Bloqueante con Reintentos**: Se modificó la adquisición de `lock_phone_` para que realice 5 intentos (esperando 600ms entre cada uno) en lugar de descartar la llamada. Si el mensaje anterior está terminando, el siguiente mensaje espera su turno y se procesa correctamente.
-- **Mapeo Unificado de Saludos y Menú**: Saludos habituales (`hola`, `buenas`, `buen dia`, `m`, `menu`, `inicio`) ahora resetean la conversación al paso inicial (`info_general`) y devuelven inmediatamente sus opciones o formulario de datos sin caer en fallback.
+- **Evaluador Multiformato Inteligente de Opciones**:
+  1. **Acepta Letra o Número indistintamente**: Para la primera opción, acepta `a`, `1`, `a)`, `1)`. Para la segunda opción, acepta `b`, `2`, `b)`, `2)`.
+  2. **Limpieza de Puntuación**: Ignora paréntesis, puntos o dos puntos al comparar (`a` = `A)` = `a.`).
+  3. **Reconocimiento de Texto Parcial**: Si el usuario escribe palabras de la opción (ej: `quiero info`, `paciente`, `profesional`), también lo reconoce y avanza.

@@ -535,7 +535,7 @@ async function getSafeChat(client, msg, phone) {
                 return matchedChat;
             }
         } catch (e) {
-            console.warn('[TRACE] getSafeChat digit search failed:', e.message);
+            // Silently fall back to synthetic wrapper
         }
     }
 
@@ -1931,14 +1931,28 @@ async function startBot(forceClean = false) {
 
             // Evaluation (Process Input)
             const options = currentStep.options || [];
+            const cleanInput = input.replace(/[\)\.\:\-]/g, '').trim().toLowerCase();
 
-            for (const opt of options) {
-                const key = (opt.key || '').toLowerCase();
-                const label = (opt.label || '').toLowerCase();
-                if (key === 'h' || label.includes('asesor')) {
-                    console.log(`[TRACE][${conversation._id}] 🕵️ FOUND OPTION H IN EVALUATION: ${JSON.stringify(opt)}`);
-                }
-                if (input === key || input === label || (input.length > 3 && label.includes(input))) {
+            for (let idx = 0; idx < options.length; idx++) {
+                const opt = options[idx];
+                const rawKey = (opt.key || '').toLowerCase().trim();
+                const cleanKey = rawKey.replace(/[\)\.\:\-]/g, '').trim();
+                const rawLabel = (opt.label || '').toLowerCase().trim();
+                const cleanLabel = rawLabel.replace(/[\)\.\:\-]/g, '').trim();
+
+                // 1. Direct Key Match (raw or cleaned)
+                const isKeyMatch = (input === rawKey || cleanInput === cleanKey);
+
+                // 2. Letter / Number Equivalence Match for option index (0 -> A/1, 1 -> B/2, 2 -> C/3, etc.)
+                const letterForIdx = String.fromCharCode(97 + idx); // 0 -> 'a', 1 -> 'b', 2 -> 'c'
+                const numberForIdx = String(idx + 1);              // 0 -> '1', 1 -> '2', 2 -> '3'
+                const isIndexMatch = (cleanInput === letterForIdx || cleanInput === numberForIdx);
+
+                // 3. Label Match (exact or partial)
+                const isLabelMatch = (cleanInput === cleanLabel || (cleanInput.length >= 3 && cleanLabel.includes(cleanInput)) || (cleanLabel.length >= 3 && cleanInput.includes(cleanLabel)));
+
+                if (isKeyMatch || isIndexMatch || isLabelMatch) {
+                    console.log(`[TRACE][${conversation._id}] ✅ Option Matched! Input="${input}" -> Option "${opt.key}: ${opt.label}" (Index ${idx})`);
                     targetOption = opt;
                     break;
                 }
