@@ -110,13 +110,10 @@ app.post('/bot/logout', async (req, res) => {
         botState = 'disconnected';
         currentQR = null;
 
-        // Wipe session directory on explicit logout
+        // Wipe session directory contents on explicit logout
         const sessionName = process.env.SESSION_NAME || '.wwebjs_auth';
         const authPath = path.join(process.cwd(), sessionName);
-        if (fs.existsSync(authPath)) {
-            console.log('[LOGOUT] Removing session directory on explicit logout...');
-            fs.rmSync(authPath, { recursive: true, force: true });
-        }
+        clearDirectoryContents(authPath);
 
         res.json({ success: true });
     } catch (error) {
@@ -473,6 +470,45 @@ const markUnreadWithDelay = (chat, delayMs = 2500) => {
     }, delayMs);
 };
 
+// Safely clear contents of a directory (works cleanly on Docker volume mount points)
+function clearDirectoryContents(dirPath) {
+    if (!fs.existsSync(dirPath)) return;
+    try {
+        console.log(`[CLEANUP] Clearing session contents in ${dirPath}...`);
+        const files = fs.readdirSync(dirPath);
+        for (const file of files) {
+            const curPath = path.join(dirPath, file);
+            fs.rmSync(curPath, { recursive: true, force: true });
+        }
+        console.log(`[CLEANUP] Successfully cleared session contents in ${dirPath}`);
+    } catch (e) {
+        console.warn(`[CLEANUP] Warning while clearing directory ${dirPath}:`, e.message);
+    }
+}
+
+// Remove Chromium process singleton locks left by previous containers or crashes
+function removeChromiumLocks(dirPath) {
+    if (!fs.existsSync(dirPath)) return;
+    const findAndUnlinkLocks = (dir) => {
+        try {
+            const files = fs.readdirSync(dir);
+            for (const file of files) {
+                const fullPath = path.join(dir, file);
+                try {
+                    const stat = fs.lstatSync(fullPath);
+                    if (stat.isDirectory()) {
+                        findAndUnlinkLocks(fullPath);
+                    } else if (file.startsWith('SingletonLock') || file.startsWith('SingletonCookie') || file.startsWith('SingletonSocket')) {
+                        fs.unlinkSync(fullPath);
+                        console.log(`[CLEANUP] 🔓 Removed stale Chromium lock file: ${fullPath}`);
+                    }
+                } catch (err) {}
+            }
+        } catch (err) {}
+    };
+    findAndUnlinkLocks(dirPath);
+}
+
 // Start WhatsApp client
 async function startBot(forceClean = false) {
     botState = 'connecting';
@@ -482,17 +518,11 @@ async function startBot(forceClean = false) {
     const authPath = path.join(process.cwd(), sessionName);
 
     if (forceClean) {
-        try {
-            if (fs.existsSync(authPath)) {
-                console.log(`[INIT] Removing existing session directory: ${sessionName}...`);
-                fs.rmSync(authPath, { recursive: true, force: true });
-                console.log('[INIT] Session directory removed.');
-            }
-        } catch (e) {
-            console.warn('[INIT] Warning during cleanup:', e.message);
-        }
+        clearDirectoryContents(authPath);
     } else {
         console.log(`[INIT] Preserving session directory (${sessionName}) to allow auto-login without QR re-scan.`);
+        // Crucial: remove leftover Chromium lock files from previous container hosts to prevent Code 21 (profile locked)
+        removeChromiumLocks(authPath);
     }
 
     // CLEANUP: Destroy old client if it exists
@@ -512,7 +542,15 @@ async function startBot(forceClean = false) {
         }),
         puppeteer: {
             headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu']
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-gpu',
+                '--disable-dev-shm-usage',
+                '--no-first-run',
+                '--no-zygote',
+                '--disable-extensions'
+            ]
         }
     });
 
@@ -549,12 +587,7 @@ async function startBot(forceClean = false) {
         console.error('[INIT] AUTHENTICATION FAILURE', msg);
         botState = 'disconnected';
         currentQR = null;
-        try {
-            if (fs.existsSync(authPath)) {
-                console.log('[INIT] Removing invalid session directory after auth_failure...');
-                fs.rmSync(authPath, { recursive: true, force: true });
-            }
-        } catch (e) { }
+        clearDirectoryContents(authPath);
     });
 
     client.on('loading_screen', (percent, message) => {
@@ -586,11 +619,7 @@ async function startBot(forceClean = false) {
 
         if (isUnlinked) {
             console.log(`[INIT] ⚠️ Session unlinked/logged out from phone (Reason: ${reason}). Wiping session directory...`);
-            try {
-                if (fs.existsSync(authPath)) {
-                    fs.rmSync(authPath, { recursive: true, force: true });
-                }
-            } catch (e) { }
+            clearDirectoryContents(authPath);
             return;
         }
 
@@ -608,11 +637,7 @@ async function startBot(forceClean = false) {
         setTimeout(async () => {
             if (botState === 'connecting' && !currentQR) {
                 console.warn('[INIT] ⚠️ Bot stuck in connecting state with saved session for 40s. Session likely revoked on phone. Cleaning session and generating fresh QR...');
-                try {
-                    if (fs.existsSync(authPath)) {
-                        fs.rmSync(authPath, { recursive: true, force: true });
-                    }
-                } catch (e) { }
+                clearDirectoryContents(authPath);
                 await startBot(true);
             }
         }, 40000);

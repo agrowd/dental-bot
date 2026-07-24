@@ -181,12 +181,15 @@ El cliente reportó que buscar números copiados de WhatsApp con espacios (ej. `
 
 ---
 
-## 🛠️ Persistencia Permanente de Sesión WhatsApp ante Actualizaciones del Servidor (24/07/2026)
+## 🛠️ Solución al Bloqueo de Perfil Chromium (Code 21) y Limpieza de Volúmenes en Docker (24/07/2026)
 
 ### 1. Root Cause Analysis
-El usuario solicitó: *"Podemos hacer alguna forma de que se mantenga la sesión aunque se actualice el server? busca la forma"*.
-- **Causa Raíz de la Pérdida de Sesión en Deploys**: El directorio `.wwebjs_auth` se estaba almacenando dentro del sistema de archivos interno/efímero del contenedor Docker `dental-bot-runner`. Cada vez que se ejecutaba `./deploy-vps.sh`, el comando `docker compose down` eliminaba el contenedor antiguo y borraba los archivos de sesión guardados, forzando un nuevo escaneo QR.
+Al revisar la salida del deploy enviada por el usuario:
+`Error: Failed to launch the browser process: Code: 21. The profile appears to be in use by another Chromium process (1514) on another computer (c07cae9eac83). Chromium has locked the profile so that it doesn't get corrupted.`
+- **Causa Raíz de Code 21**: Al mapear el volumen persistente de Docker, Chromium deja archivos de bloqueo (`SingletonLock`, `SingletonSocket`) en la carpeta de sesión con el ID del contenedor viejo (`c07cae9eac83`). Al iniciarse un contenedor nuevo, el ID del contenedor cambia, provocando que Chromium rechace cargar el perfil creyendo que lo está usando otra computadora.
+- **Causa Raíz de EBUSY**: El método `fs.rmSync('/app/.wwebjs_auth')` intentaba eliminar el directorio raíz del punto de montaje del volumen Docker, lo cual Linux rechaza con error `EBUSY`.
 
 ### 2. Solución Aplicada
-- **Volumen Persistente Nominado de Docker**: En [docker-compose.yml](file:///c:/Users/Try%20Hard/Desktop/Nexte/dental-response/docker-compose.yml), se añadió el volumen persistente `whatsapp-session:/app/.wwebjs_auth` bajo la definición global `volumes: whatsapp-session: name: odontobot_whatsapp_session`.
-- **Comportamiento**: Las credenciales de autenticación quedan guardadas en el almacenamiento persistente del sistema operativo del VPS. Cuando se sube código nuevo y se ejecuta `./deploy-vps.sh`, el contenedor se destruye y reconstruye, pero vuelve a montar automáticamente el volumen `odontobot_whatsapp_session` intacto. El bot se auto-conecta en ~3 segundos **sin pedir escaneo de código QR**.
+- **Desbloqueador de Perfil Chromium (`removeChromiumLocks`)**: Se agregó un limpiador que remueve automáticamente los cerrojos `SingletonLock` y `SingletonSocket` antes de abrir el navegador en cada inicio del bot.
+- **Limpiador de Contenidos de Volúmenes (`clearDirectoryContents`)**: Se modificaron las rutinas de vaciado de sesión para borrar el contenido dentro de la carpeta sin intentar eliminar el punto de montaje.
+- **Parámetros de Estabilidad Puppeteer**: Se incorporó `--disable-dev-shm-usage` y `--no-zygote` en los argumentos de Puppeteer.
