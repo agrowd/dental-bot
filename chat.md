@@ -181,11 +181,15 @@ El cliente reportó que buscar números copiados de WhatsApp con espacios (ej. `
 
 ---
 
-## 🛠️ Solución a Bloqueo Silencioso de Mensajes por Candados Atómicos Residuales (`lock_phone_`) (24/07/2026)
+## 🛠️ Solución Definitiva a Excepción `r: r` al Resolver Chats WhatsApp de Usuarios LID (24/07/2026)
 
 ### 1. Root Cause Analysis
-- **Causa Raíz**: Para evitar respuestas duplicadas, el bot registra un candado en MongoDB (`Setting.create({ key: 'lock_phone_' + phone })`). Si un contenedor se reiniciaba o un mensaje crasheaba a mitad del flujo, el candado quedaba atrapado en la base de datos MongoDB indefinidamente. En los siguientes mensajes de ese número, MongoDB devolvía el error `11000` (llave duplicada) y el bot descartaba silenciosamente el mensaje sin responder jamás.
+De la traza exacta de logs provista por el usuario:
+`[ERROR] Fatal Error in message handler: r: r`
+` at async Client.getChatById (/app/node_modules/whatsapp-web.js/src/Client.js:1754:22)`
+` at async handleStepLogic (/app/index.js:1651:30)`
+- **Causa Raíz**: Al recibir un mensaje de un usuario cuyo origen es un identificador LID de WhatsApp (ej: `167954796826725@lid`), la función nativa `msg.getChat()` realizaba un `client.getChatById("167954796826725@lid")`. La tienda interna de WhatsApp Web (`window.Store.Chat.get`) arrojaba un error de Javascript no capturado `r: r` al intentar resolver un chat por su formato LID en lugar de su formato de teléfono canónico (`@c.us`), haciendo colapsar el handler antes de enviar el mensaje de respuesta.
 
 ### 2. Solución Aplicada
-- **Purga de Candados en Inicio**: Al iniciar y quedar en estado `ready`, el bot elimina de MongoDB todos los registros `lock_phone_*` heredados de sesiones previas.
-- **Vencimiento de Candado a los 15 Segundos**: Si al procesar un mensaje existe un candado en MongoDB con más de 15 segundos de antigüedad, se asume obsoleto, se elimina y se continúa con el procesamiento normal.
+- **Implementación de `getSafeChat` y `getSafeContact`**: Se programaron dos utilidades defensivas que traducen primero el identificador al formato estándar de teléfono (`telefono + '@c.us'`).
+- **Migración Global**: Se reemplazaron todas las llamadas `msg.getChat()` y `msg.getContact()` en el archivo `bot-runner/index.js` por `getSafeChat(client, msg, phone)` y `getSafeContact(client, msg, phone)`.

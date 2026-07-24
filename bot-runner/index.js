@@ -470,6 +470,76 @@ const markUnreadWithDelay = (chat, delayMs = 2500) => {
     }, delayMs);
 };
 
+// Helper: Safely resolve a WhatsApp Chat instance (protects against LID @lid lookup crashes in WWebJS)
+async function getSafeChat(client, msg, phone) {
+    if (!client) return null;
+
+    // 1. Prefer phone + '@c.us' first as @c.us JIDs work 100% reliably in WhatsApp Web Store
+    if (phone) {
+        try {
+            const cleanPhone = String(phone).replace('@c.us', '').replace('@lid', '').trim();
+            if (cleanPhone) {
+                const chat = await client.getChatById(cleanPhone + '@c.us');
+                if (chat) return chat;
+            }
+        } catch (e) {
+            // Silently fall back
+        }
+    }
+
+    // 2. Try msg.getChat()
+    if (msg && typeof msg.getChat === 'function') {
+        try {
+            const chat = await msg.getChat();
+            if (chat) return chat;
+        } catch (e) {
+            // Silently fall back
+        }
+    }
+
+    // 3. Try msg.from if available
+    if (msg && msg.from) {
+        try {
+            const chat = await client.getChatById(msg.from);
+            if (chat) return chat;
+        } catch (e) { }
+    }
+
+    // 4. Try msg.to if available (outgoing)
+    if (msg && msg.to) {
+        try {
+            const chat = await client.getChatById(msg.to);
+            if (chat) return chat;
+        } catch (e) { }
+    }
+
+    throw new Error(`Could not get WhatsApp chat for phone ${phone} / JID ${msg?.from}`);
+}
+
+// Helper: Safely resolve a WhatsApp Contact instance (protects against LID @lid lookup crashes)
+async function getSafeContact(client, msg, phone) {
+    if (!client) return { isMyContact: false, name: msg?.pushname || '', pushname: msg?.pushname || '' };
+
+    if (phone) {
+        try {
+            const cleanPhone = String(phone).replace('@c.us', '').replace('@lid', '').trim();
+            if (cleanPhone) {
+                const contact = await client.getContactById(cleanPhone + '@c.us');
+                if (contact) return contact;
+            }
+        } catch (e) { }
+    }
+
+    if (msg && typeof msg.getContact === 'function') {
+        try {
+            const contact = await msg.getContact();
+            if (contact) return contact;
+        } catch (e) { }
+    }
+
+    return { isMyContact: false, name: msg?.pushname || '', pushname: msg?.pushname || '' };
+}
+
 // Safely clear contents of a directory (works cleanly on Docker volume mount points)
 function clearDirectoryContents(dirPath) {
     if (!fs.existsSync(dirPath)) return;
@@ -904,7 +974,7 @@ async function startBot(forceClean = false) {
             }
 
             // 3. CONTACT & CONVERSATION
-            const chatContact = await msg.getContact(); // Get full WPP contact info
+            const chatContact = await getSafeContact(client, msg, phone); // Get full WPP contact info
             const currentStatus = chatContact.isMyContact ? 'agendado' : 'no_agendado';
             
             let contact = await Contact.findOne({ phone });
@@ -960,14 +1030,14 @@ async function startBot(forceClean = false) {
                 if (activeConversations.length > 0) {
                     await Conversation.updateMany({ phone, state: 'active' }, { $set: { state: 'closed' } });
                 }
-                const chat = await msg.getChat();
+                const chat = await getSafeChat(client, msg, phone);
                 await chat.sendMessage('🔄 Conversación reiniciada.');
                 await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout);
                 return;
             }
 
             if (!conversation) {
-                const chatContact = await msg.getContact();
+                const chatContact = await getSafeContact(client, msg, phone);
                 let selectedFlow = await selectFlow({ isAgendado: chatContact.isMyContact, source: contact.source, phone });
 
                 // FALLBACK FOR USERS WITH NO MATCHING FLOW RULE
@@ -992,7 +1062,7 @@ async function startBot(forceClean = false) {
                 console.log(`[TRACE] New conversation: ${conversation._id}`);
             } else {
                 console.log(`[TRACE] Active conversation: ${conversation._id} at ${conversation.currentStepId}`);
-                const chatContact = await msg.getContact();
+                const chatContact = await getSafeContact(client, msg, phone);
                 const forcingFlow = await selectFlow({ isAgendado: chatContact.isMyContact, source: contact.source, forceOnly: true, body: msg.body, phone });
 
                 if (forcingFlow) {
@@ -1079,7 +1149,7 @@ async function startBot(forceClean = false) {
 
                     if (ackMessage) {
                         try {
-                            const chat = await msg.getChat();
+                            const chat = await getSafeChat(client, msg, phone);
                             await chat.sendMessage(ackMessage);
                             await Conversation.updateOne({ _id: conversation._id }, { $set: { handoffAckSent: true } });
                             console.log(`[TRACE] 📨 Handoff ACK sent to ${phone}`);
@@ -1117,7 +1187,7 @@ async function startBot(forceClean = false) {
                 console.log(`[WARNING] Flow V${conversation.flowVersion} missing or step broken for ${phone}. Forcing restart.`);
                 await Conversation.updateOne({ _id: conversation._id }, { $set: { state: 'closed' } });
 
-                const chatContact = await msg.getContact();
+                const chatContact = await getSafeContact(client, msg, phone);
                 const selectedFlow = await selectFlow({ isAgendado: chatContact.isMyContact, source: contact.source, phone });
 
                 if (!selectedFlow) {
@@ -1147,7 +1217,7 @@ async function startBot(forceClean = false) {
             // ============================================================
             if (conversation.freeTextState && conversation.freeTextState.active) {
                 const freeInput = (msg.body || '').trim();
-                const chat = await msg.getChat();
+                const chat = await getSafeChat(client, msg, phone);
 
                 // Allow V/M to cancel
                 const freeInputLow = freeInput.toLowerCase();
@@ -1199,7 +1269,7 @@ async function startBot(forceClean = false) {
             // ============================================================
             if (conversation.formState && conversation.formState.active) {
                 const formInput = (msg.body || '').trim();
-                const chat = await msg.getChat();
+                const chat = await getSafeChat(client, msg, phone);
 
                 // Allow V/M to cancel the form
                 const formInputLow = formInput.toLowerCase();
@@ -1346,7 +1416,7 @@ async function startBot(forceClean = false) {
             })();
 
             if (nextStepForCapture && (!contact.name || !contact.email)) {
-                const chat = await msg.getChat();
+                const chat = await getSafeChat(client, msg, phone);
                 const namePrompt = nextStepForCapture.step.actions?.leadDataNamePrompt || '¡Perfecto! Antes de continuar necesito un par de datos 😊\n\n¿Cuál es tu *nombre y apellido*?';
 
                 await Conversation.updateOne({ _id: conversation._id }, {
@@ -1391,9 +1461,9 @@ async function startBot(forceClean = false) {
             })();
 
             if (nextFreeTextStep) {
-                const chat = await msg.getChat();
+                const chat = await getSafeChat(client, msg, phone);
                 const freeTextPrompt = nextFreeTextStep.step.actions?.freeTextPrompt
-                    || '¡Entendido! Por favor desc ribi tu consulta y un integrante del equipo te responderá a la brevedad. 🙏';
+                    || '¡Entendido! Por favor describí tu consulta y un integrante del equipo te responderá a la brevedad. 🙏';
                 const freeTextAck = nextFreeTextStep.step.actions?.freeTextAckMessage
                     || '✅ Recibimos tu consulta. Un integrante del equipo la revisará y te responderá a la brevedad. 🙏\n\n🔹 *M:* Menú principal';
 
@@ -1421,7 +1491,7 @@ async function startBot(forceClean = false) {
 
             // GLOBAL: Always mark as unread after bot has finished its turn.
             // This ensures Salvador sees the unread notification for every incoming message.
-            const chat = await msg.getChat();
+            const chat = await getSafeChat(client, msg, phone);
             markUnreadWithDelay(chat);
 
             // FINAL CLEANUP
@@ -1502,7 +1572,7 @@ async function startBot(forceClean = false) {
         // Detect voice notes (Audio/PTT) and respond asking user to write text instead
         if (msg.type === 'ptt' || msg.type === 'audio') {
             console.log(`[TRACE] 🎤 Voice message (PTT) received from ${contact.phone}. Sending text request.`);
-            const chat = await msg.getChat();
+            const chat = await getSafeChat(client, msg, contact.phone);
             await sendTyping(chat);
             await randomDelay(800, 400);
 
@@ -1533,7 +1603,7 @@ async function startBot(forceClean = false) {
 
             if (!isInPaymentStep) {
                 console.log(`[TRACE] 🚫 Media received outside payment step (step: ${conversation.currentStepId}). Sending menu fallback.`);
-                const chat = await msg.getChat();
+                const chat = await getSafeChat(client, msg, contact.phone);
                 await sendTyping(chat);
                 await randomDelay(800, 400);
                 await chat.sendMessage('No pude entender ese archivo. Escribí *M* para volver al menú principal o *V* para volver atrás.');
@@ -1553,7 +1623,7 @@ async function startBot(forceClean = false) {
                 { $addToSet: { tags: 'pago-enviado' } }
             );
 
-            const chat = await msg.getChat();
+            const chat = await getSafeChat(client, msg, contact.phone);
             // Mark unread + WA label — Salvador needs to verify this payment
             markUnreadWithDelay(chat);
             await syncWhatsAppLabel(chat, 'Pago Enviado');
@@ -1604,7 +1674,7 @@ async function startBot(forceClean = false) {
                     }
                     ops.$set = { state: 'paused' };
                     conversation.state = 'paused';
-                    const chat = await msg.getChat();
+                    const chat = await getSafeChat(client, msg, contact.phone);
                     await syncWhatsAppLabel(chat, 'Quiso Hablar Asesor');
                     // Mark unread — requires human attention now
                     markUnreadWithDelay(chat);
@@ -1648,7 +1718,7 @@ async function startBot(forceClean = false) {
                 }
 
                 const response = formatMessage(currentStep, flow);
-                const chat = await msg.getChat();
+                const chat = await getSafeChat(client, msg, contact.phone);
 
                 // AUTO-TAG: if step contains info-rich content, tag as 'solicito-info'
                 const INFO_KEYWORDS = ['tienda.rad-implantes.com.ar', '.pdf', 'protesis', 'implante', 'presupuesto', 'informe'];
@@ -1795,7 +1865,7 @@ async function startBot(forceClean = false) {
                         $addToSet: { tags: 'intervencion-humana' }
                     }
                 );
-                const chat = await msg.getChat();
+                const chat = await getSafeChat(client, msg, contact.phone);
                 await chat.sendMessage("👍 Recibido. Un asesor humano revisará tu mensaje y te responderá a la brevedad.");
                 return;
             }
@@ -1813,7 +1883,7 @@ async function startBot(forceClean = false) {
             conversation.loopDetection.messagesInCurrentStep = newCount;
 
             const maxAttempts = (flow && flow.published && flow.published.fallbackMaxAttempts) || 5;
-            const chat = await msg.getChat();
+            const chat = await getSafeChat(client, msg, contact.phone);
 
             if (newCount >= maxAttempts) {
                 // LOCKOUT: Too many failed attempts
@@ -1867,7 +1937,7 @@ async function startBot(forceClean = false) {
             if (nextStep?.actions?.collectLeadData && (!contact.name || !contact.email)) {
                 console.log(`[TRACE] 📋 Next step ${nextStep.id} requires capture. Triggering form immediately.`);
                 const namePrompt = nextStep.actions?.leadDataNamePrompt || '¡Perfecto! Antes de continuar necesito un par de datos 😊\n\n¿Cuál es tu *nombre y apellido*?';
-                const chat = await msg.getChat();
+                const chat = await getSafeChat(client, msg, contact.phone);
                 
                 await Conversation.updateOne({ _id: conversation._id }, {
                     $set: {
