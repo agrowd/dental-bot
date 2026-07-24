@@ -1459,14 +1459,20 @@ async function startBot(forceClean = false) {
             }
 
             // --- LEAD CAPTURE FORM TRIGGER ---
-            // Trigger the form if the user selected an option that leads to a step with `collectLeadData: true`
-            const nextStepForCapture = (() => {
+            // Trigger the form if the current step OR a selected option leads to a step with `collectLeadData: true`
+            const stepRequiresCapture = (() => {
                 const steps = flow?.published?.steps;
                 if (!steps || !conversation.currentStepId) return null;
                 const getStep = (id) => (typeof steps.get === 'function') ? steps.get(id) : steps[id];
                 const currentStep = getStep(conversation.currentStepId);
                 if (!currentStep) return null;
 
+                // 1. Check if the CURRENT step itself requires lead capture
+                if (currentStep.actions?.collectLeadData) {
+                    return { id: currentStep.id, step: currentStep };
+                }
+
+                // 2. Check if the user selected an option that leads to a capture step
                 const input = (msg.body || '').trim().toLowerCase();
                 for (const opt of (currentStep.options || [])) {
                     const key = (opt.key || '').toLowerCase();
@@ -1481,21 +1487,21 @@ async function startBot(forceClean = false) {
                 return null;
             })();
 
-            if (nextStepForCapture && (!contact.name || !contact.email)) {
+            if (stepRequiresCapture && (!contact.name || !contact.email)) {
                 const chat = await getSafeChat(client, msg, phone);
-                const namePrompt = nextStepForCapture.step.actions?.leadDataNamePrompt || '¡Perfecto! Antes de continuar necesito un par de datos 😊\n\n¿Cuál es tu *nombre y apellido*?';
+                const namePrompt = stepRequiresCapture.step.actions?.leadDataNamePrompt || '¡Perfecto! Antes de continuar necesito un par de datos 😊\n\n¿Cuál es tu *nombre y apellido*?';
 
                 await Conversation.updateOne({ _id: conversation._id }, {
                     $set: {
                         'formState.active': true,
-                        'formState.pendingStepId': nextStepForCapture.id,
+                        'formState.pendingStepId': stepRequiresCapture.id,
                         'formState.currentField': 'name',
                         'formState.name': '',
                         'formState.email': '',
                         'formState.attempts': 0,
                     }
                 });
-                conversation.formState = { active: true, pendingStepId: nextStepForCapture.id, currentField: 'name', name: '', email: '', attempts: 0 };
+                conversation.formState = { active: true, pendingStepId: stepRequiresCapture.id, currentField: 'name', name: '', email: '', attempts: 0 };
                 await sendTyping(chat);
                 await randomDelay(600, 300);
                 await chat.sendMessage(namePrompt);
@@ -1603,7 +1609,37 @@ async function startBot(forceClean = false) {
             conversation.state = 'active';
             conversation.history = [];
             conversation.loopDetection.messagesInCurrentStep = 0;
-            // Removed early return to allow immediate menu response
+
+            const currentStep = getStep(newStepId);
+            if (currentStep) {
+                // Check if entry step requires lead capture first
+                if (currentStep.actions?.collectLeadData && (!contact.name || !contact.email)) {
+                    const namePrompt = currentStep.actions?.leadDataNamePrompt || '¡Perfecto! Antes de continuar necesito un par de datos 😊\n\n¿Cuál es tu *nombre y apellido*?';
+                    await Conversation.updateOne({ _id: conversation._id }, {
+                        $set: {
+                            'formState.active': true,
+                            'formState.pendingStepId': currentStep.id,
+                            'formState.currentField': 'name',
+                            'formState.name': '',
+                            'formState.email': '',
+                            'formState.attempts': 0,
+                        }
+                    });
+                    const chat = await getSafeChat(client, msg, contact.phone);
+                    await sendTyping(chat);
+                    await randomDelay(600, 300);
+                    await chat.sendMessage(namePrompt);
+                    return;
+                }
+
+                const response = formatMessage(currentStep, flow);
+                const chat = await getSafeChat(client, msg, contact.phone);
+                await sendTyping(chat);
+                await randomDelay(600, 300);
+                await chat.sendMessage(response);
+                markUnreadWithDelay(chat);
+            }
+            return;
         }
         else if (!isPaused && (input === 'v' || input === 'atras' || input.includes('volver'))) {
             console.log(`[TRACE] ⬅️ Universal Back requested by ${contact.phone}`);
@@ -1631,7 +1667,17 @@ async function startBot(forceClean = false) {
             conversation.state = 'active';
             conversation.history = newHistory;
             conversation.loopDetection.messagesInCurrentStep = 0;
-            // Removed early return to allow immediate back response
+
+            const currentStep = getStep(newStepId);
+            if (currentStep) {
+                const response = formatMessage(currentStep, flow);
+                const chat = await getSafeChat(client, msg, contact.phone);
+                await sendTyping(chat);
+                await randomDelay(600, 300);
+                await chat.sendMessage(response);
+                markUnreadWithDelay(chat);
+            }
+            return;
         }
 
         // 1.5a VOICE MESSAGE (PTT) DETECTION

@@ -181,15 +181,12 @@ El cliente reportó que buscar números copiados de WhatsApp con espacios (ej. `
 
 ---
 
-## 🛠️ Solución Definitiva a Excepción `r: r` y Variaciones de Formato Móvil LATAM en `getSafeChat` (24/07/2026)
+## 🛠️ Solución a Navegación Universal (M/V) y Activación de Captura de Datos en Paso Inicial (24/07/2026)
 
 ### 1. Root Cause Analysis
-Del último log de ejecución en el VPS:
-`[TRACE] Resolved LID 167954796826725@lid to phone JID 5491126642674@c.us via enforceLidAndPnRetrieval`
-`[ERROR] Fatal Error in message handler: Error: Could not get WhatsApp chat for phone 5491126642674 / JID 167954796826725@lid`
-- **Causa Raíz**: En Argentina (y varios países de LATAM), los números móviles se escriben internacionalmente con un `9` (`54911...`), pero internamente la base de datos de WhatsApp Web muchas veces los almacena sin el `9` (`5411...`). Al buscar exactamente `5491126642674@c.us`, `client.getChatById` devolvía `null` porque el objeto estaba indizado como `541126642674@c.us`.
+- **Fallo en Comandos M / V**: Al enviar `M` o `V`, el bot reseteaba la posición en la conversación pero no hacía `return`. La ejecución continuaba hacia la evaluación de opciones donde la letra `"M"` era comparada contra las opciones `1`, `2`, `3` del menú. Al no coincidir, el bot disparaba inmediatamente el mensaje de fallback *"No comprendí tu mensaje..."*.
+- **Fallo de Captura de Leads en `info_general`**: El paso de entrada `info_general` tiene la acción `collectLeadData: true` activa en el flujo. La comprobación previa sólo buscaba `collectLeadData` al transicionar mediante opciones, ignorando cuando el usuario ya estaba en el paso inicial.
 
 ### 2. Solución Aplicada
-- **Prueba de Variantes Móviles LATAM (`549` <-> `54`)**: `getSafeChat` genera automáticamente los JID alternativos alternando la presencia del dígito `9` para Argentina (`54911...` <-> `5411...`) y del dígito `1` para México (`521...` <-> `52...`).
-- **Búsqueda Dinámica por Dígitos**: Si la consulta directa por JID no responde, `getSafeChat` busca entre los chats de la memoria de WhatsApp Web coincidiendo los últimos 8 dígitos.
-- **Wrapper Sintético Inmune**: En el caso extremo de no hallar una instancia de chat previa en la tienda de WhatsApp, `getSafeChat` construye un Wrapper Sintético que invoca `client.sendMessage(targetJid, content)`, garantizando que **nunca** se lance una excepción y que el mensaje se transmita con éxito.
+- **Respuesta y Salida Directa en M y V**: Se estructuraron los handlers `M` y `V` para enviar inmediatamente la respuesta del paso menú/anterior y retornar, evitando la evaluación errónea como opción.
+- **Captura Evaluada en Paso Actual**: Se actualizó `stepRequiresCapture` para verificar `collectLeadData` en el paso actual (`currentStep`), disparando la solicitud de Nombre y Email desde la primera interacción.
