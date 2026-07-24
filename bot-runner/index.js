@@ -599,8 +599,10 @@ async function startBot(forceClean = false) {
         console.log('✅ WhatsApp bot is ready!');
         botState = 'connected';
         currentQR = null;
-        sessionStartTime = new Date(); // Record activation time
-        if (qrTimeout) clearTimeout(qrTimeout);
+        // Clear any leftover phone processing locks in MongoDB
+        await Setting.deleteMany({ key: { $regex: '^lock_phone_' } }).catch(err => {
+            console.error('[INIT] Error cleaning stale phone locks:', err);
+        });
 
         // Run the background database migration for LID contacts
         runLidMigration(client).catch(err => {
@@ -808,15 +810,28 @@ async function startBot(forceClean = false) {
         let lockTimeout;
 
         try {
-            // 1. ATOMIC CROSS-INSTANCE LOCK BY PHONE
+            // 1. ATOMIC CROSS-INSTANCE LOCK BY PHONE (WITH 15s STALE LOCK AUTO-CLEANUP)
             try {
                 await Setting.create({ key: lockKey, instance: INSTANCE_ID, at: new Date() });
             } catch (err) {
                 if (err.code === 11000) {
-                    console.log(`[TRACE][${INSTANCE_ID}] 🔒 Phone ${phone} is BUSY. Skipping parallel processing.`);
-                    return;
+                    const existingLock = await Setting.findOne({ key: lockKey });
+                    const lockAgeMs = existingLock && existingLock.at ? (Date.now() - new Date(existingLock.at).getTime()) : 999999;
+                    if (lockAgeMs > 15000) {
+                        console.log(`[LOCK] 🔓 Found stale phone lock for ${phone} (${Math.round(lockAgeMs / 1000)}s old). Removing lock and continuing.`);
+                        await Setting.deleteOne({ key: lockKey }).catch(() => { });
+                        try {
+                            await Setting.create({ key: lockKey, instance: INSTANCE_ID, at: new Date() });
+                        } catch (retryErr) {
+                            if (retryErr.code === 11000) return;
+                        }
+                    } else {
+                        console.log(`[TRACE][${INSTANCE_ID}] 🔒 Phone ${phone} is BUSY (${Math.round(lockAgeMs / 1000)}s old lock). Skipping parallel processing.`);
+                        return;
+                    }
+                } else {
+                    throw err;
                 }
-                throw err;
             }
 
             lockTimeout = setTimeout(releaseLock, 60000); // 60s safety timeout

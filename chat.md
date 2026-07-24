@@ -181,15 +181,11 @@ El cliente reportó que buscar números copiados de WhatsApp con espacios (ej. `
 
 ---
 
-## 🛠️ Solución al Bloqueo de Perfil Chromium (Code 21) y Limpieza de Volúmenes en Docker (24/07/2026)
+## 🛠️ Solución a Bloqueo Silencioso de Mensajes por Candados Atómicos Residuales (`lock_phone_`) (24/07/2026)
 
 ### 1. Root Cause Analysis
-Al revisar la salida del deploy enviada por el usuario:
-`Error: Failed to launch the browser process: Code: 21. The profile appears to be in use by another Chromium process (1514) on another computer (c07cae9eac83). Chromium has locked the profile so that it doesn't get corrupted.`
-- **Causa Raíz de Code 21**: Al mapear el volumen persistente de Docker, Chromium deja archivos de bloqueo (`SingletonLock`, `SingletonSocket`) en la carpeta de sesión con el ID del contenedor viejo (`c07cae9eac83`). Al iniciarse un contenedor nuevo, el ID del contenedor cambia, provocando que Chromium rechace cargar el perfil creyendo que lo está usando otra computadora.
-- **Causa Raíz de EBUSY**: El método `fs.rmSync('/app/.wwebjs_auth')` intentaba eliminar el directorio raíz del punto de montaje del volumen Docker, lo cual Linux rechaza con error `EBUSY`.
+- **Causa Raíz**: Para evitar respuestas duplicadas, el bot registra un candado en MongoDB (`Setting.create({ key: 'lock_phone_' + phone })`). Si un contenedor se reiniciaba o un mensaje crasheaba a mitad del flujo, el candado quedaba atrapado en la base de datos MongoDB indefinidamente. En los siguientes mensajes de ese número, MongoDB devolvía el error `11000` (llave duplicada) y el bot descartaba silenciosamente el mensaje sin responder jamás.
 
 ### 2. Solución Aplicada
-- **Desbloqueador de Perfil Chromium (`removeChromiumLocks`)**: Se agregó un limpiador que remueve automáticamente los cerrojos `SingletonLock` y `SingletonSocket` antes de abrir el navegador en cada inicio del bot.
-- **Limpiador de Contenidos de Volúmenes (`clearDirectoryContents`)**: Se modificaron las rutinas de vaciado de sesión para borrar el contenido dentro de la carpeta sin intentar eliminar el punto de montaje.
-- **Parámetros de Estabilidad Puppeteer**: Se incorporó `--disable-dev-shm-usage` y `--no-zygote` en los argumentos de Puppeteer.
+- **Purga de Candados en Inicio**: Al iniciar y quedar en estado `ready`, el bot elimina de MongoDB todos los registros `lock_phone_*` heredados de sesiones previas.
+- **Vencimiento de Candado a los 15 Segundos**: Si al procesar un mensaje existe un candado en MongoDB con más de 15 segundos de antigüedad, se asume obsoleto, se elimina y se continúa con el procesamiento normal.
