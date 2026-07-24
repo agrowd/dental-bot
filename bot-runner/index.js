@@ -571,17 +571,28 @@ async function getSafeChat(client, msg, phone) {
     }
 
     // Synthetic Fallback Chat wrapper — guarantees getSafeChat never throws and always permits sending
-    const targetJid = jidsToTry.find(j => j.endsWith('@c.us')) || (cleanPhone ? `${cleanPhone}@c.us` : msg?.from);
-    if (targetJid) {
-        console.log(`[TRACE] 🛠️ getSafeChat creating synthetic Chat wrapper for JID: ${targetJid}`);
+    const primaryJid = msg?.from || jidsToTry.find(j => j.endsWith('@c.us')) || (cleanPhone ? `${cleanPhone}@c.us` : null);
+    const fallbackPhoneJid = jidsToTry.find(j => j.endsWith('@c.us')) || (cleanPhone ? `${cleanPhone}@c.us` : null);
+
+    if (primaryJid) {
+        console.log(`[TRACE] 🛠️ getSafeChat creating synthetic Chat wrapper (primary: ${primaryJid}, fallback: ${fallbackPhoneJid})`);
         return {
-            id: { _serialized: targetJid, user: targetJid.replace('@c.us', '').replace('@lid', '') },
+            id: { _serialized: primaryJid, user: primaryJid.replace('@c.us', '').replace('@lid', '') },
             sendMessage: async (content, options) => {
-                return await client.sendMessage(targetJid, content, options);
+                try {
+                    console.log(`[TRACE] 📤 Synthetic sendMessage attempting to ${primaryJid}`);
+                    return await client.sendMessage(primaryJid, content, options);
+                } catch (e) {
+                    if (fallbackPhoneJid && fallbackPhoneJid !== primaryJid) {
+                        console.log(`[TRACE] 📤 Primary sendMessage to ${primaryJid} failed (${e.message}). Trying fallback ${fallbackPhoneJid}...`);
+                        return await client.sendMessage(fallbackPhoneJid, content, options);
+                    }
+                    throw e;
+                }
             },
             sendStateTyping: async () => {
                 try {
-                    const chat = await client.getChatById(targetJid);
+                    const chat = await client.getChatById(primaryJid).catch(() => null);
                     if (chat && typeof chat.sendStateTyping === 'function') {
                         return await chat.sendStateTyping();
                     }
@@ -589,7 +600,7 @@ async function getSafeChat(client, msg, phone) {
             },
             markUnread: async () => {
                 try {
-                    const chat = await client.getChatById(targetJid);
+                    const chat = await client.getChatById(primaryJid).catch(() => null);
                     if (chat && typeof chat.markUnread === 'function') {
                         return await chat.markUnread();
                     }

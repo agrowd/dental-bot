@@ -181,12 +181,11 @@ El cliente reportó que buscar números copiados de WhatsApp con espacios (ej. `
 
 ---
 
-## 🛠️ Solución Definitiva a Bloqueo de Recepción de Mensajes (Cache en Memoria y Timeout de Resolución LID) (24/07/2026)
+## 🛠️ Solución al Enrutamiento Directo de Mensajes WhatsApp (`msg.from` Primario en Wrapper Sintético) (24/07/2026)
 
 ### 1. Root Cause Analysis
-- **Causa Raíz Encontrada**: En la captura de pantalla y logs enviada por el usuario se observó que **solo el primer `hola` ingresaba al procesador de mensajes `client.on('message')`**. Los mensajes siguientes (`a`, `hola`, `a`) no llegaban ni a registrarse en la terminal.
-- **Origen exacto del bloqueo**: La función `resolveLidToPhone` ejecutaba una llamada síncrona a Puppeteer (`client.pupPage.evaluate`) en **cada mensaje recibido**. Al no haber caché ni tiempo límite de espera, cuando el navegador se demoraba o se bloqueaba internamente, el listener `client.on('message')` quedaba pausado indefinidamente esperando que la promesa retornara, bloqueando todas las respuestas subsecuentes del cliente.
+- **Causa Raíz Revelada**: Para contactos que utilizan ID de privacidad (`@lid`), WhatsApp Web mantiene abierta la ventana de chat usando exclusivamente esa ID privada (`167954796826725@lid`). El wrapper sintético de `getSafeChat` estaba obligando a responder apuntando a la ID traducida de teléfono (`5491126642674@c.us`), provocando que WhatsApp Web descartara silenciosamente el envío por no ser la ID del hilo de conversación activo.
 
 ### 2. Solución Aplicada
-- **Caché en Memoria a 0ms (`lidResolutionMemoryCache`)**: Al resolver por primera vez un usuario con ID de privacidad (LID), el número de teléfono real se almacena en memoria. Todos los mensajes posteriores devuelven el número resuelto en 0ms sin tocar Puppeteer.
-- **Límite de Tiempo Máximo de 2.5s (`withTimeout`)**: Se estableció un timeout estricto de 2.5 segundos en la consulta a Puppeteer. Si WhatsApp Web no responde en ese tiempo, la llamada se aborta de forma segura para no congelar la recepción de mensajes.
+- **Respuesta Prioritaria a `msg.from`**: El wrapper sintético de `getSafeChat` envía prioritariamente la respuesta al hilo activo del cual proviene el mensaje (`msg.from`).
+- **Respaldo Secundario a Teléfono**: Si por cualquier razón la transmisión al JID emisor falla, el sistema intenta de inmediato el JID alternativo de teléfono (`54911...@c.us`).
