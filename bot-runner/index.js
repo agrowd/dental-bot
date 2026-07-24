@@ -2378,13 +2378,30 @@ async function triggerAutoHandoff(conversation, contact, currentStep) {
     console.log('Auto-handoff triggered for:', conversation.phone);
 }
 
-// Helper to resolve LID to real JID
+const lidResolutionMemoryCache = new Map();
+
+// Helper to resolve LID to real JID with in-memory caching & timeout protection
 async function resolveLidToPhone(client, sourceId) {
     if (!sourceId || !sourceId.includes('@lid')) return sourceId;
     
-    // 1. Try enforceLidAndPnRetrieval in page context (extremely reliable, queries server if not cached)
+    // 0. Check in-memory cache first (0ms latency, zero Puppeteer / DB calls)
+    if (lidResolutionMemoryCache.has(sourceId)) {
+        return lidResolutionMemoryCache.get(sourceId);
+    }
+
+    // Helper: Wrap promise with a strict timeout (2500ms) to ensure pupPage NEVER blocks message handler
+    const withTimeout = (promise, ms = 2500) => {
+        return Promise.race([
+            promise,
+            new Promise((_, reject) => setTimeout(() => reject(new Error('LID resolution timeout')), ms))
+        ]);
+    };
+
+    let resolvedJid = null;
+
+    // 1. Try enforceLidAndPnRetrieval in page context with 2.5s timeout
     try {
-        const resolvedJid = await client.pupPage.evaluate(async (lid) => {
+        resolvedJid = await withTimeout(client.pupPage.evaluate(async (lid) => {
             try {
                 if (window.WWebJS && window.WWebJS.enforceLidAndPnRetrieval) {
                     const res = await window.WWebJS.enforceLidAndPnRetrieval(lid);
@@ -2392,69 +2409,50 @@ async function resolveLidToPhone(client, sourceId) {
                         return res.phone._serialized;
                     }
                 }
-            } catch (err) {
-                console.error('enforceLidAndPnRetrieval failed in page context:', err);
-            }
+            } catch (err) {}
             return null;
-        }, sourceId);
-
-        if (resolvedJid) {
-            console.log(`[TRACE] Resolved LID ${sourceId} to phone JID ${resolvedJid} via enforceLidAndPnRetrieval`);
-            return resolvedJid;
-        }
-    } catch (e) {
-        console.log(`[TRACE] enforceLidAndPnRetrieval failed for ${sourceId}:`, e.message);
-    }
-
-    // 2. Try resolving via LidUtils in page context (local cache check fallback)
-    try {
-        const resolvedJid = await client.pupPage.evaluate((lid) => {
-            try {
-                if (window.Store && window.Store.WidFactory && window.Store.LidUtils) {
-                    const wid = window.Store.WidFactory.createWid(lid);
-                    const pnWid = window.Store.LidUtils.getPhoneNumber(wid);
-                    if (pnWid && pnWid._serialized) {
-                        return pnWid._serialized;
-                    }
-                }
-            } catch (err) {
-                console.error('LidUtils resolution failed in page context:', err);
-            }
-            return null;
-        }, sourceId);
-
-        if (resolvedJid) {
-            console.log(`[TRACE] Resolved LID ${sourceId} to phone JID ${resolvedJid} via LidUtils`);
-            return resolvedJid;
-        }
-    } catch (e) {
-        console.log(`[TRACE] LidUtils resolution failed for ${sourceId}:`, e.message);
-    }
-
-    // 3. Try getContactLidAndPhone if it exists (for compatibility with other versions)
-    try {
-        if (typeof client.getContactLidAndPhone === 'function') {
-            const mapping = await client.getContactLidAndPhone(sourceId);
-            if (mapping && mapping[0] && mapping[0].pn) {
-                return mapping[0].pn;
-            }
-        }
-    } catch (e) {
-        console.log(`[TRACE] getContactLidAndPhone failed for ${sourceId}:`, e.message);
-    }
-
-    // 4. Fallback: getContactById check if it returns JID or phone number
-    try {
-        const wppContact = await client.getContactById(sourceId);
-        if (wppContact && wppContact.id && wppContact.id._serialized && wppContact.id._serialized.endsWith('@c.us')) {
-            return wppContact.id._serialized;
-        }
-        if (wppContact && wppContact.number && wppContact.number.length <= 13) {
-            return wppContact.number + '@c.us';
-        }
+        }, sourceId));
     } catch (e) { }
 
-    return sourceId;
+    // 2. Try LidUtils if step 1 failed
+    if (!resolvedJid) {
+        try {
+            resolvedJid = await withTimeout(client.pupPage.evaluate((lid) => {
+                try {
+                    if (window.Store && window.Store.WidFactory && window.Store.LidUtils) {
+                        const wid = window.Store.WidFactory.createWid(lid);
+                        const pnWid = window.Store.LidUtils.getPhoneNumber(wid);
+                        if (pnWid && pnWid._serialized) {
+                            return pnWid._serialized;
+                        }
+                    }
+                } catch (err) {}
+                return null;
+            }, sourceId));
+        } catch (e) { }
+    }
+
+    // 3. Try getContactById as fallback
+    if (!resolvedJid) {
+        try {
+            const wppContact = await withTimeout(client.getContactById(sourceId));
+            if (wppContact && wppContact.id && wppContact.id._serialized && wppContact.id._serialized.endsWith('@c.us')) {
+                resolvedJid = wppContact.id._serialized;
+            } else if (wppContact && wppContact.number && wppContact.number.length <= 13) {
+                resolvedJid = wppContact.number + '@c.us';
+            }
+        } catch (e) { }
+    }
+
+    const finalResult = resolvedJid || sourceId;
+
+    // Cache the result (if resolved to phone) to eliminate future lookups
+    if (finalResult && finalResult.endsWith('@c.us')) {
+        lidResolutionMemoryCache.set(sourceId, finalResult);
+        console.log(`[TRACE] 💡 Cached LID resolution: ${sourceId} -> ${finalResult}`);
+    }
+
+    return finalResult;
 }
 
 // Background database migration script to resolve historical LID records

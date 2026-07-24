@@ -181,12 +181,12 @@ El cliente reportó que buscar números copiados de WhatsApp con espacios (ej. `
 
 ---
 
-## 🛠️ Solución Integral a la Continuidad de Flujos (Motor Centralizado de Opciones) (24/07/2026)
+## 🛠️ Solución Definitiva a Bloqueo de Recepción de Mensajes (Cache en Memoria y Timeout de Resolución LID) (24/07/2026)
 
 ### 1. Root Cause Analysis
-- **Revisión General de Flujos**: Al revisar todos los flujos del sistema, detectamos que había 3 evaluadores separados en el bot (`stepRequiresCapture`, `nextFreeTextStep` y `handleStepLogic`). Dos de ellos mantenían una comparación estricta de cadenas que ignoraba respuestas con minúsculas `a`, números `1` o variantes con signos de puntuación `A)`. Esto ocasionaba que en ciertos menús o saltos de flujo el bot no reconociera la opción elegida.
+- **Causa Raíz Encontrada**: En la captura de pantalla y logs enviada por el usuario se observó que **solo el primer `hola` ingresaba al procesador de mensajes `client.on('message')`**. Los mensajes siguientes (`a`, `hola`, `a`) no llegaban ni a registrarse en la terminal.
+- **Origen exacto del bloqueo**: La función `resolveLidToPhone` ejecutaba una llamada síncrona a Puppeteer (`client.pupPage.evaluate`) en **cada mensaje recibido**. Al no haber caché ni tiempo límite de espera, cuando el navegador se demoraba o se bloqueaba internamente, el listener `client.on('message')` quedaba pausado indefinidamente esperando que la promesa retornara, bloqueando todas las respuestas subsecuentes del cliente.
 
 ### 2. Solución Aplicada
-- **Motor Unificado `findMatchingOption`**: Se centralizó la lógica en una función única usada por todo el motor del bot.
-  - Opciones como `A) ...` ahora aceptan: `a`, `1`, `A`, `1)`, `A)` o palabras clave del texto de la opción.
-  - Aplica de forma idéntica en **todos los flujos creados y por crear** en el sistema.
+- **Caché en Memoria a 0ms (`lidResolutionMemoryCache`)**: Al resolver por primera vez un usuario con ID de privacidad (LID), el número de teléfono real se almacena en memoria. Todos los mensajes posteriores devuelven el número resuelto en 0ms sin tocar Puppeteer.
+- **Límite de Tiempo Máximo de 2.5s (`withTimeout`)**: Se estableció un timeout estricto de 2.5 segundos en la consulta a Puppeteer. Si WhatsApp Web no responde en ese tiempo, la llamada se aborta de forma segura para no congelar la recepción de mensajes.
