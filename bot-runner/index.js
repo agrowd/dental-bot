@@ -594,80 +594,6 @@ async function startBot(forceClean = false) {
         console.log(`[HEARTBEAT] Bot runner alive. State: ${botState}. Memory: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB`);
     }, 20 * 60 * 1000); // Every 20 minutes
 
-    // Start client initialization
-    await client.initialize();
-}
-
-// --- AUTOMATIC WATCHDOG & SELF-HEALING ENGINE ---
-let isRecovering = false;
-
-const autoRecoverBot = async (reason) => {
-    if (isRecovering) return;
-    isRecovering = true;
-    console.log(`[WATCHDOG] 🔄 Auto-recovering bot runner (Reason: ${reason})...`);
-
-    try {
-        botState = 'connecting';
-        if (client) {
-            try {
-                await client.destroy();
-            } catch (e) {
-                console.warn('[WATCHDOG] Error destroying client:', e.message);
-            }
-            client = null;
-        }
-
-        await new Promise(r => setTimeout(r, 3000));
-
-        // Re-start bot preserving saved session
-        await startBot(false);
-        console.log('[WATCHDOG] ✅ Auto-recovery restart triggered successfully.');
-    } catch (err) {
-        console.error('[WATCHDOG] ❌ Auto-recovery failed:', err.message);
-        botState = 'disconnected';
-    } finally {
-        isRecovering = false;
-    }
-};
-
-const runWatchdogCheck = async () => {
-    if (isRecovering) return;
-
-    const sessionName = process.env.SESSION_NAME || '.wwebjs_auth';
-    const authPath = path.join(process.cwd(), sessionName);
-
-    // 1. If state claims connected, verify Puppeteer & WhatsApp page responsiveness
-    if (botState === 'connected' && client) {
-        let isAlive = false;
-        try {
-            const statePromise = client.getState();
-            const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('Health state check timeout')), 10000)
-            );
-
-            const state = await Promise.race([statePromise, timeoutPromise]);
-            if (state === 'CONNECTED' || state === 'PAIRING') {
-                isAlive = true;
-            }
-        } catch (err) {
-            console.warn('[WATCHDOG] ⚠️ Health check ping failed:', err.message);
-            isAlive = false;
-        }
-
-        if (!isAlive) {
-            console.error('[WATCHDOG] 🚨 Bot is FROZEN or UNRESPONSIVE! Initiating self-healing restart...');
-            await autoRecoverBot('frozen_unresponsive');
-        }
-    } else if (botState === 'disconnected' && fs.existsSync(authPath)) {
-        // Auto-reconnect if session exists but state is disconnected
-        console.log('[WATCHDOG] ⚡ Disconnected state with valid session detected. Re-triggering bot...');
-        await autoRecoverBot('disconnected_state_recovery');
-    }
-};
-
-// Run watchdog health check every 2 minutes
-setInterval(runWatchdogCheck, 2 * 60 * 1000);
-
     // Call Handler (New Implementation)
     client.on('call', async (call) => {
         console.log('[TRACE] 📞 Incoming call from:', call.from);
@@ -1885,6 +1811,80 @@ setInterval(runWatchdogCheck, 2 * 60 * 1000);
             return;
         }
     } // End of handleStepLogic
+
+    // Start client initialization
+    await client.initialize();
+} // End of startBot
+
+// --- AUTOMATIC WATCHDOG & SELF-HEALING ENGINE ---
+let isRecovering = false;
+
+const autoRecoverBot = async (reason) => {
+    if (isRecovering) return;
+    isRecovering = true;
+    console.log(`[WATCHDOG] 🔄 Auto-recovering bot runner (Reason: ${reason})...`);
+
+    try {
+        botState = 'connecting';
+        if (client) {
+            try {
+                await client.destroy();
+            } catch (e) {
+                console.warn('[WATCHDOG] Error destroying client:', e.message);
+            }
+            client = null;
+        }
+
+        await new Promise(r => setTimeout(r, 3000));
+
+        // Re-start bot preserving saved session
+        await startBot(false);
+        console.log('[WATCHDOG] ✅ Auto-recovery restart triggered successfully.');
+    } catch (err) {
+        console.error('[WATCHDOG] ❌ Auto-recovery failed:', err.message);
+        botState = 'disconnected';
+    } finally {
+        isRecovering = false;
+    }
+};
+
+const runWatchdogCheck = async () => {
+    if (isRecovering) return;
+
+    const sessionName = process.env.SESSION_NAME || '.wwebjs_auth';
+    const authPath = path.join(process.cwd(), sessionName);
+
+    // 1. If state claims connected, verify Puppeteer & WhatsApp page responsiveness
+    if (botState === 'connected' && client) {
+        let isAlive = false;
+        try {
+            const statePromise = client.getState();
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Health state check timeout')), 10000)
+            );
+
+            const state = await Promise.race([statePromise, timeoutPromise]);
+            if (state === 'CONNECTED' || state === 'PAIRING') {
+                isAlive = true;
+            }
+        } catch (err) {
+            console.warn('[WATCHDOG] ⚠️ Health check ping failed:', err.message);
+            isAlive = false;
+        }
+
+        if (!isAlive) {
+            console.error('[WATCHDOG] 🚨 Bot is FROZEN or UNRESPONSIVE! Initiating self-healing restart...');
+            await autoRecoverBot('frozen_unresponsive');
+        }
+    } else if (botState === 'disconnected' && fs.existsSync(authPath)) {
+        // Auto-reconnect if session exists but state is disconnected
+        console.log('[WATCHDOG] ⚡ Disconnected state with valid session detected. Re-triggering bot...');
+        await autoRecoverBot('disconnected_state_recovery');
+    }
+};
+
+// Run watchdog health check every 2 minutes
+setInterval(runWatchdogCheck, 2 * 60 * 1000);
 
 // Format message with options and dynamic variables
 function formatMessage(step, flow) {
