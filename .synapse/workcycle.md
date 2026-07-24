@@ -69,11 +69,11 @@
 ### 11/06/2026 - Habilitación de Pegado en Buscadores de Leads y Conversaciones
 - **Habilitación de Pegado (Buscadores Principales)**: El usuario reportó que el buscador principal de Leads tampoco permitía pegar números en su computadora. Para solucionarlo, se implementó un handler `onPaste` explícito y se agregó un botón interactivo "📋 Pegar" tanto en el buscador de la página de Leads ([leads/page.tsx](file:///c:/Users/Try%20Hard/Desktop/Nexte/dental-response/src/app/admin/leads/page.tsx)) como en el de la página de Conversaciones ([conversations/page.tsx](file:///c:/Users/Try%20Hard/Desktop/Nexte/dental-response/src/app/admin/conversations/page.tsx)). El botón lee del portapapeles con `navigator.clipboard.readText()` y tiene un fallback en caso de bloqueos del navegador (como entornos HTTP inseguros).
 
-### 24/07/2026 - Solución a la Continuidad de Opciones en el Flujo (Evaluador Multiformato de Opciones)
-- **Diagnóstico del Fallo al Responder con Letras (`a`, `b`, `c`)**: La función de evaluación de opciones realizaba una comparación estricta de cadenas entre el mensaje del usuario y la propiedad `opt.key` de MongoDB. Cuando las opciones se mostraban al cliente como `A)`, `B)`, `C)`, la respuesta en minúscula `a` no coincidía exactamente con `A)` ni con las claves numéricas `1`, `2`, `3`. Al no coincidir, el bot caía en Fallback y no avanzaba al siguiente paso del flujo.
+### 24/07/2026 - Solución Integral a la Continuidad de Flujos (Motor Centralizado de Opciones)
+- **Auditoría Global de Flujos**: Se realizó una auditoría completa sobre cómo se evalúan las opciones en todos los flujos del sistema. Se identificó que existían 3 puntos distintos en el código donde se comparaban las opciones del usuario con las claves del flujo (`stepRequiresCapture`, `nextFreeTextStep` y la evaluación principal). En los disparadores de captura se mantenía una búsqueda estricta que no toleraba variaciones de letras/números/puntuación.
 - **Solución Implementada**:
-  - **Evaluador Multiformato de Opciones**: Se implementó una lógica de coincidencia flexible de 3 capas:
-    1. **Coincidencia Directa y Limpia**: Compara quitando signos de puntuación (`a` coincide con `A)`, `A.`, `a:`).
-    2. **Equivalencia Letra <-> Número por Índice**: La opción 1 (índice 0) acepta `a`, `1`, `a)`, `1)`. La opción 2 (índice 1) acepta `b`, `2`, `b)`, `2)`. La opción 3 (índice 2) acepta `c`, `3`, `c)`, `3)`.
-    3. **Coincidencia Parcial de Texto de la Opción**: Reconoce palabras clave del texto de la etiqueta (ej: `quiero info`, `paciente`, `profesional`).
-  - **Depuración de Logs**: Se silenció el aviso de diagnóstico interno para mantener la terminal limpia.
+  - **Función Central `findMatchingOption(input, options)`**: Se creó un motor unificado de evaluación para todo el bot que garantiza coincidencia en 100% de los escenarios:
+    - Acepta letras (`a`, `b`, `c`), números (`1`, `2`, `3`), o formatos con signos (`A)`, `1.`).
+    - Tolera diferencias de mayúsculas/minúsculas y espacios.
+    - Reconoce palabras clave del texto de la opción.
+  - **Aplicación Global**: Se reemplazó la lógica en los 3 evaluadores del bot, garantizando que **todos los flujos y menús del sistema** respondan con total soltura y fluidez.

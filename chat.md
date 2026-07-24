@@ -181,13 +181,12 @@ El cliente reportó que buscar números copiados de WhatsApp con espacios (ej. `
 
 ---
 
-## 🛠️ Solución a la Continuidad de Opciones en el Flujo (Evaluador Multiformato de Opciones) (24/07/2026)
+## 🛠️ Solución Integral a la Continuidad de Flujos (Motor Centralizado de Opciones) (24/07/2026)
 
 ### 1. Root Cause Analysis
-- **Causa Raíz (Respuesta `a` no avanzaba el flujo)**: La función de evaluación de opciones en `handleStepLogic` hacía una comparación directa estricta entre lo que escribía el usuario (`a`) y las propiedades de las opciones en MongoDB. Como el texto mostrado al usuario decía `A) Quiero Info...` (con paréntesis), la letra simple `a` no coincidía exactamente con la clave guardada ni con la etiqueta completa. Por ende, el bot no detectaba la opción elegida y no avanzaba al siguiente paso.
+- **Revisión General de Flujos**: Al revisar todos los flujos del sistema, detectamos que había 3 evaluadores separados en el bot (`stepRequiresCapture`, `nextFreeTextStep` y `handleStepLogic`). Dos de ellos mantenían una comparación estricta de cadenas que ignoraba respuestas con minúsculas `a`, números `1` o variantes con signos de puntuación `A)`. Esto ocasionaba que en ciertos menús o saltos de flujo el bot no reconociera la opción elegida.
 
 ### 2. Solución Aplicada
-- **Evaluador Multiformato Inteligente de Opciones**:
-  1. **Acepta Letra o Número indistintamente**: Para la primera opción, acepta `a`, `1`, `a)`, `1)`. Para la segunda opción, acepta `b`, `2`, `b)`, `2)`.
-  2. **Limpieza de Puntuación**: Ignora paréntesis, puntos o dos puntos al comparar (`a` = `A)` = `a.`).
-  3. **Reconocimiento de Texto Parcial**: Si el usuario escribe palabras de la opción (ej: `quiero info`, `paciente`, `profesional`), también lo reconoce y avanza.
+- **Motor Unificado `findMatchingOption`**: Se centralizó la lógica en una función única usada por todo el motor del bot.
+  - Opciones como `A) ...` ahora aceptan: `a`, `1`, `A`, `1)`, `A)` o palabras clave del texto de la opción.
+  - Aplica de forma idéntica en **todos los flujos creados y por crear** en el sistema.
