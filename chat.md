@@ -181,14 +181,12 @@ El cliente reportó que buscar números copiados de WhatsApp con espacios (ej. `
 
 ---
 
-## 🛠️ Diagnóstico y Solución: Bucle de Sesión Revocada en Teléfono y Generación Limpia de QR (24/07/2026)
+## 🛠️ Persistencia Permanente de Sesión WhatsApp ante Actualizaciones del Servidor (24/07/2026)
 
 ### 1. Root Cause Analysis
-Salvador reportó: *"Cerré sesión en el Chat de Jenny y volví a escanear también y tampoco va... Esta mortadela. Probé con 3 números distintos"*.
-- **Causa Raíz**: Al desvincular o cerrar sesión en WhatsApp desde el celular, la carpeta `.wwebjs_auth` en el VPS conservaba los tokens desvinculados/revocados. Cuando el usuario hacía clic en "Activar Bot", el sistema intentaba reutilizar `.wwebjs_auth`, pero como el token había sido anulado por WhatsApp, el cliente quedaba colgado intentando conectar con credenciales inactivas **sin emitir jamás un nuevo código QR**.
+El usuario solicitó: *"Podemos hacer alguna forma de que se mantenga la sesión aunque se actualice el server? busca la forma"*.
+- **Causa Raíz de la Pérdida de Sesión en Deploys**: El directorio `.wwebjs_auth` se estaba almacenando dentro del sistema de archivos interno/efímero del contenedor Docker `dental-bot-runner`. Cada vez que se ejecutaba `./deploy-vps.sh`, el comando `docker compose down` eliminaba el contenedor antiguo y borraba los archivos de sesión guardados, forzando un nuevo escaneo QR.
 
 ### 2. Solución Aplicada
-- **Auto-Detección de Desvinculación en Teléfono**: En `client.on('disconnected')`, si el motivo es `LOGOUT`, `UNPAIRED`, `NAVIGATION` o `CONFLICT`, la carpeta de sesión revocada se borra de inmediato.
-- **Auto-Recuperación por Timeout (40s)**: Si el bot se queda en estado `connecting` por más de 40s intentando cargar una sesión guardada sin obtener respuesta, asume que la sesión fue anulada, limpia `.wwebjs_auth` y genera automáticamente un nuevo código QR.
-- **Acción Manual "Generar Nuevo QR" en el Panel Admin**: Se incorporó el botón `⚡ Generar Nuevo QR (Limpiar Sesión)` en [admin/whatsapp/page.tsx](file:///c:/Users/Try%20Hard/Desktop/Nexte/dental-response/src/app/admin/whatsapp/page.tsx) para forzar la limpieza de credenciales revocadas de forma directa desde la web.
-- **Despausado Automático e Inclusión de Buffer de Timestamp**: Saludos y opciones despausan automáticamente las conversaciones y se aplicó un buffer de 10 minutos de margen de conexión.
+- **Volumen Persistente Nominado de Docker**: En [docker-compose.yml](file:///c:/Users/Try%20Hard/Desktop/Nexte/dental-response/docker-compose.yml), se añadió el volumen persistente `whatsapp-session:/app/.wwebjs_auth` bajo la definición global `volumes: whatsapp-session: name: odontobot_whatsapp_session`.
+- **Comportamiento**: Las credenciales de autenticación quedan guardadas en el almacenamiento persistente del sistema operativo del VPS. Cuando se sube código nuevo y se ejecuta `./deploy-vps.sh`, el contenedor se destruye y reconstruye, pero vuelve a montar automáticamente el volumen `odontobot_whatsapp_session` intacto. El bot se auto-conecta en ~3 segundos **sin pedir escaneo de código QR**.

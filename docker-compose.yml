@@ -36,3 +36,8 @@ services:
       - WHATSAPP_SESSION_PATH=/app/.wwebjs_auth
     volumes:
       - ./public/uploads:/app/public/uploads
+      - whatsapp-session:/app/.wwebjs_auth
+
+volumes:
+  whatsapp-session:
+    name: odontobot_whatsapp_session
