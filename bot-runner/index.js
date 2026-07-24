@@ -793,18 +793,21 @@ async function startBot(forceClean = false) {
 
             // 2. SESSION TIME FILTER
             const msgDate = new Date(msg.timestamp * 1000);
-            let safetyThreshold = sessionStartTime;
+            // Default 10-minute safety buffer prior to sessionStartTime to account for latency and clock drift
+            let defaultBufferMs = 10 * 60 * 1000;
+            let safetyThreshold = sessionStartTime ? new Date(sessionStartTime.getTime() - defaultBufferMs) : null;
             try {
                 const safetySetting = await Setting.findOne({ key: 'bot_safety' });
-                if (safetySetting && safetySetting.value && safetySetting.value.activationOffset) {
+                if (safetySetting && safetySetting.value && safetySetting.value.activationOffset !== undefined) {
                     const offsetMs = safetySetting.value.activationOffset * 60 * 1000;
-                    safetyThreshold = new Date(sessionStartTime.getTime() - offsetMs);
+                    safetyThreshold = sessionStartTime ? new Date(sessionStartTime.getTime() - offsetMs) : null;
                 }
             } catch (e) {
                 console.error('[ERROR] Could not fetch safety settings.');
             }
 
-            if (sessionStartTime && msgDate < safetyThreshold) {
+            if (sessionStartTime && safetyThreshold && msgDate < safetyThreshold) {
+                console.log(`[TRACE] ⏳ Message timestamp (${msgDate.toISOString()}) prior to safety threshold (${safetyThreshold.toISOString()}). Skipping.`);
                 await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout);
                 return;
             }
@@ -898,11 +901,12 @@ async function startBot(forceClean = false) {
                 const chatContact = await msg.getContact();
                 let selectedFlow = await selectFlow({ isAgendado: chatContact.isMyContact, source: contact.source, phone });
 
-                // FIX 1: FALLBACK FOR USERS WITH NO MATCHING FLOW RULE
-                // If no flow rule matches (e.g. user wrote a sentence, not a keyword),
-                // use the highest-priority active published flow as the default entry point.
+                // FALLBACK FOR USERS WITH NO MATCHING FLOW RULE
                 if (!selectedFlow) {
                     selectedFlow = await Flow.findOne({ isActive: true, published: { $ne: null } }).sort({ 'activationRules.priority': -1 });
+                    if (!selectedFlow) {
+                        selectedFlow = await Flow.findOne({ published: { $ne: null } }).sort({ updatedAt: -1 });
+                    }
                     if (!selectedFlow) {
                         console.log(`[DEBUG] No fallback flow available for ${phone}. Ignoring.`);
                         await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout); return;
@@ -923,11 +927,8 @@ async function startBot(forceClean = false) {
                 const forcingFlow = await selectFlow({ isAgendado: chatContact.isMyContact, source: contact.source, forceOnly: true, body: msg.body, phone });
 
                 if (forcingFlow) {
-                    // SILENCE CHECK: Usually we ignore automation when paused.
-                    // BUT: If the user sends a FORCE RESTART keyword (like V, M, or Hola), we allow it to "break" the pause.
                     if (conversation.state === 'paused') {
                         console.log(`[TRACE] 🔓 Force restart keyword detected! Unpausing conversation for ${phone}`);
-                        // Don't return here, continue with the restart logic below
                     }
 
                     console.log(`[TRACE] ⚡ FORCE RESTART: "${forcingFlow.name}"`);
@@ -941,12 +942,20 @@ async function startBot(forceClean = false) {
                 }
             }
 
-            // 🔓 ALLOW ESCAPE FROM PAUSE (Emergency Nav Commands)
+            // 🔓 ALLOW ESCAPE FROM PAUSE (Greetings, Nav Commands, Options & Stale Pauses)
             const cleanBody = (msg.body || '').trim().toLowerCase();
-            const isEmergencyNav = cleanBody === 'v' || cleanBody === 'm' || cleanBody === 'volver' || cleanBody === 'menu' || cleanBody === 'atras' || cleanBody.includes('menu principal');
+            const GREETINGS_AND_NAV = [
+                'hola', 'buenas', 'buen dia', 'buenos dias', 'buenas tardes', 'buenas noches', 'hola!', 'hello',
+                'v', 'm', 'volver', 'menu', 'atras', 'inicio', 'empezar', 'reset',
+                '1', '2', '3', '4', 'a', 'b', 'c', 'd'
+            ];
+            const isGreetingOrNav = GREETINGS_AND_NAV.some(term => cleanBody === term || cleanBody.startsWith(term + ' ')) || cleanBody.includes('menu principal');
+            
+            const pausedDurationMs = conversation.updatedAt ? (Date.now() - new Date(conversation.updatedAt).getTime()) : 0;
+            const isStalePause = pausedDurationMs > 12 * 60 * 60 * 1000; // 12 hours
 
-            if (conversation.state === 'paused' && isEmergencyNav) {
-                console.log(`[TRACE] 🔓 Emergency Escape Command executed by ${phone}. Unpausing!`);
+            if (conversation.state === 'paused' && (isGreetingOrNav || isStalePause)) {
+                console.log(`[TRACE] 🔓 Auto-unpausing conversation for ${phone} (Reason: ${isGreetingOrNav ? 'Greeting/Nav keyword' : 'Stale pause >12h'}).`);
                 conversation.state = 'active';
                 if (conversation.formState) conversation.formState.active = false;
                 if (conversation.freeTextState) conversation.freeTextState.active = false;

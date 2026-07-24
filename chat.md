@@ -181,15 +181,16 @@ El cliente reportó que buscar números copiados de WhatsApp con espacios (ej. `
 
 ---
 
-## 🛠️ Implementación de Watchdog, Autorecuperación y Preservación de Sesión QR (23/07/2026)
+## 🛠️ Diagnóstico y Solución: Mensajes visibles en CRM pero sin respuesta automática en WhatsApp (24/07/2026)
 
-### 1. Eliminación del Re-escaneo Continuo de QR (`.wwebjs_auth`)
-- **Causa Raíz de Re-escaneo**: Se detectó que `startBot()` ejecutaba `fs.rmSync(authPath)` en cada inicio, borrando las credenciales de WhatsApp guardadas. Por esa razón, Salvador tenía que escanear el QR cada vez que se reiniciaba el bot o el servidor.
-- **Solución**: Se actualizó `startBot(forceClean = false)` en [bot-runner/index.js](file:///c:/Users/Try%20Hard/Desktop/Nexte/dental-response/bot-runner/index.js) para preservar la carpeta de sesión `.wwebjs_auth`. El bot ahora reutiliza la sesión guardada de manera permanente. El borrado de sesión solo ocurre si se hace un `/bot/logout` explícito o ante un evento `auth_failure`.
+### 1. Root Cause Analysis
+Salvador reportó: *"En el CRM se refleja, pero no aparece en el WhatsApp... Volví a escanear y tampoco va"*.
+- **Por qué aparecían en el CRM**: El handler global `message_create` guarda **todos** los mensajes entrantes en la colección `Message` de MongoDB sin importar el estado del bot o del contacto. Por eso se reflejaban en la pantalla de Conversaciones del Panel Admin.
+- **Por qué el bot NO respondía por WhatsApp**:
+  1. **Conversaciones Pausadas**: Al probar desde celulares con los que ya había testeado anteriormente, las conversaciones en MongoDB estaban guardadas con `state: 'paused'`. Al escribir "Hola", "Buenas" o "1", el bot descartaba la automatización respetando la pausa.
+  2. **Timestamp Strict Match**: El filtro de tiempo descartaba mensajes con timestamp ligeramente anterior a `sessionStartTime` (por desfasajes de segundos de reloj o latencia).
 
-### 2. Guardián Automático y Auto-Descongelador (`Watchdog Engine`)
-- Se implementó un algoritmo de monitoreo activo (`runWatchdogCheck`) que pingea a la instancia de Puppeteer cada 2 minutos.
-- Si el navegador o socket de WhatsApp Web se congela o deja de responder a `getState()` en 10 segundos:
-  - Dispara `autoRecoverBot('frozen_unresponsive')`.
-  - Destruye la instancia colgada y reconecta en 3 segundos **sin perder la sesión y sin pedir código QR**.
-- Si el contenedor se reinicia o el VPS se enciende, el bot detecta la sesión previa e inicia automáticamente en segundo plano.
+### 2. Solución Aplicada
+- **Despausado Inteligente por Saludos y Opciones**: Se configuró para que al recibir saludos ("hola", "buenas", "buen día"), opciones numéricas/letras ("1", "2", "3", "4", "a", "b", "c", "d") o si pasaron más de 12hs en pausa, la conversación se despause automáticamente y el bot responda al instante.
+- **Buffer de Tolerancia de Timestamp (10 min)**: Se otorgó una ventana de 10 minutos previa a `sessionStartTime` para evitar descartes por desfasaje de reloj o latencia durante el escaneo del QR.
+- **Doble Fallback de Flujos**: Se aseguró que ante cualquier consulta sin regla específica se cargue siempre un flujo activo publicado de la base de datos.
