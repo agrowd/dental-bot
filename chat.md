@@ -181,16 +181,14 @@ El cliente reportó que buscar números copiados de WhatsApp con espacios (ej. `
 
 ---
 
-## 🛠️ Diagnóstico y Solución: Mensajes visibles en CRM pero sin respuesta automática en WhatsApp (24/07/2026)
+## 🛠️ Diagnóstico y Solución: Bucle de Sesión Revocada en Teléfono y Generación Limpia de QR (24/07/2026)
 
 ### 1. Root Cause Analysis
-Salvador reportó: *"En el CRM se refleja, pero no aparece en el WhatsApp... Volví a escanear y tampoco va"*.
-- **Por qué aparecían en el CRM**: El handler global `message_create` guarda **todos** los mensajes entrantes en la colección `Message` de MongoDB sin importar el estado del bot o del contacto. Por eso se reflejaban en la pantalla de Conversaciones del Panel Admin.
-- **Por qué el bot NO respondía por WhatsApp**:
-  1. **Conversaciones Pausadas**: Al probar desde celulares con los que ya había testeado anteriormente, las conversaciones en MongoDB estaban guardadas con `state: 'paused'`. Al escribir "Hola", "Buenas" o "1", el bot descartaba la automatización respetando la pausa.
-  2. **Timestamp Strict Match**: El filtro de tiempo descartaba mensajes con timestamp ligeramente anterior a `sessionStartTime` (por desfasajes de segundos de reloj o latencia).
+Salvador reportó: *"Cerré sesión en el Chat de Jenny y volví a escanear también y tampoco va... Esta mortadela. Probé con 3 números distintos"*.
+- **Causa Raíz**: Al desvincular o cerrar sesión en WhatsApp desde el celular, la carpeta `.wwebjs_auth` en el VPS conservaba los tokens desvinculados/revocados. Cuando el usuario hacía clic en "Activar Bot", el sistema intentaba reutilizar `.wwebjs_auth`, pero como el token había sido anulado por WhatsApp, el cliente quedaba colgado intentando conectar con credenciales inactivas **sin emitir jamás un nuevo código QR**.
 
 ### 2. Solución Aplicada
-- **Despausado Inteligente por Saludos y Opciones**: Se configuró para que al recibir saludos ("hola", "buenas", "buen día"), opciones numéricas/letras ("1", "2", "3", "4", "a", "b", "c", "d") o si pasaron más de 12hs en pausa, la conversación se despause automáticamente y el bot responda al instante.
-- **Buffer de Tolerancia de Timestamp (10 min)**: Se otorgó una ventana de 10 minutos previa a `sessionStartTime` para evitar descartes por desfasaje de reloj o latencia durante el escaneo del QR.
-- **Doble Fallback de Flujos**: Se aseguró que ante cualquier consulta sin regla específica se cargue siempre un flujo activo publicado de la base de datos.
+- **Auto-Detección de Desvinculación en Teléfono**: En `client.on('disconnected')`, si el motivo es `LOGOUT`, `UNPAIRED`, `NAVIGATION` o `CONFLICT`, la carpeta de sesión revocada se borra de inmediato.
+- **Auto-Recuperación por Timeout (40s)**: Si el bot se queda en estado `connecting` por más de 40s intentando cargar una sesión guardada sin obtener respuesta, asume que la sesión fue anulada, limpia `.wwebjs_auth` y genera automáticamente un nuevo código QR.
+- **Acción Manual "Generar Nuevo QR" en el Panel Admin**: Se incorporó el botón `⚡ Generar Nuevo QR (Limpiar Sesión)` en [admin/whatsapp/page.tsx](file:///c:/Users/Try%20Hard/Desktop/Nexte/dental-response/src/app/admin/whatsapp/page.tsx) para forzar la limpieza de credenciales revocadas de forma directa desde la web.
+- **Despausado Automático e Inclusión de Buffer de Timestamp**: Saludos y opciones despausan automáticamente las conversaciones y se aplicó un buffer de 10 minutos de margen de conexión.

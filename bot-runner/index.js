@@ -63,11 +63,13 @@ app.get('/bot/qr', (req, res) => {
 
 // POST /bot/start
 app.post('/bot/start', async (req, res) => {
-    if (botState === 'connected') {
+    const forceClean = req.body?.forceClean === true;
+
+    if (botState === 'connected' && !forceClean) {
         return res.json({ status: 'already_connected' });
     }
 
-    if (botState === 'connecting') {
+    if (botState === 'connecting' && !forceClean) {
         return res.json({ status: 'already_connecting' });
     }
 
@@ -85,7 +87,6 @@ app.post('/bot/start', async (req, res) => {
     }
 
     try {
-        const forceClean = req.body?.forceClean === true;
         await startBot(forceClean);
         retryCount++;
         lastRetryTime = now;
@@ -576,18 +577,46 @@ async function startBot(forceClean = false) {
 
     // Disconnected handler
     client.on('disconnected', (reason) => {
-        console.log('Bot disconnected:', reason);
+        console.log('Bot disconnected. Reason:', reason);
         botState = 'disconnected';
         currentQR = null;
 
-        // Auto-reconnect if session files exist
+        const reasonStr = String(reason || '').toUpperCase();
+        const isUnlinked = reasonStr.includes('LOGOUT') || reasonStr.includes('NAVIGATION') || reasonStr.includes('UNPAIRED') || reasonStr.includes('CONFLICT');
+
+        if (isUnlinked) {
+            console.log(`[INIT] ⚠️ Session unlinked/logged out from phone (Reason: ${reason}). Wiping session directory...`);
+            try {
+                if (fs.existsSync(authPath)) {
+                    fs.rmSync(authPath, { recursive: true, force: true });
+                }
+            } catch (e) { }
+            return;
+        }
+
+        // Auto-reconnect only for temporary network disconnections if session files exist
         if (fs.existsSync(authPath)) {
-            console.log('[WATCHDOG] ⚡ Disconnected event fired. Triggering automatic reconnection in 5s...');
+            console.log('[WATCHDOG] ⚡ Network disconnected event fired. Triggering automatic reconnection in 5s...');
             setTimeout(() => {
                 autoRecoverBot('disconnected_event');
             }, 5000);
         }
     });
+
+    // Safety timeout: If connecting with saved session hangs for >40s without QR or Ready, wipe session & generate fresh QR
+    if (!forceClean && fs.existsSync(authPath)) {
+        setTimeout(async () => {
+            if (botState === 'connecting' && !currentQR) {
+                console.warn('[INIT] ⚠️ Bot stuck in connecting state with saved session for 40s. Session likely revoked on phone. Cleaning session and generating fresh QR...');
+                try {
+                    if (fs.existsSync(authPath)) {
+                        fs.rmSync(authPath, { recursive: true, force: true });
+                    }
+                } catch (e) { }
+                await startBot(true);
+            }
+        }, 40000);
+    }
 
     // Heartbeat log to confirm process is alive
     setInterval(() => {
