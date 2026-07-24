@@ -181,12 +181,12 @@ El cliente reportó que buscar números copiados de WhatsApp con espacios (ej. `
 
 ---
 
-## 🛠️ Solución a Navegación Universal (M/V) y Activación de Captura de Datos en Paso Inicial (24/07/2026)
+## 🛠️ Solución a Bloqueo de Mensajes Rápido (Lock No Bloqueante) y Reconocimiento de Saludos / Menú (24/07/2026)
 
 ### 1. Root Cause Analysis
-- **Fallo en Comandos M / V**: Al enviar `M` o `V`, el bot reseteaba la posición en la conversación pero no hacía `return`. La ejecución continuaba hacia la evaluación de opciones donde la letra `"M"` era comparada contra las opciones `1`, `2`, `3` del menú. Al no coincidir, el bot disparaba inmediatamente el mensaje de fallback *"No comprendí tu mensaje..."*.
-- **Fallo de Captura de Leads en `info_general`**: El paso de entrada `info_general` tiene la acción `collectLeadData: true` activa en el flujo. La comprobación previa sólo buscaba `collectLeadData` al transicionar mediante opciones, ignorando cuando el usuario ya estaba en el paso inicial.
+- **Causa Raíz 1 (Mensajes Rápido Descartados)**: Cuando el usuario enviaba un mensaje (ej: `hola`) y rápidamente enviaba `m`, `m`, `m` a los 1-2 segundos, el candado atómico `lock_phone_` estaba activo procesando `hola`. Al recibir los mensajes `m`, el sistema los descartaba inmediatamente con el mensaje de traza `Phone is BUSY` sin procesarlos jamás.
+- **Causa Raíz 2 (Reconocimiento de Saludos y Menú)**: Saludos informales (`hola`, `buenas`, `buen dia`) no estaban mapeados para resetear y mostrar el menú principal cuando la conversación ya estaba en estado `active`, lo que provocaba que cayeran en la evaluación de opciones numéricas y mostraran el mensaje de fallback.
 
 ### 2. Solución Aplicada
-- **Respuesta y Salida Directa en M y V**: Se estructuraron los handlers `M` y `V` para enviar inmediatamente la respuesta del paso menú/anterior y retornar, evitando la evaluación errónea como opción.
-- **Captura Evaluada en Paso Actual**: Se actualizó `stepRequiresCapture` para verificar `collectLeadData` en el paso actual (`currentStep`), disparando la solicitud de Nombre y Email desde la primera interacción.
+- **Candado No Bloqueante con Reintentos**: Se modificó la adquisición de `lock_phone_` para que realice 5 intentos (esperando 600ms entre cada uno) en lugar de descartar la llamada. Si el mensaje anterior está terminando, el siguiente mensaje espera su turno y se procesa correctamente.
+- **Mapeo Unificado de Saludos y Menú**: Saludos habituales (`hola`, `buenas`, `buen dia`, `m`, `menu`, `inicio`) ahora resetean la conversación al paso inicial (`info_general`) y devuelven inmediatamente sus opciones o formulario de datos sin caer en fallback.

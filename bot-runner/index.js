@@ -946,28 +946,32 @@ async function startBot(forceClean = false) {
         let lockTimeout;
 
         try {
-            // 1. ATOMIC CROSS-INSTANCE LOCK BY PHONE (WITH 15s STALE LOCK AUTO-CLEANUP)
-            try {
-                await Setting.create({ key: lockKey, instance: INSTANCE_ID, at: new Date() });
-            } catch (err) {
-                if (err.code === 11000) {
-                    const existingLock = await Setting.findOne({ key: lockKey });
-                    const lockAgeMs = existingLock && existingLock.at ? (Date.now() - new Date(existingLock.at).getTime()) : 999999;
-                    if (lockAgeMs > 15000) {
-                        console.log(`[LOCK] 🔓 Found stale phone lock for ${phone} (${Math.round(lockAgeMs / 1000)}s old). Removing lock and continuing.`);
-                        await Setting.deleteOne({ key: lockKey }).catch(() => { });
-                        try {
-                            await Setting.create({ key: lockKey, instance: INSTANCE_ID, at: new Date() });
-                        } catch (retryErr) {
-                            if (retryErr.code === 11000) return;
+            // 1. ATOMIC CROSS-INSTANCE LOCK BY PHONE (WITH RETRIES & 15s STALE AUTO-CLEANUP)
+            let lockAcquired = false;
+            for (let attempt = 0; attempt < 5; attempt++) {
+                try {
+                    await Setting.create({ key: lockKey, instance: INSTANCE_ID, at: new Date() });
+                    lockAcquired = true;
+                    break;
+                } catch (err) {
+                    if (err.code === 11000) {
+                        const existingLock = await Setting.findOne({ key: lockKey });
+                        const lockAgeMs = existingLock && existingLock.at ? (Date.now() - new Date(existingLock.at).getTime()) : 999999;
+                        if (lockAgeMs > 15000) {
+                            console.log(`[LOCK] 🔓 Found stale phone lock for ${phone} (${Math.round(lockAgeMs / 1000)}s old). Removing lock.`);
+                            await Setting.deleteOne({ key: lockKey }).catch(() => { });
+                        } else {
+                            // Wait 600ms for previous message processing turn to complete, then retry
+                            await new Promise(r => setTimeout(r, 600));
                         }
                     } else {
-                        console.log(`[TRACE][${INSTANCE_ID}] 🔒 Phone ${phone} is BUSY (${Math.round(lockAgeMs / 1000)}s old lock). Skipping parallel processing.`);
-                        return;
+                        throw err;
                     }
-                } else {
-                    throw err;
                 }
+            }
+
+            if (!lockAcquired) {
+                console.log(`[TRACE][${INSTANCE_ID}] 🔒 Lock for ${phone} busy after retries. Processing message.`);
             }
 
             lockTimeout = setTimeout(releaseLock, 60000); // 60s safety timeout
@@ -1589,8 +1593,11 @@ async function startBot(forceClean = false) {
 
         // 1. UNIVERSAL COMMANDS (V/M) - Only if NOT paused
         const isPaused = conversation.state === 'paused';
-        if (!isPaused && (input === 'm' || input === 'menu' || input.includes('menu principal'))) {
-            console.log(`[TRACE] 🏠 Universal Menu requested by ${contact.phone}`);
+        const GREETINGS_NAV = ['hola', 'buenas', 'buen dia', 'buenos dias', 'buenas tardes', 'buenas noches', 'hola!', 'hello', 'm', 'menu', 'inicio', 'empezar', 'reset'];
+        const isMenuOrGreeting = GREETINGS_NAV.some(t => input === t || input.startsWith(t + ' ')) || input.includes('menu principal');
+
+        if (!isPaused && isMenuOrGreeting) {
+            console.log(`[TRACE] 🏠 Universal Menu/Greeting requested by ${contact.phone}: "${input}"`);
             const newStepId = flow.published.entryStepId;
             await Conversation.updateOne(
                 { _id: conversation._id },
