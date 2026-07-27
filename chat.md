@@ -181,11 +181,13 @@ El cliente reportó que buscar números copiados de WhatsApp con espacios (ej. `
 
 ---
 
-## 🛠️ Solución al Enrutamiento Directo de Mensajes WhatsApp (`msg.from` Primario en Wrapper Sintético) (24/07/2026)
+## 🛠️ Solución a la Transmisión de Respuestas mediante `msg.reply` Nativo (27/07/2026)
 
 ### 1. Root Cause Analysis
-- **Causa Raíz Revelada**: Para contactos que utilizan ID de privacidad (`@lid`), WhatsApp Web mantiene abierta la ventana de chat usando exclusivamente esa ID privada (`167954796826725@lid`). El wrapper sintético de `getSafeChat` estaba obligando a responder apuntando a la ID traducida de teléfono (`5491126642674@c.us`), provocando que WhatsApp Web descartara silenciosamente el envío por no ser la ID del hilo de conversación activo.
+- **Causa Raíz a nivel Protocolo**: Al invocar `client.sendMessage(jid)`, la librería `whatsapp-web.js` consulta el almacén de chats del navegador (`window.Store.Chat.get`). Si el almacén no tiene indexada la ID de chat en ese preciso instante, la función falla internamente en el navegador sin enviar la respuesta.
+- **La Solución Nativa**: Cuando un cliente envía un mensaje, el objeto `msg` recibido en la función ya contiene la referencia directa a la conversación activa. El método nativo `msg.reply(texto)` transmite la respuesta utilizando el contexto del mensaje sin necesidad de consultar el almacén de chats ni realizar búsquedas de JID.
 
 ### 2. Solución Aplicada
-- **Respuesta Prioritaria a `msg.from`**: El wrapper sintético de `getSafeChat` envía prioritariamente la respuesta al hilo activo del cual proviene el mensaje (`msg.from`).
-- **Respaldo Secundario a Teléfono**: Si por cualquier razón la transmisión al JID emisor falla, el sistema intenta de inmediato el JID alternativo de teléfono (`54911...@c.us`).
+- **Envío Prioritario con `msg.reply`**: El wrapper de respuestas de `getSafeChat` ejecuta primero `await msg.reply(contenido)`. Dado que aprovecha el mensaje original del cliente, la entrega de respuestas es directa e inmune a errores de formato o IDs de privacidad (`@lid`).
+- **Respaldo Secundario**: Si el mensaje original no estuviese disponible, conmuta a `client.sendMessage`.
+- **Salvaguarda de Navegación**: Se verificó la disponibilidad de `client.pupPage` en la resolución de IDs para evitar excepciones si Chromium se reinicia.

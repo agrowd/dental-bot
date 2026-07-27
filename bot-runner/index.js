@@ -579,8 +579,19 @@ async function getSafeChat(client, msg, phone) {
         return {
             id: { _serialized: primaryJid, user: primaryJid.replace('@c.us', '').replace('@lid', '') },
             sendMessage: async (content, options) => {
+                // 1. Try native msg.reply if msg object is available (100% success on active incoming messages!)
+                if (msg && typeof msg.reply === 'function') {
+                    try {
+                        console.log(`[TRACE] 📤 Synthetic sendMessage attempting native msg.reply to ${primaryJid}`);
+                        return await msg.reply(content, options);
+                    } catch (replyErr) {
+                        console.log(`[TRACE] Native msg.reply failed (${replyErr.message}), trying client.sendMessage...`);
+                    }
+                }
+
+                // 2. Try client.sendMessage to primaryJid
                 try {
-                    console.log(`[TRACE] 📤 Synthetic sendMessage attempting to ${primaryJid}`);
+                    console.log(`[TRACE] 📤 Synthetic sendMessage attempting client.sendMessage to ${primaryJid}`);
                     return await client.sendMessage(primaryJid, content, options);
                 } catch (e) {
                     if (fallbackPhoneJid && fallbackPhoneJid !== primaryJid) {
@@ -2399,6 +2410,8 @@ async function resolveLidToPhone(client, sourceId) {
     if (lidResolutionMemoryCache.has(sourceId)) {
         return lidResolutionMemoryCache.get(sourceId);
     }
+
+    if (!client || !client.pupPage) return sourceId;
 
     // Helper: Wrap promise with a strict timeout (2500ms) to ensure pupPage NEVER blocks message handler
     const withTimeout = (promise, ms = 2500) => {
