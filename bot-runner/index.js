@@ -571,39 +571,50 @@ async function getSafeChat(client, msg, phone) {
     }
 
     // Synthetic Fallback Chat wrapper — guarantees getSafeChat never throws and always permits sending
-    const primaryJid = msg?.from || jidsToTry.find(j => j.endsWith('@c.us')) || (cleanPhone ? `${cleanPhone}@c.us` : null);
-    const fallbackPhoneJid = jidsToTry.find(j => j.endsWith('@c.us')) || (cleanPhone ? `${cleanPhone}@c.us` : null);
+    const phoneJids = jidsToTry.filter(j => j && j.endsWith('@c.us'));
+    const targetPhoneJid = phoneJids[0] || (cleanPhone ? `${cleanPhone}@c.us` : null);
+    const targetAltPhoneJid = phoneJids[1] || null;
 
-    if (primaryJid) {
-        console.log(`[TRACE] 🛠️ getSafeChat creating synthetic Chat wrapper (primary: ${primaryJid}, fallback: ${fallbackPhoneJid})`);
+    const wrapperId = targetPhoneJid || msg?.from || 'unknown';
+
+    if (wrapperId) {
+        console.log(`[TRACE] 🛠️ getSafeChat creating synthetic Chat wrapper for ${wrapperId} (targetPhone: ${targetPhoneJid})`);
         return {
-            id: { _serialized: primaryJid, user: primaryJid.replace('@c.us', '').replace('@lid', '') },
+            id: { _serialized: wrapperId, user: wrapperId.replace('@c.us', '').replace('@lid', '') },
             sendMessage: async (content, options) => {
                 // 1. Try native msg.reply if msg object is available (100% success on active incoming messages!)
                 if (msg && typeof msg.reply === 'function') {
                     try {
-                        console.log(`[TRACE] 📤 Synthetic sendMessage attempting native msg.reply to ${primaryJid}`);
+                        console.log(`[TRACE] 📤 Synthetic sendMessage attempting native msg.reply`);
                         return await msg.reply(content, options);
                     } catch (replyErr) {
-                        console.log(`[TRACE] Native msg.reply failed (${replyErr.message}), trying client.sendMessage...`);
+                        console.log(`[TRACE] Native msg.reply failed (${replyErr.message}), trying phone JID...`);
                     }
                 }
 
-                // 2. Try client.sendMessage to primaryJid
-                try {
-                    console.log(`[TRACE] 📤 Synthetic sendMessage attempting client.sendMessage to ${primaryJid}`);
-                    return await client.sendMessage(primaryJid, content, options);
-                } catch (e) {
-                    if (fallbackPhoneJid && fallbackPhoneJid !== primaryJid) {
-                        console.log(`[TRACE] 📤 Primary sendMessage to ${primaryJid} failed (${e.message}). Trying fallback ${fallbackPhoneJid}...`);
-                        return await client.sendMessage(fallbackPhoneJid, content, options);
+                // 2. Try client.sendMessage to targetPhoneJid (@c.us)
+                if (targetPhoneJid) {
+                    try {
+                        console.log(`[TRACE] 📤 Synthetic sendMessage attempting client.sendMessage to ${targetPhoneJid}`);
+                        return await client.sendMessage(targetPhoneJid, content, options);
+                    } catch (e) {
+                        console.log(`[TRACE] client.sendMessage to ${targetPhoneJid} failed (${e.message})`);
                     }
-                    throw e;
+                }
+
+                // 3. Try client.sendMessage to targetAltPhoneJid (@c.us) if available
+                if (targetAltPhoneJid) {
+                    try {
+                        console.log(`[TRACE] 📤 Synthetic sendMessage attempting client.sendMessage to alt ${targetAltPhoneJid}`);
+                        return await client.sendMessage(targetAltPhoneJid, content, options);
+                    } catch (e) {
+                        console.log(`[TRACE] client.sendMessage to alt ${targetAltPhoneJid} failed (${e.message})`);
+                    }
                 }
             },
             sendStateTyping: async () => {
                 try {
-                    const chat = await client.getChatById(primaryJid).catch(() => null);
+                    const chat = await client.getChatById(wrapperId).catch(() => null);
                     if (chat && typeof chat.sendStateTyping === 'function') {
                         return await chat.sendStateTyping();
                     }
@@ -611,7 +622,7 @@ async function getSafeChat(client, msg, phone) {
             },
             markUnread: async () => {
                 try {
-                    const chat = await client.getChatById(primaryJid).catch(() => null);
+                    const chat = await client.getChatById(wrapperId).catch(() => null);
                     if (chat && typeof chat.markUnread === 'function') {
                         return await chat.markUnread();
                     }
@@ -2155,6 +2166,8 @@ const autoRecoverBot = async (reason) => {
     }
 };
 
+let consecutiveFailedPings = 0;
+
 const runWatchdogCheck = async () => {
     if (isRecovering) return;
 
@@ -2180,8 +2193,15 @@ const runWatchdogCheck = async () => {
         }
 
         if (!isAlive) {
-            console.error('[WATCHDOG] 🚨 Bot is FROZEN or UNRESPONSIVE! Initiating self-healing restart...');
-            await autoRecoverBot('frozen_unresponsive');
+            consecutiveFailedPings++;
+            console.warn(`[WATCHDOG] ⚠️ Unresponsive ping count: ${consecutiveFailedPings}/3`);
+            if (consecutiveFailedPings >= 3) {
+                console.error('[WATCHDOG] 🚨 Bot is FROZEN or UNRESPONSIVE (3 consecutive failed pings)! Initiating self-healing restart...');
+                consecutiveFailedPings = 0;
+                await autoRecoverBot('frozen_unresponsive');
+            }
+        } else {
+            consecutiveFailedPings = 0;
         }
     } else if (botState === 'disconnected' && fs.existsSync(authPath)) {
         // Auto-reconnect if session exists but state is disconnected

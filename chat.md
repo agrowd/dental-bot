@@ -181,13 +181,14 @@ El cliente reportó que buscar números copiados de WhatsApp con espacios (ej. `
 
 ---
 
-## 🛠️ Solución a la Transmisión de Respuestas mediante `msg.reply` Nativo (27/07/2026)
+## 🛠️ Solución a Reinicios Falsos Positivos del Watchdog y Filtrado Estricto de JIDs `@c.us` (01/08/2026)
 
 ### 1. Root Cause Analysis
-- **Causa Raíz a nivel Protocolo**: Al invocar `client.sendMessage(jid)`, la librería `whatsapp-web.js` consulta el almacén de chats del navegador (`window.Store.Chat.get`). Si el almacén no tiene indexada la ID de chat en ese preciso instante, la función falla internamente en el navegador sin enviar la respuesta.
-- **La Solución Nativa**: Cuando un cliente envía un mensaje, el objeto `msg` recibido en la función ya contiene la referencia directa a la conversación activa. El método nativo `msg.reply(texto)` transmite la respuesta utilizando el contexto del mensaje sin necesidad de consultar el almacén de chats ni realizar búsquedas de JID.
+- **Diagnóstico del Log Enviado**: En la captura del VPS enviada se detectaron 2 eventos clave:
+  1. `client.sendMessage` intentaba enviar mensajes hacia JIDs con formato `@lid`. Al no ser soportados directamente por la API de `sendMessage` de `whatsapp-web.js`, se generaban excepciones en el navegador.
+  2. Esas excepciones hacían demorar la respuesta de comprobación de salud del Watchdog (`client.getState()`). El Watchdog, con un límite agresivo de 1 solo fallo de 10s, declaraba al bot como `frozen_unresponsive` y reiniciaba por completo la sesión de Chromium.
+  3. Durante los 30 a 60 segundos que tardaba el bot en volver a conectarse (`LOADING SCREEN 0 -> 100`), los mensajes entrantes (`hola` de las 10:18 y 10:20 PM) no podían ser procesados por la instancia.
 
 ### 2. Solución Aplicada
-- **Envío Prioritario con `msg.reply`**: El wrapper de respuestas de `getSafeChat` ejecuta primero `await msg.reply(contenido)`. Dado que aprovecha el mensaje original del cliente, la entrega de respuestas es directa e inmune a errores de formato o IDs de privacidad (`@lid`).
-- **Respaldo Secundario**: Si el mensaje original no estuviese disponible, conmuta a `client.sendMessage`.
-- **Salvaguarda de Navegación**: Se verificó la disponibilidad de `client.pupPage` en la resolución de IDs para evitar excepciones si Chromium se reinicia.
+- **Garantía de JID `@c.us` en Envío**: `getSafeChat` filtra los JIDs candidatos asegurando que `client.sendMessage` reciba únicamente direcciones telefónicas `@c.us` (`54911...` o `5411...`).
+- **Tolerancia del Watchdog**: El Watchdog ahora exige 3 pings fallidos consecutivos antes de forzar un reinicio, evitando interrupciones no deseadas por picos temporales de carga.
