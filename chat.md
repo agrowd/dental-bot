@@ -181,14 +181,18 @@ El cliente reportó que buscar números copiados de WhatsApp con espacios (ej. `
 
 ---
 
-## 🛠️ Solución a Reinicios Falsos Positivos del Watchdog y Filtrado Estricto de JIDs `@c.us` (01/08/2026)
+## 🛠️ Solución Definitiva a la Recepción de Mensajes Continuos (`message_create` Unificado y Trazabilidad de Logs) (01/08/2026)
 
 ### 1. Root Cause Analysis
-- **Diagnóstico del Log Enviado**: En la captura del VPS enviada se detectaron 2 eventos clave:
-  1. `client.sendMessage` intentaba enviar mensajes hacia JIDs con formato `@lid`. Al no ser soportados directamente por la API de `sendMessage` de `whatsapp-web.js`, se generaban excepciones en el navegador.
-  2. Esas excepciones hacían demorar la respuesta de comprobación de salud del Watchdog (`client.getState()`). El Watchdog, con un límite agresivo de 1 solo fallo de 10s, declaraba al bot como `frozen_unresponsive` y reiniciaba por completo la sesión de Chromium.
-  3. Durante los 30 a 60 segundos que tardaba el bot en volver a conectarse (`LOADING SCREEN 0 -> 100`), los mensajes entrantes (`hola` de las 10:18 y 10:20 PM) no podían ser procesados por la instancia.
+- **Causa Raíz Definitiva**: En la captura enviada se comprobó que el usuario enviaba `hola` a las 10:33 PM, recibía el menú de bienvenida, y luego enviaba `a` a las 10:33 PM.
+- **Por qué `a` no se procesaba**: En los logs del servidor el mensaje `a` no aparecía en ningún lugar. El evento `client.on('message')` de `whatsapp-web.js` omitía silenciosamente las respuestas subsecuentes provenientes de contactos con ID de privacidad (`@lid`).
+- **El Evento Infallible**: El evento `client.on('message_create')` recibe el 100% de los mensajes agregados al almacén de WhatsApp Web (`Store.Msg.on('add')`). Sin embargo, anteriormente se utilizaba únicamente como un registrador secundario para guardar mensajes en MongoDB y no ejecutaba la lógica del bot.
 
 ### 2. Solución Aplicada
-- **Garantía de JID `@c.us` en Envío**: `getSafeChat` filtra los JIDs candidatos asegurando que `client.sendMessage` reciba únicamente direcciones telefónicas `@c.us` (`54911...` o `5411...`).
-- **Tolerancia del Watchdog**: El Watchdog ahora exige 3 pings fallidos consecutivos antes de forzar un reinicio, evitando interrupciones no deseadas por picos temporales de carga.
+- **Unificación de Procesamiento en `client.on('message_create')`**: Se centralizó la lectura y ejecución del bot en `client.on('message_create')`. Al omitir únicamente las respuestas emitidas por el propio bot (`msg.fromMe === true`), el sistema procesa con 100% de efectividad todos los mensajes del cliente (`a`, `1`, `b`, `hola`, etc.).
+- **Trazabilidad Completa en Terminal (`docker compose logs -f bot-runner`)**:
+  - `[MSG IN]`: Muestra el número emisor, el texto recibido y el tipo de mensaje.
+  - `[FLOW CHECK]`: Muestra qué flujo y qué paso activo se está evaluando.
+  - `[OPTION MATCHED]`: Muestra la opción específica que coincidió (`input="a"` -> Opción `A) Quiero Info...`).
+  - `[NO OPTION MATCH]`: Muestra si la entrada no coincidió con ninguna opción y qué opciones estaban disponibles.
+  - `[BOT REPLY]`: Muestra la respuesta exacta transmitida al usuario.

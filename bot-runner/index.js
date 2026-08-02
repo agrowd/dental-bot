@@ -948,61 +948,51 @@ async function startBot(forceClean = false) {
     const processedMessages = new Set();
     setInterval(() => processedMessages.clear(), 3600000); // 1hr cleanup
 
-    // --- GLOBAL MESSAGE LOGGER (INCOMING & OUTGOING) ---
+    // --- SINGLE AUTHORITATIVE MESSAGE HANDLER (INCOMING & OUTGOING) ---
     const loggedHistory = new Set();
     setInterval(() => loggedHistory.clear(), 3600000 * 2);
 
     client.on('message_create', async (msg) => {
-        try {
-            const messageId = msg.id._serialized;
-            if (loggedHistory.has(messageId)) return;
+        const messageId = msg.id?._serialized || Math.random().toString();
+        if (processedMessages.has(messageId)) return;
+        processedMessages.add(messageId);
+
+        if (msg.from === 'status@broadcast' || msg.to === 'status@broadcast') return;
+        if (msg.from?.endsWith('@g.us') || msg.to?.endsWith('@g.us')) return;
+
+        let sourceId = msg.fromMe ? msg.to : msg.from;
+        sourceId = await resolveLidToPhone(client, sourceId);
+        const phone = sourceId ? sourceId.replace('@c.us', '').replace('@lid', '') : '';
+        if (!phone) return;
+
+        // 1. LOG TO DB (INCOMING & OUTGOING)
+        if (!loggedHistory.has(messageId)) {
             loggedHistory.add(messageId);
-
-            if (msg.from === 'status@broadcast' || msg.to === 'status@broadcast') return;
-            if (msg.from.endsWith('@g.us') || msg.to.endsWith('@g.us')) return;
-
-            let sourceId = msg.fromMe ? msg.to : msg.from;
-            sourceId = await resolveLidToPhone(client, sourceId);
-            const phone = sourceId.replace('@c.us', '').replace('@lid', '');
-
             await Message.create({
                 phone,
                 direction: msg.fromMe ? 'out' : 'in',
                 text: msg.body || (msg.hasMedia ? '[Archivo Multimedia]' : ''),
                 timestamp: new Date(msg.timestamp * 1000)
-            });
-
-            // PERSISTENT UNREAD: After EVERY bot message, re-mark as unread if forceUnread is true
-            // This is the centralized, DB-driven approach — guarantees unread persists until human clears it
-            if (msg.fromMe) {
-                try {
-                    const conv = await Conversation.findOne({ phone, state: { $in: ['active', 'paused'] } });
-                    if (conv && conv.forceUnread !== false) {
-                        // Default behavior: mark as unread (forceUnread defaults to true)
-                        setTimeout(async () => {
-                            try {
-                                const chat = await msg.getChat();
-                                await chat.markUnread();
-                            } catch (e) { /* silently fail */ }
-                        }, 3000); // 3s delay to win race against WA auto-read
-                    }
-                } catch (e) { /* silently fail */ }
-            }
-        } catch (e) {
-            console.error('[ERROR] Global message logger failed:', e);
+            }).catch(() => {});
         }
-    });
 
-    // Message handler
-    client.on('message', async (msg) => {
-        const messageId = msg.id._serialized;
-        if (processedMessages.has(messageId)) return;
-        processedMessages.add(messageId);
+        // 2. OUTGOING MESSAGES SENT BY BOT -> HANDLE PERSISTENT UNREAD & STOP
+        if (msg.fromMe) {
+            try {
+                const conv = await Conversation.findOne({ phone, state: { $in: ['active', 'paused'] } });
+                if (conv && conv.forceUnread !== false) {
+                    setTimeout(async () => {
+                        try {
+                            const chat = await msg.getChat();
+                            await chat.markUnread();
+                        } catch (e) { }
+                    }, 3000);
+                }
+            } catch (e) { }
+            return;
+        }
 
-        let sourceId = msg.from;
-        sourceId = await resolveLidToPhone(client, sourceId);
-        const phone = sourceId.replace('@c.us', '').replace('@lid', '');
-
+        // 3. INCOMING USER MESSAGE PROCESSING
         const lockKey = `lock_phone_${phone}`;
         const releaseLock = async () => {
             await Setting.deleteOne({ key: lockKey }).catch(() => { });
@@ -1991,8 +1981,10 @@ async function startBot(forceClean = false) {
             const options = currentStep.options || [];
             const matchedOpt = findMatchingOption(input, options);
             if (matchedOpt) {
-                console.log(`[TRACE][${conversation._id}] ✅ Option Matched! Input="${input}" -> Option "${matchedOpt.option.key}: ${matchedOpt.option.label}" (Index ${matchedOpt.index})`);
+                console.log(`[TRACE][${conversation._id}] ✅ OPTION MATCHED! Input="${input}" -> Option "${matchedOpt.option.key}: ${matchedOpt.option.label}" (Index ${matchedOpt.index}) -> NextStep: ${matchedOpt.option.nextStepId}`);
                 targetOption = matchedOpt.option;
+            } else {
+                console.log(`[TRACE][${conversation._id}] 🔍 NO OPTION MATCH: Input="${input}" in Step "${currentStep.id}" (options count: ${options.length}). Available options:`, options.map(o => `[Key:${o.key} | Label:${o.label}]`));
             }
 
             // If match found, break loop to handle transition below
