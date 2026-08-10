@@ -860,6 +860,12 @@ async function startBot(forceClean = false) {
             // 1. Get Contact Info
             const wppContact = await client.getContactById(call.from);
 
+            // Whitelist check on calls
+            if (!isWhitelistedUser(phone, call.from)) {
+                console.log(`[WHITELIST] 🔒 Whitelist active: Ignoring call from ${phone}. Only responding to Federico (541126642674).`);
+                return;
+            }
+
             // 2. Logic: If saved contact, IGNORE (let it ring/missed call)
             if (wppContact.isMyContact) {
                 console.log(`[TRACE] 📞 Call from CONTACT ${phone}. Ignoring to allow normal ringing.`);
@@ -942,9 +948,27 @@ async function startBot(forceClean = false) {
         }
     });
 
+    // --- EXCLUSIVE TESTING WHITELIST (FEDERICO: 541126642674 / 5491126642674) ---
+    // When enabled, the bot ONLY processes and replies to Federico's number
+    const TEST_WHITELIST_ENABLED = process.env.TEST_WHITELIST_ENABLED !== 'false';
+    const TEST_WHITELIST_NUMBERS = (process.env.TEST_WHITELIST_NUMBERS || '541126642674,5491126642674,1126642674,26642674,167954796826725')
+        .split(',')
+        .map(n => n.trim().replace(/[^0-9]/g, ''))
+        .filter(Boolean);
+
+    function isWhitelistedUser(phone, fromJid) {
+        if (!TEST_WHITELIST_ENABLED) return true;
+        const cleanPhone = String(phone || '').replace(/[^0-9]/g, '');
+        const cleanJid = String(fromJid || '').replace(/[^0-9]/g, '');
+        
+        return TEST_WHITELIST_NUMBERS.some(allowed => {
+            return cleanPhone.endsWith(allowed) || allowed.endsWith(cleanPhone) || cleanJid.includes(allowed);
+        });
+    }
+
     // --- MULTI-INSTANCE PROTECTION ---
     const INSTANCE_ID = Math.random().toString(36).substring(7).toUpperCase();
-    console.log(`[INIT] Starting Bot Instance ${INSTANCE_ID}`);
+    console.log(`[INIT] Starting Bot Instance ${INSTANCE_ID} (Whitelist Restricted: ${TEST_WHITELIST_ENABLED ? 'ENABLED (Federico: 541126642674)' : 'DISABLED'})`);
     const processedMessages = new Set();
     setInterval(() => processedMessages.clear(), 3600000); // 1hr cleanup
 
@@ -1050,9 +1074,16 @@ async function startBot(forceClean = false) {
                 return;
             }
 
+            // 1.5 EXCLUSIVE TEST WHITELIST FILTER (ONLY RESPOND TO FEDERICO: 541126642674)
+            if (!isWhitelistedUser(phone, msg.from)) {
+                console.log(`[WHITELIST] 🔒 Whitelist active: Ignoring incoming message from ${phone} (${msg.from}). Bot is in test mode restricted to Federico (541126642674).`);
+                await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout);
+                return;
+            }
+
             const sender = msg.from;
             const body = msg.body;
-            console.log(`[TRACE][${INSTANCE_ID}] 📨 PROCESSING: "${body}" from ${sender} (type: ${msg.type})`);
+            console.log(`[TRACE][${INSTANCE_ID}] 📨 PROCESSING: "${body}" from ${sender} (phone: ${phone}, type: ${msg.type})`);
 
             // 2. SESSION TIME FILTER
             const msgDate = new Date(msg.timestamp * 1000);

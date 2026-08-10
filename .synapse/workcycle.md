@@ -69,16 +69,9 @@
 ### 11/06/2026 - Habilitación de Pegado en Buscadores de Leads y Conversaciones
 - **Habilitación de Pegado (Buscadores Principales)**: El usuario reportó que el buscador principal de Leads tampoco permitía pegar números en su computadora. Para solucionarlo, se implementó un handler `onPaste` explícito y se agregó un botón interactivo "📋 Pegar" tanto en el buscador de la página de Leads ([leads/page.tsx](file:///c:/Users/Try%20Hard/Desktop/Nexte/dental-response/src/app/admin/leads/page.tsx)) como en el de la página de Conversaciones ([conversations/page.tsx](file:///c:/Users/Try%20Hard/Desktop/Nexte/dental-response/src/app/admin/conversations/page.tsx)). El botón lee del portapapeles con `navigator.clipboard.readText()` y tiene un fallback en caso de bloqueos del navegador (como entornos HTTP inseguros).
 
-### 01/08/2026 - Solución a la Captura de Respuestas Seguidas (`message_create` Unificado y Trazabilidad Total)
-- **Análisis de Causa Raíz a partir del Log y Captura**:
-  1. En los logs se evidenció que el primer mensaje `hola` era procesado por `client.on('message')`, pero cuando el usuario respondía `a` a los 5 segundos, `client.on('message')` **nunca se disparaba**. `whatsapp-web.js` omitía el evento `message` para mensajes en hilos `@lid` después de enviar respuestas.
-  2. Sin embargo, `client.on('message_create')` capturaba el 100% de los eventos del socket de WhatsApp Web (`window.Store.Msg.on('add')`), pero en el bot runner solo se usaba para guardar mensajes en la BD y no para procesar el flujo.
+### 10/08/2026 - Modo de Prueba Exclusivo (Whitelist para Federico `541126642674`)
+- **Requerimiento del Usuario**: Configurar el bot para responder de forma 100% exclusiva al número de Federico (`541126642674` / `5491126642674` / `167954796826725@lid`), de modo de probar todos los flujos de conversación de forma segura y aislada sin responder a otros contactos o pacientes reales.
 - **Solución Implementada**:
-  - **Procesador Único en `client.on('message_create')`**: Se unificó la recepción y el procesamiento de flujos dentro de `client.on('message_create')`. Al descartar los mensajes salientes del propio bot (`msg.fromMe === true`), **el 100% de los mensajes entrantes de los clientes (`a`, `1`, `b`, `hola`) son recibidos y procesados instantáneamente**.
-  - **Trazabilidad Detallada de Logs**: Se agregaron logs explicativos que detallan en tiempo real:
-    - 📩 Número que envió el mensaje y texto enviado (`[MSG IN]`).
-    - 🔍 Paso activo en el que se encuentra la conversación.
-    - 🎯 Opción que coincidió (`[OPTION MATCHED]`) o razón por la cual no coincidió (`[NO OPTION MATCH]`).
-    - 📤 Respuesta enviada de vuelta al cliente (`[BOT REPLY]`).
-  - **Exclusión Absoluta de JIDs `@lid` en `client.sendMessage`**: El wrapper sintético de `getSafeChat` ahora filtra estrictamente los JIDs antes de enviarle comandos a WhatsApp Web, seleccionando únicamente candidate JIDs terminados en `@c.us` (número de teléfono).
-  - **Tolerancia del Watchdog (3 pings fallidos)**: Se modificó la salud del bot para requerir **3 fallas consecutivas** de ping de 10 segundos antes de gatillar un reinicio de Chromium. Esto evita reinicios accidentales por fluctuaciones normales de carga o red.
+  - **Función `isWhitelistedUser(phone, fromJid)`**: Se implementó un filtro de whitelist global en `bot-runner/index.js` que reconoce todas las variantes del número de Federico (`541126642674`, `5491126642674`, `1126642674`, y su JID privado `@lid`).
+  - **Filtro en Mensajes y Llamadas**: Los mensajes entrantes de otros contactos se guardan de forma segura en la base de datos (para no perder el historial), pero el bot no los procesa ni les envía respuestas automáticas.
+  - **Logs Informativos de Whitelist**: Cuando llega un mensaje no permitido, la terminal imprime `[WHITELIST] 🔒 Whitelist active: Ignoring incoming message from... Bot is restricted to Federico (541126642674).`

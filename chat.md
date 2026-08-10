@@ -181,18 +181,13 @@ El cliente reportó que buscar números copiados de WhatsApp con espacios (ej. `
 
 ---
 
-## 🛠️ Solución Definitiva a la Recepción de Mensajes Continuos (`message_create` Unificado y Trazabilidad de Logs) (01/08/2026)
+## 🛠️ Modo de Prueba Exclusivo (Whitelist para Federico `541126642674`) (10/08/2026)
 
-### 1. Root Cause Analysis
-- **Causa Raíz Definitiva**: En la captura enviada se comprobó que el usuario enviaba `hola` a las 10:33 PM, recibía el menú de bienvenida, y luego enviaba `a` a las 10:33 PM.
-- **Por qué `a` no se procesaba**: En los logs del servidor el mensaje `a` no aparecía en ningún lugar. El evento `client.on('message')` de `whatsapp-web.js` omitía silenciosamente las respuestas subsecuentes provenientes de contactos con ID de privacidad (`@lid`).
-- **El Evento Infallible**: El evento `client.on('message_create')` recibe el 100% de los mensajes agregados al almacén de WhatsApp Web (`Store.Msg.on('add')`). Sin embargo, anteriormente se utilizaba únicamente como un registrador secundario para guardar mensajes en MongoDB y no ejecutaba la lógica del bot.
+### 1. Requerimiento
+- Habilitar una whitelist exclusiva para que el bot responda **únicamente al número de Federico (`541126642674`)**, permitiendo probar la totalidad de los flujos, menús, botones, navegación `V`/`M` y opciones sin responder a clientes externos.
 
 ### 2. Solución Aplicada
-- **Unificación de Procesamiento en `client.on('message_create')`**: Se centralizó la lectura y ejecución del bot en `client.on('message_create')`. Al omitir únicamente las respuestas emitidas por el propio bot (`msg.fromMe === true`), el sistema procesa con 100% de efectividad todos los mensajes del cliente (`a`, `1`, `b`, `hola`, etc.).
-- **Trazabilidad Completa en Terminal (`docker compose logs -f bot-runner`)**:
-  - `[MSG IN]`: Muestra el número emisor, el texto recibido y el tipo de mensaje.
-  - `[FLOW CHECK]`: Muestra qué flujo y qué paso activo se está evaluando.
-  - `[OPTION MATCHED]`: Muestra la opción específica que coincidió (`input="a"` -> Opción `A) Quiero Info...`).
-  - `[NO OPTION MATCH]`: Muestra si la entrada no coincidió con ninguna opción y qué opciones estaban disponibles.
-  - `[BOT REPLY]`: Muestra la respuesta exacta transmitida al usuario.
+- **Filtro Global `isWhitelistedUser`**: Reconoce todas las variantes del número de Federico (`541126642674`, `5491126642674`, `1126642674` y su JID privado `167954796826725@lid`).
+- **Comportamiento Aislado**:
+  - Los mensajes de Federico son procesados de inmediato por el flujo correspondiente.
+  - Los mensajes de otros números se registran en el panel de administración (MongoDB) para no perder datos, pero el bot descarta la respuesta automática (`[WHITELIST] 🔒 Whitelist active`).
