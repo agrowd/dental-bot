@@ -82,3 +82,7 @@
 - **Solución**:
   1. Se actualizó `isMenuOrGreeting` y `Universal Back` para establecer `messagesInCurrentStep = 1` inmediatamente al enviar el mensaje de navegación, asegurando que la siguiente respuesta del usuario se evalúe de inmediato contra las opciones del paso en su primer intento.
   2. Se agregó reintento automático y soporte para `msg.from` en el wrapper sintético de `getSafeChat`, protegiendo el envío de mensajes ante posibles micro-recargas de `whatsapp-web.js` / Puppeteer.
+
+### 10/08/2026 - Desactivación del Modo Whitelist (Apertura Global a Todos los Usuarios)
+- **Acción**: Se desactivó la restricción exclusiva del número de prueba (`TEST_WHITELIST_ENABLED = process.env.TEST_WHITELIST_ENABLED === 'true'`).
+- **Comportamiento**: El bot vuelve a responder de manera estándar a todos los números y pacientes entrantes. Si se requiere volver a modo test en el futuro, solo se necesita configurar `TEST_WHITELIST_ENABLED=true` en el entorno.

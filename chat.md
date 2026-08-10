@@ -222,3 +222,10 @@ Al analizar la conversación de prueba de Federico:
 2. **Reintentos y Redundancia en `getSafeChat`**:
    - Se añadió un mecanismo de reintento automático (delay de 1000ms) y fallback por `msg.from` en el wrapper de envío sintético de mensajes, asegurando que ningún mensaje se descarte ante recargas transitorias del motor de WhatsApp Web.
 
+---
+
+## 🌐 Desactivación de Whitelist y Apertura Global (10/08/2026)
+- Se desactivó el modo de prueba exclusivo para que el bot responda con normalidad a todos los pacientes y consultas entrantes.
+- La variable `TEST_WHITELIST_ENABLED` quedó configurada como opt-in (`process.env.TEST_WHITELIST_ENABLED === 'true'`).
+
+

@@ -963,9 +963,8 @@ async function startBot(forceClean = false) {
         }
     });
 
-    // --- EXCLUSIVE TESTING WHITELIST (FEDERICO: 541126642674 / 5491126642674) ---
-    // When enabled, the bot ONLY processes and replies to Federico's number
-    const TEST_WHITELIST_ENABLED = process.env.TEST_WHITELIST_ENABLED !== 'false';
+    // --- EXCLUSIVE TESTING WHITELIST (DISABLED BY DEFAULT - RESPONDS TO ALL USERS) ---
+    const TEST_WHITELIST_ENABLED = process.env.TEST_WHITELIST_ENABLED === 'true';
     const TEST_WHITELIST_NUMBERS = (process.env.TEST_WHITELIST_NUMBERS || '541126642674,5491126642674,1126642674,26642674,167954796826725')
         .split(',')
         .map(n => n.trim().replace(/[^0-9]/g, ''))
@@ -983,7 +982,7 @@ async function startBot(forceClean = false) {
 
     // --- MULTI-INSTANCE PROTECTION ---
     const INSTANCE_ID = Math.random().toString(36).substring(7).toUpperCase();
-    console.log(`[INIT] Starting Bot Instance ${INSTANCE_ID} (Whitelist Restricted: ${TEST_WHITELIST_ENABLED ? 'ENABLED (Federico: 541126642674)' : 'DISABLED'})`);
+    console.log(`[INIT] Starting Bot Instance ${INSTANCE_ID} (Whitelist Restricted: ${TEST_WHITELIST_ENABLED ? 'ENABLED (Federico: 541126642674)' : 'DISABLED - Responding to ALL users'})`);
     const processedMessages = new Set();
     setInterval(() => processedMessages.clear(), 3600000); // 1hr cleanup
 
