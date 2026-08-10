@@ -582,6 +582,18 @@ async function getSafeChat(client, msg, phone) {
         return {
             id: { _serialized: wrapperId, user: wrapperId.replace('@c.us', '').replace('@lid', '') },
             sendMessage: async (content, options) => {
+                const tryTarget = async (jid, label) => {
+                    if (!jid) return false;
+                    try {
+                        console.log(`[TRACE] 📤 Synthetic sendMessage attempting client.sendMessage to ${label} (${jid})`);
+                        await client.sendMessage(jid, content, options);
+                        return true;
+                    } catch (e) {
+                        console.log(`[TRACE] client.sendMessage to ${label} (${jid}) failed (${e.message})`);
+                        return false;
+                    }
+                };
+
                 // 1. Try native msg.reply if msg object is available (100% success on active incoming messages!)
                 if (msg && typeof msg.reply === 'function') {
                     try {
@@ -593,24 +605,27 @@ async function getSafeChat(client, msg, phone) {
                 }
 
                 // 2. Try client.sendMessage to targetPhoneJid (@c.us)
-                if (targetPhoneJid) {
-                    try {
-                        console.log(`[TRACE] 📤 Synthetic sendMessage attempting client.sendMessage to ${targetPhoneJid}`);
-                        return await client.sendMessage(targetPhoneJid, content, options);
-                    } catch (e) {
-                        console.log(`[TRACE] client.sendMessage to ${targetPhoneJid} failed (${e.message})`);
-                    }
-                }
+                if (targetPhoneJid && await tryTarget(targetPhoneJid, 'targetPhone')) return;
 
                 // 3. Try client.sendMessage to targetAltPhoneJid (@c.us) if available
-                if (targetAltPhoneJid) {
-                    try {
-                        console.log(`[TRACE] 📤 Synthetic sendMessage attempting client.sendMessage to alt ${targetAltPhoneJid}`);
-                        return await client.sendMessage(targetAltPhoneJid, content, options);
-                    } catch (e) {
-                        console.log(`[TRACE] client.sendMessage to alt ${targetAltPhoneJid} failed (${e.message})`);
-                    }
+                if (targetAltPhoneJid && await tryTarget(targetAltPhoneJid, 'altPhone')) return;
+
+                // 4. Try client.sendMessage to msg.from directly if available
+                if (msg?.from && msg.from !== targetPhoneJid && msg.from !== targetAltPhoneJid) {
+                    if (await tryTarget(msg.from, 'rawFromJid')) return;
                 }
+
+                // 5. If initial attempts failed (e.g. during a brief Puppeteer reload/injection), wait 1000ms and retry once
+                console.log(`[TRACE] ⏳ Initial send attempts failed. Retrying in 1000ms...`);
+                await new Promise(r => setTimeout(r, 1000));
+
+                if (msg && typeof msg.reply === 'function') {
+                    try {
+                        return await msg.reply(content, options);
+                    } catch (e) { }
+                }
+                if (targetPhoneJid && await tryTarget(targetPhoneJid, 'targetPhone_retry')) return;
+                if (msg?.from && await tryTarget(msg.from, 'rawFromJid_retry')) return;
             },
             sendStateTyping: async () => {
                 try {
@@ -1686,7 +1701,7 @@ async function startBot(forceClean = false) {
                         currentStepId: newStepId,
                         history: [],
                         "loopDetection.currentStepId": newStepId,
-                        "loopDetection.messagesInCurrentStep": 0,
+                        "loopDetection.messagesInCurrentStep": 1, // ALREADY SENT: Next user reply will be evaluated as an option input
                         "loopDetection.lastStepChangeAt": new Date()
                     }
                 }
@@ -1694,7 +1709,7 @@ async function startBot(forceClean = false) {
             conversation.currentStepId = newStepId;
             conversation.state = 'active';
             conversation.history = [];
-            conversation.loopDetection.messagesInCurrentStep = 0;
+            conversation.loopDetection.messagesInCurrentStep = 1;
 
             const currentStep = getStep(newStepId);
             if (currentStep) {
@@ -1744,7 +1759,7 @@ async function startBot(forceClean = false) {
                         currentStepId: newStepId,
                         history: newHistory,
                         "loopDetection.currentStepId": newStepId,
-                        "loopDetection.messagesInCurrentStep": 0,
+                        "loopDetection.messagesInCurrentStep": 1, // ALREADY SENT: Next user reply will be evaluated as an option input
                         "loopDetection.lastStepChangeAt": new Date()
                     }
                 }
@@ -1752,7 +1767,7 @@ async function startBot(forceClean = false) {
             conversation.currentStepId = newStepId;
             conversation.state = 'active';
             conversation.history = newHistory;
-            conversation.loopDetection.messagesInCurrentStep = 0;
+            conversation.loopDetection.messagesInCurrentStep = 1;
 
             const currentStep = getStep(newStepId);
             if (currentStep) {

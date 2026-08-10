@@ -191,3 +191,34 @@ El cliente reportó que buscar números copiados de WhatsApp con espacios (ej. `
 - **Comportamiento Aislado**:
   - Los mensajes de Federico son procesados de inmediato por el flujo correspondiente.
   - Los mensajes de otros números se registran en el panel de administración (MongoDB) para no perder datos, pero el bot descarta la respuesta automática (`[WHITELIST] 🔒 Whitelist active`).
+
+---
+
+## 🛠️ Corrección de Flujo y Menús Repetidos (Universal Nav & messagesInCurrentStep) (10/08/2026)
+
+### 1. Análisis del Problema
+Al analizar la conversación de prueba de Federico:
+- `Federico: hola` -> El bot responde con el Menú de Bienvenida (A, B, C).
+- `Federico: a` -> El bot responde **nuevamente con el Menú de Bienvenida** en lugar de avanzar al paso correspondiente.
+- `Federico: a` -> Al enviarlo por segunda vez, el bot avanza a `info_general`.
+- `Federico: b` -> Avanza a `info_protesis`.
+- `Federico: v` -> Vuelve a `info_general`.
+- `Federico: m` -> Vuelve al Menú de Bienvenida.
+- `Federico: c` -> El bot no responde.
+
+### 2. Diagnóstico de Causa Raíz
+1. **Desincronización en `messagesInCurrentStep`**:
+   - En la máquina de estados de `handleStepLogic`, `messagesInCurrentStep === 0` indica que el bot acaba de entrar a un paso y aún no le mostró el mensaje al usuario (Fase de Entrada).
+   - Cuando el usuario utiliza un comando de navegación universal (`hola`, `M`, `V`), el bot enviaba el mensaje formateado a WhatsApp, pero guardaba `"loopDetection.messagesInCurrentStep": 0`.
+   - Al recibir la siguiente respuesta del usuario (ej. `A`), el bot detectaba `messagesInCurrentStep === 0`, creía erróneamente que no había enviado el mensaje de bienvenida y lo reenviaba (`Revisit (no media)`), consumiendo la respuesta sin evaluar la opción seleccionada.
+   - Recién en el segundo envío de `A`, `messagesInCurrentStep` era `1`, permitiendo que se evalúe la opción.
+2. **Fallo en Envío Sintético ante Recargas de Puppeteer**:
+   - Al enviar `C`, `whatsapp-web.js` experimentó una micro-desconexión (`LOADING SCREEN 100`) donde `window.Store.Chat` no estaba disponible de forma síncrona, provocando un fallo en `client.sendMessage`.
+
+### 3. Solución Aplicada
+1. **Actualización de Navegación Universal (`bot-runner/index.js`)**:
+   - Se modificaron `isMenuOrGreeting` y `Universal Back` para establecer `messagesInCurrentStep = 1` inmediatamente al enviar el mensaje de navegación.
+   - De este modo, la siguiente respuesta del usuario (`A`, `B`, `C`, etc.) pasa de forma inmediata a la fase de evaluación de opciones en el **primer intento**.
+2. **Reintentos y Redundancia en `getSafeChat`**:
+   - Se añadió un mecanismo de reintento automático (delay de 1000ms) y fallback por `msg.from` en el wrapper de envío sintético de mensajes, asegurando que ningún mensaje se descarte ante recargas transitorias del motor de WhatsApp Web.
+

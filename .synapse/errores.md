@@ -13,3 +13,10 @@
 **Solución:** Los comandos universales (M/V) ahora limpian `formState.active`, `freeTextState.active` y `handoffAckSent`. Se agregó lógica para disparar el formulario de captura inmediatamente durante transiciones de opciones.
 **Commit:** `pending`
 **Estado:** ✅ FIXED
+
+## ERR-06: Menú Repetido al Seleccionar Opción tras Navegación (10/08/2026)
+**Síntoma:** Al escribir 'hola' o 'M' y luego elegir una opción ('A', 'B', 'C'), el bot repetía el menú de bienvenida en lugar de avanzar al paso correspondiente.
+**Root Cause:** Los manejadores de `isMenuOrGreeting` y `Universal Back` enviaban el mensaje de navegación pero dejaban `messagesInCurrentStep: 0`. Al recibir el siguiente mensaje del usuario, la máquina de estados interpretaba que aún no había mostrado el paso y lo reenviaba consumiendo el input sin evaluar opciones.
+**Solución:** Se estableció `messagesInCurrentStep: 1` al enviar los mensajes en `isMenuOrGreeting` y `Universal Back`.
+**Estado:** ✅ FIXED
+

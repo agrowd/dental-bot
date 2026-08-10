@@ -75,3 +75,10 @@
   - **Función `isWhitelistedUser(phone, fromJid)`**: Se implementó un filtro de whitelist global en `bot-runner/index.js` que reconoce todas las variantes del número de Federico (`541126642674`, `5491126642674`, `1126642674`, y su JID privado `@lid`).
   - **Filtro en Mensajes y Llamadas**: Los mensajes entrantes de otros contactos se guardan de forma segura en la base de datos (para no perder el historial), pero el bot no los procesa ni les envía respuestas automáticas.
   - **Logs Informativos de Whitelist**: Cuando llega un mensaje no permitido, la terminal imprime `[WHITELIST] 🔒 Whitelist active: Ignoring incoming message from... Bot is restricted to Federico (541126642674).`
+
+### 10/08/2026 - Fix de Transición de Flujo y Menús Repetidos (Universal Nav & messagesInCurrentStep)
+- **Problema Detectado**: Al enviar una opción (`A`, `B`, `C`) luego de un saludo (`hola`) o comando de navegación universal (`M`, `V`), el bot reenviaba el menú anterior en lugar de avanzar al paso correspondiente, requiriendo que el usuario enviara la opción por segunda vez.
+- **Causa Raíz**: En los manejadores de comandos universales (`isMenuOrGreeting` y `Universal Back`), se enviaba directamente el mensaje del menú formateado a WhatsApp, pero se guardaba `"loopDetection.messagesInCurrentStep": 0` en la base de datos y memoria. Cuando el usuario enviaba su elección (ej. `A`), `handleStepLogic` detectaba `messagesInCurrentStep === 0` (lógica de entrada al paso), asumía erróneamente que el menú no había sido enviado aún, lo reenviaba, colocaba `messagesInCurrentStep = 1` y salía del bucle sin evaluar la opción.
+- **Solución**:
+  1. Se actualizó `isMenuOrGreeting` y `Universal Back` para establecer `messagesInCurrentStep = 1` inmediatamente al enviar el mensaje de navegación, asegurando que la siguiente respuesta del usuario se evalúe de inmediato contra las opciones del paso en su primer intento.
+  2. Se agregó reintento automático y soporte para `msg.from` en el wrapper sintético de `getSafeChat`, protegiendo el envío de mensajes ante posibles micro-recargas de `whatsapp-web.js` / Puppeteer.
