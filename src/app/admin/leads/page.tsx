@@ -154,8 +154,16 @@ export default function LeadsPage() {
         setEditingValue(lead[field] || '');
     }
 
-    // Normalize phone/search string for flexible matching
-    const normalizePhone = (s: string) => (s || '').replace(/[\s\-\+]/g, '').replace(/^549/, '');
+    // Normalize phone/search string for flexible matching across all prefix variants
+    const normalizePhone = (s: string) => {
+        let clean = (s || '').replace(/[\s\-\+]/g, '');
+        if (clean.startsWith('549')) clean = clean.substring(3);
+        else if (clean.startsWith('54')) clean = clean.substring(2);
+        if (clean.startsWith('9')) clean = clean.substring(1);
+        if (clean.startsWith('0')) clean = clean.substring(1);
+        if (clean.startsWith('15')) clean = clean.substring(2);
+        return clean;
+    };
 
     // Filter leads
     const filteredLeads = leads.filter(lead => {

@@ -629,9 +629,36 @@ async function getSafeChat(client, msg, phone) {
             },
             sendStateTyping: async () => {
                 try {
-                    const chat = await client.getChatById(wrapperId).catch(() => null);
-                    if (chat && typeof chat.sendStateTyping === 'function') {
-                        return await chat.sendStateTyping();
+                    // 1. Direct Puppeteer Store injection across candidate JIDs (100% reliable)
+                    if (client && client.pupPage) {
+                        const candidates = [targetPhoneJid, targetAltPhoneJid, msg?.from, wrapperId].filter(Boolean);
+                        await client.pupPage.evaluate(async (jids) => {
+                            try {
+                                for (const jid of jids) {
+                                    if (!jid || !window.Store) continue;
+                                    const wid = window.Store.WidFactory?.createWid(jid);
+                                    if (!wid) continue;
+                                    let chat = window.Store.Chat?.get(wid);
+                                    if (!chat && window.Store.Chat?.find) {
+                                        chat = await window.Store.Chat.find(wid).catch(() => null);
+                                    }
+                                    if (chat) {
+                                        if (window.Store.SendPresenceAvailable) await window.Store.SendPresenceAvailable().catch(() => {});
+                                        if (window.Store.Presence?.sendPresenceAvailable) await window.Store.Presence.sendPresenceAvailable().catch(() => {});
+                                        if (window.Store.ChatPresence?.markComposing) {
+                                            await window.Store.ChatPresence.markComposing(chat).catch(() => {});
+                                        }
+                                        return;
+                                    }
+                                }
+                            } catch (err) {}
+                        }, candidates).catch(() => {});
+                    }
+
+                    // 2. Native chat sendStateTyping fallback
+                    const nativeChat = await client.getChatById(wrapperId).catch(() => null);
+                    if (nativeChat && typeof nativeChat.sendStateTyping === 'function') {
+                        await nativeChat.sendStateTyping().catch(() => {});
                     }
                 } catch (e) { }
             },
@@ -2480,43 +2507,34 @@ async function resolveLidToPhone(client, sourceId) {
 
     let resolvedJid = null;
 
-    // 1. Try enforceLidAndPnRetrieval in page context with 2.5s timeout
+    // 1. Try page context evaluation (enforceLidAndPnRetrieval + LidUtils) in a single fast call (1000ms timeout)
     try {
         resolvedJid = await withTimeout(client.pupPage.evaluate(async (lid) => {
             try {
+                // Method A: enforceLidAndPnRetrieval
                 if (window.WWebJS && window.WWebJS.enforceLidAndPnRetrieval) {
                     const res = await window.WWebJS.enforceLidAndPnRetrieval(lid);
                     if (res && res.phone && res.phone._serialized) {
                         return res.phone._serialized;
                     }
                 }
+                // Method B: LidUtils
+                if (window.Store && window.Store.WidFactory && window.Store.LidUtils) {
+                    const wid = window.Store.WidFactory.createWid(lid);
+                    const pnWid = window.Store.LidUtils.getPhoneNumber(wid);
+                    if (pnWid && pnWid._serialized) {
+                        return pnWid._serialized;
+                    }
+                }
             } catch (err) {}
             return null;
-        }, sourceId));
+        }, sourceId), 1000);
     } catch (e) { }
 
-    // 2. Try LidUtils if step 1 failed
+    // 2. Fallback: getContactById with 800ms timeout
     if (!resolvedJid) {
         try {
-            resolvedJid = await withTimeout(client.pupPage.evaluate((lid) => {
-                try {
-                    if (window.Store && window.Store.WidFactory && window.Store.LidUtils) {
-                        const wid = window.Store.WidFactory.createWid(lid);
-                        const pnWid = window.Store.LidUtils.getPhoneNumber(wid);
-                        if (pnWid && pnWid._serialized) {
-                            return pnWid._serialized;
-                        }
-                    }
-                } catch (err) {}
-                return null;
-            }, sourceId));
-        } catch (e) { }
-    }
-
-    // 3. Try getContactById as fallback
-    if (!resolvedJid) {
-        try {
-            const wppContact = await withTimeout(client.getContactById(sourceId));
+            const wppContact = await withTimeout(client.getContactById(sourceId), 800);
             if (wppContact && wppContact.id && wppContact.id._serialized && wppContact.id._serialized.endsWith('@c.us')) {
                 resolvedJid = wppContact.id._serialized;
             } else if (wppContact && wppContact.number && wppContact.number.length <= 13) {

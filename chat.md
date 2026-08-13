@@ -228,4 +228,25 @@ Al analizar la conversación de prueba de Federico:
 - Se desactivó el modo de prueba exclusivo para que el bot responda con normalidad a todos los pacientes y consultas entrantes.
 - La variable `TEST_WHITELIST_ENABLED` quedó configurada como opt-in (`process.env.TEST_WHITELIST_ENABLED === 'true'`).
 
+---
+
+## ⚡ Optimización de Respuestas, Indicador "Escribiendo..." y Búsqueda de Contactos (13/08/2026)
+
+### 1. Feedback de Salvador Jaef
+- Indicador de presencia en WhatsApp: *"No salen los puntitos como que están escribiendo"*.
+- Latencia: *"Está un poco más lenta la respuesta"*.
+- Búsqueda: *"Este número por ejemplo en cualquier formato, no me sale si lo busco y tampoco se conectó con el bot (54 9 11 2630-1001)"*.
+
+### 2. Diagnóstico y Mejoras Realizadas
+1. **Puntitos "Escribiendo..." (`sendStateTyping`)**:
+   - Se implementó la inyección directa de `window.Store.ChatPresence.markComposing` en Puppeteer para todos los JIDs asociados al contacto.
+   - Se configuró una pausa de escritura de **1.0s – 1.8s** para dar tiempo suficiente a WhatsApp de transmitir los 3 puntos animados a la pantalla del paciente.
+2. **Reducción de Latencia (`resolveLidToPhone`)**:
+   - Se unificaron los métodos de resolución de LID a una sola llamada con timeout de 1000ms, eliminando esperas acumulativas de hasta 7.5s.
+3. **Normalización de Búsqueda Telefónica (`leads/page.tsx` & `conversations/page.tsx`)**:
+   - Se mejoró `normalizePhone` para remover automáticamente todos los prefijos locales e internacionales (`549`, `54`, `9`, `0`, `15`), permitiendo encontrar el contacto sin importar si se busca con o sin espacios/guiones/prefijos.
+4. **Estado de `54 9 11 2630-1001`**:
+   - Salvador realizó su prueba mientras el bot estaba restringido a la whitelist temporal de Federico. Una vez desactivada la whitelist, el bot responde de inmediato a su número y lo registra en MongoDB, permitiendo buscarlo y gestionarlo normalmente en el CRM.
+
+
 

@@ -86,3 +86,20 @@
 ### 10/08/2026 - Desactivación del Modo Whitelist (Apertura Global a Todos los Usuarios)
 - **Acción**: Se desactivó la restricción exclusiva del número de prueba (`TEST_WHITELIST_ENABLED = process.env.TEST_WHITELIST_ENABLED === 'true'`).
 - **Comportamiento**: El bot vuelve a responder de manera estándar a todos los números y pacientes entrantes. Si se requiere volver a modo test en el futuro, solo se necesita configurar `TEST_WHITELIST_ENABLED=true` en el entorno.
+
+### 13/08/2026 - Optimización de Tiempos de Respuesta, Indicador "Escribiendo..." y Búsqueda de Contactos
+- **Reporte de Salvador Jaef**:
+  1. No aparecían los puntos animados de "escribiendo..." (`sendStateTyping`) en WhatsApp.
+  2. Sensación de lentitud en ciertas respuestas.
+  3. Su número (`54 9 11 2630-1001`) no aparecía en el buscador del CRM ni se conectaba al bot al probar.
+- **Diagnóstico y Soluciones**:
+  1. **Indicador "Escribiendo..." (`sendStateTyping`)**:
+     - El wrapper sintético de chat invocaba `client.getChatById(wrapperId)` para `sendStateTyping()`. Cuando `getChatById` no resolvía, el typing fallaba en silencio y el delay de 600ms era demasiado corto para que WhatsApp Web propagara la presencia al cliente móvil.
+     - Se implementó la inyección directa de `window.Store.ChatPresence.markComposing` en el contexto Puppeteer a través de todos los JIDs candidatos (`targetPhoneJid`, `altPhone`, `msg.from`).
+     - Se ajustó el tiempo de simulación de escritura a un rango natural de **1.0s – 1.8s**, garantizando que el usuario vea los 3 puntos animados de "escribiendo..." con claridad.
+  2. **Optimización de Latencia (`resolveLidToPhone`)**:
+     - Se unificó la resolución de LIDs en Puppeteer combinando `enforceLidAndPnRetrieval` y `LidUtils` en una única evaluación rápida con timeout de 1000ms, reduciendo la espera máxima en casos no cacheados de 7.5s a 1.0s.
+  3. **Búsqueda Flexible y Normalización de Prefijos (`normalizePhone`)**:
+     - En el frontend de Leads ([leads/page.tsx](file:///c:/Users/Try%20Hard/Desktop/Nexte/dental-response/src/app/admin/leads/page.tsx)) y Conversaciones ([conversations/page.tsx](file:///c:/Users/Try%20Hard/Desktop/Nexte/dental-response/src/app/admin/conversations/page.tsx)), `normalizePhone` fue actualizado para limpiar todos los prefijos argentinos e internacionales (`549`, `54`, `9`, `0`, `15`), permitiendo encontrar números sin importar el espaciado o prefijo con el que se busque.
+  4. **Explicación sobre `54 9 11 2630-1001`**:
+     - El número no se había conectado ni guardado en MongoDB porque Salvador realizó su prueba mientras el bot estaba en modo Whitelist exclusiva de prueba. Con la whitelist deshabilitada, al escribir se crea el contacto y responde de inmediato. Además, puede probarse forzando el inicio desde el botón de la interfaz.
