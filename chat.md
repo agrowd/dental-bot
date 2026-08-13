@@ -245,8 +245,10 @@ Al analizar la conversación de prueba de Federico:
    - Se unificaron los métodos de resolución de LID a una sola llamada con timeout de 1000ms, eliminando esperas acumulativas de hasta 7.5s.
 3. **Normalización de Búsqueda Telefónica (`leads/page.tsx` & `conversations/page.tsx`)**:
    - Se mejoró `normalizePhone` para remover automáticamente todos los prefijos locales e internacionales (`549`, `54`, `9`, `0`, `15`), permitiendo encontrar el contacto sin importar si se busca con o sin espacios/guiones/prefijos.
-4. **Estado de `54 9 11 2630-1001`**:
-   - Salvador realizó su prueba mientras el bot estaba restringido a la whitelist temporal de Federico. Una vez desactivada la whitelist, el bot responde de inmediato a su número y lo registra en MongoDB, permitiendo buscarlo y gestionarlo normalmente en el CRM.
+4. **Garantía Total de Registro en Leads y Conversaciones**:
+   - Se añadió la rutina `syncAllWhatsAppChats(client)` en el evento `ready` del bot. Al conectarse, escanea todos los chats y contactos existentes en WhatsApp Web y los inserta inmediatamente en MongoDB como `Contact` y `Conversation`, haciendo visible a todo el historial de la cuenta en el CRM.
+   - Se agregó la creación/actualización inmediata de `Contact` y `Conversation` en `message_create` para el 100% de los mensajes (entrantes y salientes, manuales o del bot) antes de cualquier filtro, asegurando que ningún número quede sin registrarse en Leads y Conversaciones.
+
 
 
 

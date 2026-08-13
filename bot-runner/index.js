@@ -846,6 +846,11 @@ async function startBot(forceClean = false) {
             console.error('[INIT] Error cleaning stale phone locks:', err);
         });
 
+        // Run full sync of all WhatsApp chats & contacts into MongoDB
+        syncAllWhatsAppChats(client).catch(err => {
+            console.error('[SYNC] Error in syncAllWhatsAppChats:', err.message);
+        });
+
         // Run the background database migration for LID contacts
         runLidMigration(client).catch(err => {
             console.error('[MIGRATION] Error in runLidMigration:', err);
@@ -1041,7 +1046,65 @@ async function startBot(forceClean = false) {
             }).catch(() => {});
         }
 
-        // 2. OUTGOING MESSAGES SENT BY BOT -> HANDLE PERSISTENT UNREAD & STOP
+        // 1.1 ALWAYS GUARANTEE: Contact and Conversation exist in MongoDB for ALL communicating numbers (incoming AND outgoing)
+        try {
+            const chatContact = await getSafeContact(client, msg, phone);
+            const currentStatus = chatContact.isMyContact ? 'agendado' : 'no_agendado';
+            
+            let contact = await Contact.findOne({ phone });
+            if (!contact) {
+                contact = await Contact.create({
+                    phone,
+                    name: chatContact.name || msg.pushname || '',
+                    pushname: msg.pushname || '',
+                    status: currentStatus,
+                    source: 'organic',
+                    firstSeenAt: new Date(),
+                    lastSeenAt: new Date(),
+                    tags: [],
+                    meta: {},
+                    events: [{ event: `Contacto creado (${currentStatus})`, date: new Date() }]
+                });
+                console.log(`[SYNC] 👤 Contact auto-created: ${phone} (name: "${contact.name || contact.pushname || 'none'}", status: ${currentStatus})`);
+            } else {
+                const updateFields = { lastSeenAt: new Date() };
+                if (msg.pushname && !contact.pushname) updateFields.pushname = msg.pushname;
+                if (chatContact.name && (!contact.name || contact.name === contact.pushname)) {
+                    updateFields.name = chatContact.name;
+                }
+                if (chatContact.isMyContact && contact.status !== 'agendado') {
+                    updateFields.status = 'agendado';
+                }
+                await Contact.updateOne({ _id: contact._id }, { $set: updateFields });
+            }
+
+            // Ensure a Conversation document exists for this phone so it shows up in CRM
+            const existingConv = await Conversation.findOne({ phone, state: { $in: ['active', 'paused'] } });
+            if (!existingConv) {
+                const defaultFlow = await Flow.findOne({ isActive: true, published: { $ne: null } }).sort({ 'activationRules.priority': -1 })
+                    || await Flow.findOne({ published: { $ne: null } }).sort({ updatedAt: -1 });
+                if (defaultFlow && defaultFlow.published) {
+                    await Conversation.create({
+                        phone,
+                        flowId: defaultFlow._id,
+                        flowVersion: defaultFlow.publishedVersion,
+                        currentStepId: defaultFlow.published.entryStepId,
+                        state: msg.fromMe ? 'paused' : 'active',
+                        tags: [],
+                        loopDetection: {
+                            currentStepId: defaultFlow.published.entryStepId,
+                            messagesInCurrentStep: 0,
+                            lastStepChangeAt: new Date()
+                        }
+                    });
+                    console.log(`[SYNC] 💬 Conversation record auto-created for ${phone} (state: ${msg.fromMe ? 'paused' : 'active'})`);
+                }
+            }
+        } catch (syncErr) {
+            console.error('[SYNC ERROR] Error ensuring contact/conversation:', syncErr.message);
+        }
+
+        // 2. OUTGOING MESSAGES SENT BY BOT / HUMAN -> HANDLE PERSISTENT UNREAD & STOP
         if (msg.fromMe) {
             try {
                 const conv = await Conversation.findOne({ phone, state: { $in: ['active', 'paused'] } });
@@ -2703,6 +2766,83 @@ async function runLidMigration(client) {
         console.log(`[MIGRATION] Database LID-to-Phone migration finished. Total migrated: ${migratedCount}`);
     } catch (error) {
         console.error('[MIGRATION] Fatal migration error:', error);
+    }
+}
+
+// Sync all active WhatsApp chats and address book contacts into MongoDB Leads and Conversations
+async function syncAllWhatsAppChats(client) {
+    console.log('[SYNC] 🔄 Starting full WhatsApp chats & contacts synchronization with MongoDB...');
+    try {
+        if (!client) return;
+        const chats = await client.getChats().catch(() => []);
+        console.log(`[SYNC] Found ${chats.length} active WhatsApp chats to sync with CRM...`);
+        let syncedCount = 0;
+
+        const defaultFlow = await Flow.findOne({ isActive: true, published: { $ne: null } }).sort({ 'activationRules.priority': -1 })
+            || await Flow.findOne({ published: { $ne: null } }).sort({ updatedAt: -1 });
+
+        for (const chat of chats) {
+            if (!chat || !chat.id) continue;
+            const rawId = chat.id._serialized || '';
+            if (rawId.endsWith('@g.us') || rawId === 'status@broadcast' || rawId.includes('@newsletter')) continue;
+
+            let sourceId = await resolveLidToPhone(client, rawId);
+            const phone = sourceId.replace('@c.us', '').replace('@lid', '').replace(/\D/g, '');
+            if (!phone || phone.length < 8) continue;
+
+            const isContact = !!chat.isMyContact;
+            const contactStatus = isContact ? 'agendado' : 'no_agendado';
+            const chatName = chat.name || chat.pushname || '';
+
+            // Upsert Contact
+            let dbContact = await Contact.findOne({ phone });
+            if (!dbContact) {
+                dbContact = await Contact.create({
+                    phone,
+                    name: chatName,
+                    pushname: chat.pushname || '',
+                    status: contactStatus,
+                    source: 'organic',
+                    firstSeenAt: new Date(),
+                    lastSeenAt: new Date(chat.timestamp ? chat.timestamp * 1000 : Date.now()),
+                    tags: [],
+                    meta: {},
+                    events: [{ event: `Sincronizado desde WhatsApp (${contactStatus})`, date: new Date() }]
+                });
+                syncedCount++;
+            } else {
+                const updateFields = { lastSeenAt: new Date(chat.timestamp ? chat.timestamp * 1000 : Date.now()) };
+                if (chatName && (!dbContact.name || dbContact.name === dbContact.pushname)) {
+                    updateFields.name = chatName;
+                }
+                if (isContact && dbContact.status !== 'agendado') {
+                    updateFields.status = 'agendado';
+                }
+                await Contact.updateOne({ _id: dbContact._id }, { $set: updateFields });
+            }
+
+            // Ensure Conversation exists
+            const existingConv = await Conversation.findOne({ phone, state: { $in: ['active', 'paused'] } });
+            if (!existingConv && defaultFlow && defaultFlow.published) {
+                await Conversation.create({
+                    phone,
+                    flowId: defaultFlow._id,
+                    flowVersion: defaultFlow.publishedVersion,
+                    currentStepId: defaultFlow.published.entryStepId,
+                    state: 'active',
+                    tags: [],
+                    loopDetection: {
+                        currentStepId: defaultFlow.published.entryStepId,
+                        messagesInCurrentStep: 0,
+                        lastStepChangeAt: new Date()
+                    }
+                });
+            }
+        }
+
+        console.log(`[SYNC] ✅ Full WhatsApp sync finished: ${syncedCount} new contacts registered in CRM.`);
+    } catch (err) {
+        console.error('[SYNC ERROR] Failed to sync WhatsApp chats:', err.message);
     }
 }
 
