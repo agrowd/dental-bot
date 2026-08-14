@@ -257,10 +257,13 @@ Al analizar la conversación de prueba de Federico:
 - *"No me salen los puntos y además tarda bastante la respuesta como que más de uno sale porque se imagina que no van a responder"*.
 
 ### 2. Causa Raíz y Solución
-1. **Disparo Inmediato de Presencia (0.05s)**: Apenas entra un mensaje válido a `message_create`, se dispara `sendTyping` al instante. El usuario ve los 3 puntos animados desde el segundo cero.
-2. **Inyección Multicamino de Presencia**: `ChatPresence.markComposing` + `Presence.sendPresenceChat` + `WWebJS.sendPresenceChat`.
-3. **Caché en Memoria de Contactos**: Se eliminaron 5 llamadas repetidas a Puppeteer por mensaje (`contactMemoryCache`), eliminando 3 a 5 segundos de espera interna.
-4. **Respuestas en ~1 segundo**: Delays ajustados a 350-500ms. La experiencia ahora es rápida, fluida y con los puntitos de escritura visibles.
+1. **Desbloqueo de Puppeteer por Sincronización Inicial**: Al arrancar, `syncAllWhatsAppChats` inundaba Puppeteer de llamadas síncronas para resolver 500 chats. Se optimizó para extraer `@c.us` directamente en 0ms y ceder el hilo con delays de 10ms, dejando el canal libre al 100% para los mensajes entrantes.
+2. **Persistencia de Sesión sin QR**: La sesión de WhatsApp persiste en el volumen Docker `odontobot_whatsapp_session` (`/app/.wwebjs_auth`). No es necesario re-escanear el código QR.
+3. **Disparo Inmediato de Presencia (0.05s)**: Apenas entra un mensaje válido a `message_create`, se dispara `sendTyping` al instante. El usuario ve los 3 puntos animados desde el segundo cero.
+4. **Inyección Multicamino de Presencia**: `ChatPresence.markComposing` + `Presence.sendPresenceChat` + `WWebJS.sendPresenceChat`.
+5. **Caché en Memoria de Contactos**: Se eliminaron llamadas repetidas a Puppeteer (`contactMemoryCache`).
+6. **Respuestas en ~1.3 segundos**: Delays calibrados a 800-1100ms. La experiencia es rápida, natural y con los puntitos de "escribiendo..." claramente visibles.
+
 
 
 

@@ -1137,26 +1137,28 @@ async function startBot(forceClean = false) {
                 await Contact.updateOne({ _id: contact._id }, { $set: updateFields });
             }
 
-            // Ensure a Conversation document exists for this phone so it shows up in CRM
-            const existingConv = await Conversation.findOne({ phone, state: { $in: ['active', 'paused'] } });
-            if (!existingConv) {
-                const defaultFlow = await Flow.findOne({ isActive: true, published: { $ne: null } }).sort({ 'activationRules.priority': -1 })
-                    || await Flow.findOne({ published: { $ne: null } }).sort({ updatedAt: -1 });
-                if (defaultFlow && defaultFlow.published) {
-                    await Conversation.create({
-                        phone,
-                        flowId: defaultFlow._id,
-                        flowVersion: defaultFlow.publishedVersion,
-                        currentStepId: defaultFlow.published.entryStepId,
-                        state: msg.fromMe ? 'paused' : 'active',
-                        tags: [],
-                        loopDetection: {
+            // If message is outgoing (sent by clinic operator from phone), ensure a paused Conversation exists in CRM
+            if (msg.fromMe) {
+                const existingConv = await Conversation.findOne({ phone, state: { $in: ['active', 'paused'] } });
+                if (!existingConv) {
+                    const defaultFlow = await Flow.findOne({ isActive: true, published: { $ne: null } }).sort({ 'activationRules.priority': -1 })
+                        || await Flow.findOne({ published: { $ne: null } }).sort({ updatedAt: -1 });
+                    if (defaultFlow && defaultFlow.published) {
+                        await Conversation.create({
+                            phone,
+                            flowId: defaultFlow._id,
+                            flowVersion: defaultFlow.publishedVersion,
                             currentStepId: defaultFlow.published.entryStepId,
-                            messagesInCurrentStep: 0,
-                            lastStepChangeAt: new Date()
-                        }
-                    });
-                    console.log(`[SYNC] 💬 Conversation record auto-created for ${phone} (state: ${msg.fromMe ? 'paused' : 'active'})`);
+                            state: 'paused',
+                            tags: [],
+                            loopDetection: {
+                                currentStepId: defaultFlow.published.entryStepId,
+                                messagesInCurrentStep: 0,
+                                lastStepChangeAt: new Date()
+                            }
+                        });
+                        console.log(`[SYNC] 💬 Outgoing conversation record auto-created for ${phone} (state: paused)`);
+                    }
                 }
             }
         } catch (syncErr) {
@@ -1889,7 +1891,7 @@ async function startBot(forceClean = false) {
                 const response = formatMessage(currentStep, flow);
                 const chat = await getSafeChat(client, msg, contact.phone);
                 await sendTyping(chat, contact.phone);
-                await randomDelay(350, 150);
+                await randomDelay(800, 300);
                 await chat.sendMessage(response);
                 markUnreadWithDelay(chat);
             }
@@ -1927,7 +1929,7 @@ async function startBot(forceClean = false) {
                 const response = formatMessage(currentStep, flow);
                 const chat = await getSafeChat(client, msg, contact.phone);
                 await sendTyping(chat, contact.phone);
-                await randomDelay(350, 150);
+                await randomDelay(800, 300);
                 await chat.sendMessage(response);
                 markUnreadWithDelay(chat);
             }
@@ -2110,7 +2112,7 @@ async function startBot(forceClean = false) {
 
                 try {
                     await sendTyping(chat, contact.phone);
-                    await randomDelay(350, 150);
+                    await randomDelay(800, 300);
 
                     if (currentStep.mediaUrl) {
                         const alreadySentMedia = (conversation.visitedMediaSteps || []).includes(currentStep.id);
@@ -2835,7 +2837,7 @@ async function runLidMigration(client) {
 
 // Sync all active WhatsApp chats and address book contacts into MongoDB Leads and Conversations
 async function syncAllWhatsAppChats(client) {
-    console.log('[SYNC] 🔄 Starting full WhatsApp chats & contacts synchronization with MongoDB...');
+    console.log('[SYNC] 🔄 Starting background WhatsApp chats & contacts synchronization with MongoDB...');
     try {
         if (!client) return;
         const chats = await client.getChats().catch(() => []);
@@ -2850,8 +2852,17 @@ async function syncAllWhatsAppChats(client) {
             const rawId = chat.id._serialized || '';
             if (rawId.endsWith('@g.us') || rawId === 'status@broadcast' || rawId.includes('@newsletter')) continue;
 
-            let sourceId = await resolveLidToPhone(client, rawId);
-            const phone = sourceId.replace('@c.us', '').replace('@lid', '').replace(/\D/g, '');
+            // Direct extraction for standard @c.us chats (0ms, zero Puppeteer load)
+            let phone = '';
+            if (rawId.endsWith('@c.us')) {
+                phone = rawId.replace('@c.us', '').replace(/\D/g, '');
+            } else if (rawId.endsWith('@lid')) {
+                const cached = lidResolutionMemoryCache.get(rawId);
+                phone = cached ? cached.replace('@c.us', '').replace(/\D/g, '') : rawId.replace('@lid', '');
+            } else {
+                phone = String(chat.id.user || '').replace(/\D/g, '');
+            }
+
             if (!phone || phone.length < 8) continue;
 
             const isContact = !!chat.isMyContact;
@@ -2902,6 +2913,9 @@ async function syncAllWhatsAppChats(client) {
                     }
                 });
             }
+
+            // Yield 10ms to Node event loop so incoming user messages always process with zero latency
+            await new Promise(r => setTimeout(r, 10));
         }
 
         console.log(`[SYNC] ✅ Full WhatsApp sync finished: ${syncedCount} new contacts registered in CRM.`);

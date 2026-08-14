@@ -109,12 +109,14 @@
 - **Reporte de Salvador Jaef**:
   1. *"No me salen los puntos"* (el indicador de 'escribiendo...' no se mostraba).
   2. *"Tarda bastante la respuesta como que más de uno sale porque se imagina que no van a responder"*.
+  3. *"¿Tengo que volver a escanear?"*
 - **Diagnóstico Forense**:
-  1. **Disparo Tardío del Indicador**: El `sendTyping` se ejecutaba al final de la lógica del paso. Antes de eso, pasaban entre 4 y 7 segundos en bloqueos de locks, consultas sucesivas a Puppeteer (`getSafeContact` llamado 5 veces seguidas por mensaje) y validaciones, por lo que el usuario esperaba en silencio absoluto.
-  2. **Delays Acumulados**: `randomDelay` agregaba de 1 a 2 segundos adicionales sobre los 5 segundos de procesamiento interno.
+  1. **Congestión del Canal de Puppeteer por Sincronización Inicial**: Al conectarse, `syncAllWhatsAppChats` ejecutaba cientos de llamadas `client.pupPage.evaluate` sincrónicas en bucle. Si un usuario escribía justo después del despliegue, su mensaje quedaba encolado detrás de cientos de evaluaciones de sincronización, demorando de 15 a 30 segundos.
+  2. **Persistencia de Sesión sin QR**: La sesión de WhatsApp se guarda en el volumen Docker `odontobot_whatsapp_session` (`/app/.wwebjs_auth`). **NO es necesario volver a escanear el QR** al desplegar; el bot mantiene la sesión abierta.
 - **Soluciones Aplicadas**:
-  1. **Disparo Instantáneo de "Escribiendo..." (`sendTyping` Inmediato)**: Se invoca `sendTyping` a los 50ms de recibir el mensaje entrante. Desde el primer instante, WhatsApp envía el paquete de presencia al móvil del paciente mostrando los 3 puntos animados.
-  2. **Inyección Multicamino de Presencia**: Se combinaron `ChatPresence.markComposing`, `Presence.sendPresenceChat` y `WWebJS.sendPresenceChat` con soporte para número limpio y JID completo.
-  3. **Caché en Memoria de Contactos (`contactMemoryCache`)**: Se eliminaron las 5 llamadas redundantes a Puppeteer por mensaje, resolviendo la info de contacto en 0ms.
-  4. **Reducción de Esperas de Lock**: De 600ms a 100ms.
-  5. **Calibración de Tiempos de Respuesta**: Delays de tipeo ajustados a un rango ágil y natural de **350ms – 500ms**. El tiempo total de respuesta baja a **~1 segundo**, visible, dinámico y sin sensación de espera.
+  1. **Sincronización en Background No Bloqueante**: `syncAllWhatsAppChats` extrae directamente los identificadores `@c.us` sin llamar a Puppeteer (0ms de carga) y cede 10ms al event loop de Node por chat (`await new Promise(r => setTimeout(r, 10))`). El procesador de mensajes siempre tiene prioridad absoluta.
+  2. **Disparo Instantáneo de "Escribiendo..." (`sendTyping` Inmediato)**: Se invoca `sendTyping` a los 50ms de recibir el mensaje entrante. Desde el primer instante, WhatsApp envía el paquete de presencia al móvil del paciente mostrando los 3 puntos animados.
+  3. **Inyección Multicamino de Presencia**: Se combinaron `ChatPresence.markComposing`, `Presence.sendPresenceChat` y `WWebJS.sendPresenceChat` con soporte para número limpio y JID completo.
+  4. **Caché en Memoria de Contactos (`contactMemoryCache`)**: Se eliminaron las 5 llamadas redundantes a Puppeteer por mensaje, resolviendo la info de contacto en 0ms.
+  5. **Reducción de Esperas de Lock**: De 600ms a 100ms.
+  6. **Calibración de Tiempos de Respuesta**: Delays de tipeo ajustados a un rango natural de **800ms – 1100ms**. El tiempo total de respuesta es de **~1.3 segundos**, con los 3 puntos animados mostrándose claramente antes de que entre el texto.
