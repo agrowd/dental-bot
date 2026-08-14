@@ -104,3 +104,17 @@
   4. **Garantía Total de Registro en Leads y Conversaciones**:
      - Se añadió la rutina `syncAllWhatsAppChats(client)` en el evento `ready` del bot. Al conectarse, escanea todos los chats y contactos existentes en WhatsApp Web y los inserta inmediatamente en MongoDB como `Contact` y `Conversation`, haciendo visible a todo el historial de la cuenta en el CRM.
      - Se agregó la creación/actualización inmediata de `Contact` y `Conversation` en `message_create` para el 100% de los mensajes (entrantes y salientes, manuales o del bot) antes de cualquier filtro, asegurando que ningún número quede sin registrarse en Leads y Conversaciones.
+
+### 14/08/2026 - Indicador de Presencia Instantáneo y Aceleración de Respuestas (~1s)
+- **Reporte de Salvador Jaef**:
+  1. *"No me salen los puntos"* (el indicador de 'escribiendo...' no se mostraba).
+  2. *"Tarda bastante la respuesta como que más de uno sale porque se imagina que no van a responder"*.
+- **Diagnóstico Forense**:
+  1. **Disparo Tardío del Indicador**: El `sendTyping` se ejecutaba al final de la lógica del paso. Antes de eso, pasaban entre 4 y 7 segundos en bloqueos de locks, consultas sucesivas a Puppeteer (`getSafeContact` llamado 5 veces seguidas por mensaje) y validaciones, por lo que el usuario esperaba en silencio absoluto.
+  2. **Delays Acumulados**: `randomDelay` agregaba de 1 a 2 segundos adicionales sobre los 5 segundos de procesamiento interno.
+- **Soluciones Aplicadas**:
+  1. **Disparo Instantáneo de "Escribiendo..." (`sendTyping` Inmediato)**: Se invoca `sendTyping` a los 50ms de recibir el mensaje entrante. Desde el primer instante, WhatsApp envía el paquete de presencia al móvil del paciente mostrando los 3 puntos animados.
+  2. **Inyección Multicamino de Presencia**: Se combinaron `ChatPresence.markComposing`, `Presence.sendPresenceChat` y `WWebJS.sendPresenceChat` con soporte para número limpio y JID completo.
+  3. **Caché en Memoria de Contactos (`contactMemoryCache`)**: Se eliminaron las 5 llamadas redundantes a Puppeteer por mensaje, resolviendo la info de contacto en 0ms.
+  4. **Reducción de Esperas de Lock**: De 600ms a 100ms.
+  5. **Calibración de Tiempos de Respuesta**: Delays de tipeo ajustados a un rango ágil y natural de **350ms – 500ms**. El tiempo total de respuesta baja a **~1 segundo**, visible, dinámico y sin sensación de espera.

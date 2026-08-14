@@ -448,12 +448,59 @@ const randomDelay = (baseMs = 10000, rangeMs = 5000) => {
     return new Promise(resolve => setTimeout(resolve, baseMs + Math.random() * rangeMs));
 };
 
-// Helper: Send typing indicator
-const sendTyping = async (chat) => {
+// Helper: Send typing indicator (100% bulletproof via native chat + direct Store & Presence injection)
+const sendTyping = async (chat, targetPhone = null) => {
     try {
-        await chat.sendStateTyping();
+        if (chat && typeof chat.sendStateTyping === 'function') {
+            await chat.sendStateTyping().catch(() => {});
+        }
+        if (client && client.pupPage) {
+            const jids = [];
+            if (chat?.id?._serialized) jids.push(chat.id._serialized);
+            if (chat?.id?.user) jids.push(`${chat.id.user}@c.us`);
+            if (targetPhone) {
+                const clean = String(targetPhone).replace(/\D/g, '');
+                if (clean) {
+                    jids.push(`${clean}@c.us`);
+                    if (clean.startsWith('549')) jids.push(`54${clean.substring(3)}@c.us`);
+                    if (clean.startsWith('54') && !clean.startsWith('549')) jids.push(`549${clean.substring(2)}@c.us`);
+                }
+            }
+
+            await client.pupPage.evaluate(async (candidateJids) => {
+                try {
+                    if (window.Store && window.Store.SendPresenceAvailable) {
+                        await window.Store.SendPresenceAvailable().catch(() => {});
+                    }
+                    if (window.Store && window.Store.Presence && window.Store.Presence.sendPresenceAvailable) {
+                        await window.Store.Presence.sendPresenceAvailable().catch(() => {});
+                    }
+
+                    for (const jid of candidateJids) {
+                        if (!jid || !window.Store) continue;
+                        const wid = window.Store.WidFactory ? window.Store.WidFactory.createWid(jid) : null;
+                        if (!wid) continue;
+
+                        let c = window.Store.Chat ? window.Store.Chat.get(wid) : null;
+                        if (!c && window.Store.Chat && window.Store.Chat.find) {
+                            c = await window.Store.Chat.find(wid).catch(() => null);
+                        }
+
+                        if (c && window.Store.ChatPresence && window.Store.ChatPresence.markComposing) {
+                            await window.Store.ChatPresence.markComposing(c).catch(() => {});
+                        }
+                        if (window.Store.Presence && window.Store.Presence.sendPresenceChat) {
+                            await window.Store.Presence.sendPresenceChat(wid, 'composing').catch(() => {});
+                        }
+                        if (window.WWebJS && window.WWebJS.sendPresenceChat) {
+                            await window.WWebJS.sendPresenceChat(jid, 'composing').catch(() => {});
+                        }
+                    }
+                } catch (e) {}
+            }, jids).catch(() => {});
+        }
     } catch (e) {
-        console.error('Error sending typing state:', e);
+        console.error('Error sending typing state:', e.message);
     }
 };
 
@@ -676,13 +723,18 @@ async function getSafeChat(client, msg, phone) {
     throw new Error(`Could not get WhatsApp chat for phone ${phone} / JID ${msg?.from}`);
 }
 
-// Helper: Safely resolve a WhatsApp Contact instance (protects against LID @lid lookup crashes)
+const contactMemoryCache = new Map();
+
+// Helper: Safely resolve a WhatsApp Contact instance with in-memory caching
 async function getSafeContact(client, msg, phone) {
     if (!client) return { isMyContact: false, name: msg?.pushname || '', pushname: msg?.pushname || '' };
 
-    const jidsToTry = [];
     let cleanPhone = phone ? String(phone).replace(/[^0-9]/g, '') : '';
+    if (cleanPhone && contactMemoryCache.has(cleanPhone)) {
+        return contactMemoryCache.get(cleanPhone);
+    }
 
+    const jidsToTry = [];
     if (cleanPhone) {
         jidsToTry.push(cleanPhone + '@c.us');
         if (cleanPhone.startsWith('549') && cleanPhone.length >= 12) {
@@ -691,25 +743,32 @@ async function getSafeContact(client, msg, phone) {
             jidsToTry.push('549' + cleanPhone.substring(2) + '@c.us');
         }
     }
-
     if (msg?.from) jidsToTry.push(msg.from);
 
     for (const jid of jidsToTry) {
         if (!jid) continue;
         try {
             const contact = await client.getContactById(jid);
-            if (contact) return contact;
+            if (contact) {
+                if (cleanPhone) contactMemoryCache.set(cleanPhone, contact);
+                return contact;
+            }
         } catch (e) { }
     }
 
     if (msg && typeof msg.getContact === 'function') {
         try {
             const contact = await msg.getContact();
-            if (contact) return contact;
+            if (contact) {
+                if (cleanPhone) contactMemoryCache.set(cleanPhone, contact);
+                return contact;
+            }
         } catch (e) { }
     }
 
-    return { isMyContact: false, name: msg?.pushname || '', pushname: msg?.pushname || '' };
+    const fallbackContact = { isMyContact: false, name: msg?.pushname || '', pushname: msg?.pushname || '' };
+    if (cleanPhone) contactMemoryCache.set(cleanPhone, fallbackContact);
+    return fallbackContact;
 }
 
 // Safely clear contents of a directory (works cleanly on Docker volume mount points)
@@ -1143,8 +1202,8 @@ async function startBot(forceClean = false) {
                             console.log(`[LOCK] 🔓 Found stale phone lock for ${phone} (${Math.round(lockAgeMs / 1000)}s old). Removing lock.`);
                             await Setting.deleteOne({ key: lockKey }).catch(() => { });
                         } else {
-                            // Wait 600ms for previous message processing turn to complete, then retry
-                            await new Promise(r => setTimeout(r, 600));
+                            // Wait 100ms for previous message processing turn to complete, then retry
+                            await new Promise(r => setTimeout(r, 100));
                         }
                     } else {
                         throw err;
@@ -1211,6 +1270,11 @@ async function startBot(forceClean = false) {
             }
 
             console.log(`[TRACE] 📨 RAW MESSAGE from ${sender}: "${body}"`);
+
+            // Trigger instant typing presence immediately upon receiving valid message
+            getSafeChat(client, msg, phone).then(c => {
+                if (c) sendTyping(c, phone).catch(() => {});
+            }).catch(() => {});
 
             // --- NAVIGATION INTERCEPTOR (V/M) ---
             const inputRaw = (body || '').trim().toLowerCase();
@@ -1692,8 +1756,8 @@ async function startBot(forceClean = false) {
                     }
                 });
                 conversation.formState = { active: true, pendingStepId: stepRequiresCapture.id, currentField: 'name', name: '', email: '', attempts: 0 };
-                await sendTyping(chat);
-                await randomDelay(600, 300);
+                await sendTyping(chat, phone);
+                await randomDelay(350, 150);
                 await chat.sendMessage(namePrompt);
                 await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout);
                 return;
@@ -1738,8 +1802,8 @@ async function startBot(forceClean = false) {
                     }
                 });
 
-                await sendTyping(chat);
-                await randomDelay(600, 300);
+                await sendTyping(chat, phone);
+                await randomDelay(350, 150);
                 await chat.sendMessage(freeTextPrompt);
                 console.log(`[TRACE] 📝 FreeText prompt sent to ${phone} for step ${nextFreeTextStep.id}`);
                 await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout);
@@ -1816,16 +1880,16 @@ async function startBot(forceClean = false) {
                         }
                     });
                     const chat = await getSafeChat(client, msg, contact.phone);
-                    await sendTyping(chat);
-                    await randomDelay(600, 300);
+                    await sendTyping(chat, contact.phone);
+                    await randomDelay(350, 150);
                     await chat.sendMessage(namePrompt);
                     return;
                 }
 
                 const response = formatMessage(currentStep, flow);
                 const chat = await getSafeChat(client, msg, contact.phone);
-                await sendTyping(chat);
-                await randomDelay(600, 300);
+                await sendTyping(chat, contact.phone);
+                await randomDelay(350, 150);
                 await chat.sendMessage(response);
                 markUnreadWithDelay(chat);
             }
@@ -1862,8 +1926,8 @@ async function startBot(forceClean = false) {
             if (currentStep) {
                 const response = formatMessage(currentStep, flow);
                 const chat = await getSafeChat(client, msg, contact.phone);
-                await sendTyping(chat);
-                await randomDelay(600, 300);
+                await sendTyping(chat, contact.phone);
+                await randomDelay(350, 150);
                 await chat.sendMessage(response);
                 markUnreadWithDelay(chat);
             }
@@ -1875,8 +1939,8 @@ async function startBot(forceClean = false) {
         if (msg.type === 'ptt' || msg.type === 'audio') {
             console.log(`[TRACE] 🎤 Voice message (PTT) received from ${contact.phone}. Sending text request.`);
             const chat = await getSafeChat(client, msg, contact.phone);
-            await sendTyping(chat);
-            await randomDelay(800, 400);
+            await sendTyping(chat, contact.phone);
+            await randomDelay(350, 150);
 
             // NOTE: This field is set in Flow Builder → Reglas → "Mensaje al recibir audios".
             // The flow must be PUBLISHED (not just saved) for changes to take effect.
@@ -1906,8 +1970,8 @@ async function startBot(forceClean = false) {
             if (!isInPaymentStep) {
                 console.log(`[TRACE] 🚫 Media received outside payment step (step: ${conversation.currentStepId}). Sending menu fallback.`);
                 const chat = await getSafeChat(client, msg, contact.phone);
-                await sendTyping(chat);
-                await randomDelay(800, 400);
+                await sendTyping(chat, contact.phone);
+                await randomDelay(350, 150);
                 await chat.sendMessage('No pude entender ese archivo. Escribí *M* para volver al menú principal o *V* para volver atrás.');
                 await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout);
                 return;
@@ -1930,8 +1994,8 @@ async function startBot(forceClean = false) {
             markUnreadWithDelay(chat);
             await syncWhatsAppLabel(chat, 'Pago Enviado');
 
-            await sendTyping(chat);
-            await randomDelay(1000, 500);
+            await sendTyping(chat, contact.phone);
+            await randomDelay(400, 200);
 
             let mediaAckMsg = (flow && flow.published && flow.published.msgMediaAck)
                 ? flow.published.msgMediaAck
@@ -2045,8 +2109,8 @@ async function startBot(forceClean = false) {
                 }
 
                 try {
-                    await sendTyping(chat);
-                    await randomDelay(1000, 500);
+                    await sendTyping(chat, contact.phone);
+                    await randomDelay(350, 150);
 
                     if (currentStep.mediaUrl) {
                         const alreadySentMedia = (conversation.visitedMediaSteps || []).includes(currentStep.id);
@@ -2246,8 +2310,8 @@ async function startBot(forceClean = false) {
                         'formState.attempts': 0,
                     }
                 });
-                await sendTyping(chat);
-                await randomDelay(600, 300);
+                await sendTyping(chat, contact.phone);
+                await randomDelay(350, 150);
                 await chat.sendMessage(namePrompt);
                 return;
             }

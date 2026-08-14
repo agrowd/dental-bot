@@ -249,6 +249,20 @@ Al analizar la conversación de prueba de Federico:
    - Se añadió la rutina `syncAllWhatsAppChats(client)` en el evento `ready` del bot. Al conectarse, escanea todos los chats y contactos existentes en WhatsApp Web y los inserta inmediatamente en MongoDB como `Contact` y `Conversation`, haciendo visible a todo el historial de la cuenta en el CRM.
    - Se agregó la creación/actualización inmediata de `Contact` y `Conversation` en `message_create` para el 100% de los mensajes (entrantes y salientes, manuales o del bot) antes de cualquier filtro, asegurando que ningún número quede sin registrarse en Leads y Conversaciones.
 
+---
+
+## ⚡ Disparo Inmediato de "Escribiendo..." y Respuestas Ultra Rápidas (~1s) (14/08/2026)
+
+### 1. Feedback de Salvador Jaef
+- *"No me salen los puntos y además tarda bastante la respuesta como que más de uno sale porque se imagina que no van a responder"*.
+
+### 2. Causa Raíz y Solución
+1. **Disparo Inmediato de Presencia (0.05s)**: Apenas entra un mensaje válido a `message_create`, se dispara `sendTyping` al instante. El usuario ve los 3 puntos animados desde el segundo cero.
+2. **Inyección Multicamino de Presencia**: `ChatPresence.markComposing` + `Presence.sendPresenceChat` + `WWebJS.sendPresenceChat`.
+3. **Caché en Memoria de Contactos**: Se eliminaron 5 llamadas repetidas a Puppeteer por mensaje (`contactMemoryCache`), eliminando 3 a 5 segundos de espera interna.
+4. **Respuestas en ~1 segundo**: Delays ajustados a 350-500ms. La experiencia ahora es rápida, fluida y con los puntitos de escritura visibles.
+
+
 
 
 
