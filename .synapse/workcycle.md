@@ -120,3 +120,5 @@
   4. **Caché en Memoria de Contactos (`contactMemoryCache`)**: Se eliminaron las 5 llamadas redundantes a Puppeteer por mensaje, resolviendo la info de contacto en 0ms.
   5. **Reducción de Esperas de Lock**: De 600ms a 100ms.
   6. **Calibración de Tiempos de Respuesta**: Delays de tipeo ajustados a un rango natural de **800ms – 1100ms**. El tiempo total de respuesta es de **~1.3 segundos**, con los 3 puntos animados mostrándose claramente antes de que entre el texto.
+  7. **Desactivación de Throttling en Chromium Headless**: Se incorporaron los flags `--disable-background-timer-throttling`, `--disable-backgrounding-occluded-windows` y `--disable-renderer-backgrounding` en Puppeteer para evitar que Chromium suspenda el envío de paquetes de presencia por websocket en el contenedor Docker.
+  8. **Activación de Presencia en Ready**: `client.sendPresenceAvailable()` invocado en el evento `ready` y en cada ejecución de `sendTyping`.

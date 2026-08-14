@@ -448,9 +448,12 @@ const randomDelay = (baseMs = 10000, rangeMs = 5000) => {
     return new Promise(resolve => setTimeout(resolve, baseMs + Math.random() * rangeMs));
 };
 
-// Helper: Send typing indicator (100% bulletproof via native chat + direct Store & Presence injection)
+// Helper: Send typing indicator (100% bulletproof via native client + direct Store & Presence injection)
 const sendTyping = async (chat, targetPhone = null) => {
     try {
+        if (client && typeof client.sendPresenceAvailable === 'function') {
+            await client.sendPresenceAvailable().catch(() => {});
+        }
         if (chat && typeof chat.sendStateTyping === 'function') {
             await chat.sendStateTyping().catch(() => {});
         }
@@ -475,6 +478,9 @@ const sendTyping = async (chat, targetPhone = null) => {
                     if (window.Store && window.Store.Presence && window.Store.Presence.sendPresenceAvailable) {
                         await window.Store.Presence.sendPresenceAvailable().catch(() => {});
                     }
+                    if (window.WWebJS && window.WWebJS.sendPresenceAvailable) {
+                        await window.WWebJS.sendPresenceAvailable().catch(() => {});
+                    }
 
                     for (const jid of candidateJids) {
                         if (!jid || !window.Store) continue;
@@ -491,6 +497,9 @@ const sendTyping = async (chat, targetPhone = null) => {
                         }
                         if (window.Store.Presence && window.Store.Presence.sendPresenceChat) {
                             await window.Store.Presence.sendPresenceChat(wid, 'composing').catch(() => {});
+                        }
+                        if (window.Store.SendPresenceChat) {
+                            await window.Store.SendPresenceChat(wid, 'composing').catch(() => {});
                         }
                         if (window.WWebJS && window.WWebJS.sendPresenceChat) {
                             await window.WWebJS.sendPresenceChat(jid, 'composing').catch(() => {});
@@ -850,7 +859,10 @@ async function startBot(forceClean = false) {
                 '--disable-dev-shm-usage',
                 '--no-first-run',
                 '--no-zygote',
-                '--disable-extensions'
+                '--disable-extensions',
+                '--disable-background-timer-throttling',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-renderer-backgrounding'
             ]
         }
     });
@@ -900,6 +912,9 @@ async function startBot(forceClean = false) {
         console.log('✅ WhatsApp bot is ready!');
         botState = 'connected';
         currentQR = null;
+        // Announce presence online immediately
+        await client.sendPresenceAvailable().catch(() => {});
+
         // Clear any leftover phone processing locks in MongoDB
         await Setting.deleteMany({ key: { $regex: '^lock_phone_' } }).catch(err => {
             console.error('[INIT] Error cleaning stale phone locks:', err);
