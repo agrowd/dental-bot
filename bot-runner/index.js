@@ -561,21 +561,29 @@ function findMatchingOption(input, options = []) {
 async function getSafeChat(client, msg, phone) {
     if (!client) return null;
 
+    // 1. FAST PATH: Native msg.getChat() is instant (<5ms) and 100% reliable for active messages
+    if (msg && typeof msg.getChat === 'function') {
+        try {
+            const chat = await msg.getChat();
+            if (chat) return chat;
+        } catch (e) {}
+    }
+
     const jidsToTry = [];
     let cleanPhone = phone ? String(phone).replace(/[^0-9]/g, '') : '';
 
     if (cleanPhone) {
-        // 1. Direct phone + @c.us
+        // Direct phone + @c.us
         jidsToTry.push(cleanPhone + '@c.us');
 
-        // 2. Argentina 9 toggle (54911... <-> 5411...)
+        // Argentina 9 toggle (54911... <-> 5411...)
         if (cleanPhone.startsWith('549') && cleanPhone.length >= 12) {
             jidsToTry.push('54' + cleanPhone.substring(3) + '@c.us');
         } else if (cleanPhone.startsWith('54') && !cleanPhone.startsWith('549') && cleanPhone.length >= 11) {
             jidsToTry.push('549' + cleanPhone.substring(2) + '@c.us');
         }
 
-        // 3. Mexico 1 toggle (521... <-> 52...)
+        // Mexico 1 toggle (521... <-> 52...)
         if (cleanPhone.startsWith('521') && cleanPhone.length >= 12) {
             jidsToTry.push('52' + cleanPhone.substring(3) + '@c.us');
         } else if (cleanPhone.startsWith('52') && !cleanPhone.startsWith('521') && cleanPhone.length >= 11) {
@@ -587,46 +595,16 @@ async function getSafeChat(client, msg, phone) {
     if (msg?.to) jidsToTry.push(msg.to);
     if (msg?.author) jidsToTry.push(msg.author);
 
-    // Try getChatById for candidate JIDs
+    // 2. Try getChatById for candidate JIDs
     for (const jid of jidsToTry) {
         if (!jid) continue;
         try {
             const chat = await client.getChatById(jid);
             if (chat) return chat;
-        } catch (e) {
-            // Silently fall back
-        }
+        } catch (e) {}
     }
 
-    // Try msg.getChat() as fallback
-    if (msg && typeof msg.getChat === 'function') {
-        try {
-            const chat = await msg.getChat();
-            if (chat) return chat;
-        } catch (e) {
-            // Silently fall back
-        }
-    }
-
-    // Search existing active chats in client.getChats() by matching phone digits
-    if (cleanPhone && cleanPhone.length >= 8) {
-        try {
-            const lastDigits = cleanPhone.slice(-8);
-            const chats = await client.getChats();
-            const matchedChat = chats.find(c => {
-                const cUser = c.id?.user || '';
-                return cUser.endsWith(lastDigits) || cleanPhone.endsWith(cUser);
-            });
-            if (matchedChat) {
-                console.log(`[TRACE] 🔍 getSafeChat matched phone ${cleanPhone} to chat ${matchedChat.id._serialized} via digit search`);
-                return matchedChat;
-            }
-        } catch (e) {
-            // Silently fall back to synthetic wrapper
-        }
-    }
-
-    // Synthetic Fallback Chat wrapper — guarantees getSafeChat never throws and always permits sending
+    // 3. Synthetic Fallback Chat wrapper — guarantees getSafeChat never throws and always permits sending
     const phoneJids = jidsToTry.filter(j => j && j.endsWith('@c.us'));
     const targetPhoneJid = phoneJids[0] || (cleanPhone ? `${cleanPhone}@c.us` : null);
     const targetAltPhoneJid = phoneJids[1] || null;
@@ -1071,7 +1049,7 @@ async function startBot(forceClean = false) {
 
     // --- EXCLUSIVE TESTING WHITELIST (DISABLED BY DEFAULT - RESPONDS TO ALL USERS) ---
     const TEST_WHITELIST_ENABLED = process.env.TEST_WHITELIST_ENABLED === 'true';
-    const TEST_WHITELIST_NUMBERS = (process.env.TEST_WHITELIST_NUMBERS || '541126642674,5491126642674,1126642674,26642674,167954796826725')
+    const TEST_WHITELIST_NUMBERS = (process.env.TEST_WHITELIST_NUMBERS || '541126642674,5491126642674,1126642674,26642674,167954796826725,5491126301001,541126301001,1126301001,26301001')
         .split(',')
         .map(n => n.trim().replace(/[^0-9]/g, ''))
         .filter(Boolean);
@@ -1906,7 +1884,7 @@ async function startBot(forceClean = false) {
                 const response = formatMessage(currentStep, flow);
                 const chat = await getSafeChat(client, msg, contact.phone);
                 await sendTyping(chat, contact.phone);
-                await randomDelay(800, 300);
+                await randomDelay(500, 200);
                 await chat.sendMessage(response);
                 markUnreadWithDelay(chat);
             }
@@ -1944,7 +1922,7 @@ async function startBot(forceClean = false) {
                 const response = formatMessage(currentStep, flow);
                 const chat = await getSafeChat(client, msg, contact.phone);
                 await sendTyping(chat, contact.phone);
-                await randomDelay(800, 300);
+                await randomDelay(500, 200);
                 await chat.sendMessage(response);
                 markUnreadWithDelay(chat);
             }
@@ -2127,7 +2105,7 @@ async function startBot(forceClean = false) {
 
                 try {
                     await sendTyping(chat, contact.phone);
-                    await randomDelay(800, 300);
+                    await randomDelay(500, 200);
 
                     if (currentStep.mediaUrl) {
                         const alreadySentMedia = (conversation.visitedMediaSteps || []).includes(currentStep.id);

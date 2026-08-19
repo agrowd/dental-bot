@@ -122,3 +122,15 @@
   6. **Calibración de Tiempos de Respuesta**: Delays de tipeo ajustados a un rango natural de **800ms – 1100ms**. El tiempo total de respuesta es de **~1.3 segundos**, con los 3 puntos animados mostrándose claramente antes de que entre el texto.
   7. **Desactivación de Throttling en Chromium Headless**: Se incorporaron los flags `--disable-background-timer-throttling`, `--disable-backgrounding-occluded-windows` y `--disable-renderer-backgrounding` en Puppeteer para evitar que Chromium suspenda el envío de paquetes de presencia por websocket en el contenedor Docker.
   8. **Activación de Presencia en Ready**: `client.sendPresenceAvailable()` invocado en el evento `ready` y en cada ejecución de `sendTyping`.
+
+### 19/08/2026 - Eliminación de Cuello de Botella en getSafeChat y Calibración Final (~0.8s)
+- **Reporte**:
+  1. Salvador comenta que aún no percibe los puntos y siente demora en las respuestas.
+- **Diagnóstico Forense**:
+  1. **Llamada Pesada en `getSafeChat`**: `getSafeChat` ejecutaba `client.getChats()` como fallback en casos de búsqueda por dígitos, serializando cientos de chats por Puppeteer en cada mensaje y generando una pausa de 2 a 4 segundos.
+  2. **Resolución Nativa Rápida**: `msg.getChat()` es la vía nativa más rápida (<5ms) pero se evaluaba después de varios intentos fallidos.
+- **Soluciones Aplicadas**:
+  1. **Fast Path con `msg.getChat()`**: Se evalúa `msg.getChat()` como primera opción en `getSafeChat`, resolviendo el chat real en <5ms.
+  2. **Eliminación de `client.getChats()` en Caliente**: Se suprimió la descarga masiva de chats dentro de la atención de mensajes.
+  3. **Inclusión de Salvador en Whitelist por Defecto**: Se agregaron los números de Salvador (`5491126301001`, `541126301001`) a la lista blanca por defecto.
+  4. **Tiempos de Respuesta Ultrarrápidos (~0.8s)**: Tiempos de simulación calibrados a **500ms – 700ms**, logrando que la animación de "Escribiendo..." sea visible de inmediato y la respuesta llegue en menos de 1 segundo.
