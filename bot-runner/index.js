@@ -470,8 +470,11 @@ const sendTyping = async (chat, targetPhone = null) => {
                 }
             }
 
-            await client.pupPage.evaluate(async (candidateJids) => {
+            const candidateJids = Array.from(new Set(jids)).filter(Boolean);
+
+            await client.pupPage.evaluate(async (jids) => {
                 try {
+                    // 1. Ensure client is online
                     if (window.Store && window.Store.SendPresenceAvailable) {
                         await window.Store.SendPresenceAvailable().catch(() => {});
                     }
@@ -482,31 +485,55 @@ const sendTyping = async (chat, targetPhone = null) => {
                         await window.WWebJS.sendPresenceAvailable().catch(() => {});
                     }
 
-                    for (const jid of candidateJids) {
-                        if (!jid || !window.Store) continue;
-                        const wid = window.Store.WidFactory ? window.Store.WidFactory.createWid(jid) : null;
+                    // 2. Broadcast composing state across all candidates
+                    for (const jid of jids) {
+                        if (!jid) continue;
+
+                        // Method A: Direct WWebJS sendPresenceChat (string JID)
+                        try {
+                            if (window.WWebJS && window.WWebJS.sendPresenceChat) {
+                                await window.WWebJS.sendPresenceChat(jid, 'composing');
+                            }
+                        } catch (e) {}
+
+                        if (!window.Store) continue;
+
+                        let wid = null;
+                        try {
+                            if (window.Store.WidFactory && window.Store.WidFactory.createWid) {
+                                wid = window.Store.WidFactory.createWid(jid);
+                            }
+                        } catch (e) {}
+
                         if (!wid) continue;
 
-                        let c = window.Store.Chat ? window.Store.Chat.get(wid) : null;
-                        if (!c && window.Store.Chat && window.Store.Chat.find) {
-                            c = await window.Store.Chat.find(wid).catch(() => null);
-                        }
+                        // Method B: Store.Presence.sendPresenceChat
+                        try {
+                            if (window.Store.Presence && window.Store.Presence.sendPresenceChat) {
+                                await window.Store.Presence.sendPresenceChat(wid, 'composing');
+                            }
+                        } catch (e) {}
 
-                        if (c && window.Store.ChatPresence && window.Store.ChatPresence.markComposing) {
-                            await window.Store.ChatPresence.markComposing(c).catch(() => {});
-                        }
-                        if (window.Store.Presence && window.Store.Presence.sendPresenceChat) {
-                            await window.Store.Presence.sendPresenceChat(wid, 'composing').catch(() => {});
-                        }
-                        if (window.Store.SendPresenceChat) {
-                            await window.Store.SendPresenceChat(wid, 'composing').catch(() => {});
-                        }
-                        if (window.WWebJS && window.WWebJS.sendPresenceChat) {
-                            await window.WWebJS.sendPresenceChat(jid, 'composing').catch(() => {});
-                        }
+                        // Method C: Store.SendPresenceChat
+                        try {
+                            if (window.Store.SendPresenceChat) {
+                                await window.Store.SendPresenceChat(wid, 'composing');
+                            }
+                        } catch (e) {}
+
+                        // Method D: ChatPresence.markComposing
+                        try {
+                            let c = window.Store.Chat ? window.Store.Chat.get(wid) : null;
+                            if (!c && window.Store.Chat && window.Store.Chat.find) {
+                                c = await window.Store.Chat.find(wid).catch(() => null);
+                            }
+                            if (c && window.Store.ChatPresence && window.Store.ChatPresence.markComposing) {
+                                await window.Store.ChatPresence.markComposing(c);
+                            }
+                        } catch (e) {}
                     }
                 } catch (e) {}
-            }, jids).catch(() => {});
+            }, candidateJids).catch(() => {});
         }
     } catch (e) {
         console.error('Error sending typing state:', e.message);
@@ -1884,7 +1911,7 @@ async function startBot(forceClean = false) {
                 const response = formatMessage(currentStep, flow);
                 const chat = await getSafeChat(client, msg, contact.phone);
                 await sendTyping(chat, contact.phone);
-                await randomDelay(500, 200);
+                await randomDelay(1800, 400);
                 await chat.sendMessage(response);
                 markUnreadWithDelay(chat);
             }
@@ -1922,7 +1949,7 @@ async function startBot(forceClean = false) {
                 const response = formatMessage(currentStep, flow);
                 const chat = await getSafeChat(client, msg, contact.phone);
                 await sendTyping(chat, contact.phone);
-                await randomDelay(500, 200);
+                await randomDelay(1800, 400);
                 await chat.sendMessage(response);
                 markUnreadWithDelay(chat);
             }
@@ -2105,7 +2132,7 @@ async function startBot(forceClean = false) {
 
                 try {
                     await sendTyping(chat, contact.phone);
-                    await randomDelay(500, 200);
+                    await randomDelay(1800, 400);
 
                     if (currentStep.mediaUrl) {
                         const alreadySentMedia = (conversation.visitedMediaSteps || []).includes(currentStep.id);
