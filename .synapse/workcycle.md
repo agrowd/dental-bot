@@ -145,3 +145,11 @@
   1. **Calibración de Ventana de Escritura (1.8s – 2.2s)**: Se estableció la pausa activa en `1800ms - 2200ms`.
   2. **Difusión Directa Multi-JID**: `sendTyping` retransmite presencia por string JID y objeto Wid en paralelo a través de todas las variantes del número (`549`, `54`, `@c.us`, `@lid`).
   3. **Visualización Garantizada**: El paciente ve claramente "Escribiendo..." durante ~2 segundos en la cabecera antes de recibir el mensaje.
+
+### 22/08/2026 - Diagnóstico de Error `ERR_CONNECTION_REFUSED` en Puerto 3000
+- **Reporte**:
+  - El usuario no puede ingresar a `http://66.97.46.209:3000/admin` y recibe el error `ERR_CONNECTION_REFUSED`.
+- **Diagnóstico**:
+  - El contenedor Docker de Next.js (`dental-bot-nextjs`) o la pila de servicios en el VPS no están activos en el puerto 3000 (el contenedor fue detenido o el servidor se reinició sin relanzar Docker Compose).
+- **Solución**:
+  - Ejecutar en la terminal SSH del VPS: `cd ~/odontobot && git pull && ./deploy-vps.sh` para reconstruir y levantar de nuevo los contenedores `dental-bot-nextjs` (puerto 3000) y `dental-bot-runner` (puerto 4000).

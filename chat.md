@@ -264,6 +264,14 @@ Al analizar la conversación de prueba de Federico:
 5. **Caché en Memoria de Contactos**: Se eliminaron llamadas repetidas a Puppeteer (`contactMemoryCache`).
 6. **Respuestas en ~1.3 segundos**: Delays calibrados a 800-1100ms. La experiencia es rápida, natural y con los puntitos de "escribiendo..." claramente visibles.
 
+---
+
+## 🌐 Diagnóstico de Error `ERR_CONNECTION_REFUSED` en Puerto 3000 (22/08/2026)
+- **Síntoma**: `http://66.97.46.209:3000/admin` responde `ERR_CONNECTION_REFUSED`.
+- **Causa**: El servicio Docker `dental-bot-nextjs` o la pila completa del VPS están detenidos.
+- **Solución**: Ejecutar `cd ~/odontobot && git pull && ./deploy-vps.sh` vía SSH en el servidor.
+
+
 
 
 
