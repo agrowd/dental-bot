@@ -471,8 +471,9 @@ const sendTyping = async (chat, targetPhone = null) => {
             }
 
             const candidateJids = Array.from(new Set(jids)).filter(Boolean);
+            const searchDigits = targetPhone ? String(targetPhone).replace(/\D/g, '').slice(-8) : '';
 
-            await client.pupPage.evaluate(async (jids) => {
+            await client.pupPage.evaluate(async (jids, digits) => {
                 try {
                     // 1. Ensure client is online
                     if (window.Store && window.Store.SendPresenceAvailable) {
@@ -485,11 +486,13 @@ const sendTyping = async (chat, targetPhone = null) => {
                         await window.WWebJS.sendPresenceAvailable().catch(() => {});
                     }
 
-                    // 2. Broadcast composing state across all candidates
+                    // 2. Locate matching ChatModel in window.Store.Chat
+                    const matchedChats = new Set();
+
                     for (const jid of jids) {
                         if (!jid) continue;
 
-                        // Method A: Direct WWebJS sendPresenceChat (string JID)
+                        // Try direct WWebJS sendPresenceChat
                         try {
                             if (window.WWebJS && window.WWebJS.sendPresenceChat) {
                                 await window.WWebJS.sendPresenceChat(jid, 'composing');
@@ -505,35 +508,61 @@ const sendTyping = async (chat, targetPhone = null) => {
                             }
                         } catch (e) {}
 
-                        if (!wid) continue;
+                        if (wid) {
+                            try {
+                                let c = window.Store.Chat ? window.Store.Chat.get(wid) : null;
+                                if (!c && window.Store.Chat && window.Store.Chat.find) {
+                                    c = await window.Store.Chat.find(wid).catch(() => null);
+                                }
+                                if (c) matchedChats.add(c);
+                            } catch (e) {}
 
-                        // Method B: Store.Presence.sendPresenceChat
+                            // Direct Presence calls
+                            try {
+                                if (window.Store.Presence && window.Store.Presence.sendPresenceChat) {
+                                    await window.Store.Presence.sendPresenceChat(wid, 'composing');
+                                }
+                            } catch (e) {}
+                            try {
+                                if (window.Store.SendPresenceChat) {
+                                    await window.Store.SendPresenceChat(wid, 'composing');
+                                }
+                            } catch (e) {}
+                        }
+                    }
+
+                    // Scan loaded models by digits if not found yet
+                    if (matchedChats.size === 0 && digits && window.Store && window.Store.Chat && window.Store.Chat.models) {
+                        for (const m of window.Store.Chat.models) {
+                            const u = m.id?._serialized || m.id?.user || '';
+                            if (u.includes(digits)) {
+                                matchedChats.add(m);
+                                break;
+                            }
+                        }
+                    }
+
+                    // 3. Trigger typing on all resolved ChatModels
+                    for (const c of matchedChats) {
+                        if (!c) continue;
                         try {
-                            if (window.Store.Presence && window.Store.Presence.sendPresenceChat) {
-                                await window.Store.Presence.sendPresenceChat(wid, 'composing');
+                            if (typeof c.sendStateTyping === 'function') {
+                                await c.sendStateTyping();
                             }
                         } catch (e) {}
-
-                        // Method C: Store.SendPresenceChat
                         try {
-                            if (window.Store.SendPresenceChat) {
-                                await window.Store.SendPresenceChat(wid, 'composing');
-                            }
-                        } catch (e) {}
-
-                        // Method D: ChatPresence.markComposing
-                        try {
-                            let c = window.Store.Chat ? window.Store.Chat.get(wid) : null;
-                            if (!c && window.Store.Chat && window.Store.Chat.find) {
-                                c = await window.Store.Chat.find(wid).catch(() => null);
-                            }
-                            if (c && window.Store.ChatPresence && window.Store.ChatPresence.markComposing) {
+                            if (window.Store.ChatPresence && window.Store.ChatPresence.markComposing) {
                                 await window.Store.ChatPresence.markComposing(c);
+                            }
+                        } catch (e) {}
+                        try {
+                            if (c.presence && typeof c.presence.markComposing === 'function') {
+                                await c.presence.markComposing();
                             }
                         } catch (e) {}
                     }
                 } catch (e) {}
-            }, candidateJids).catch(() => {});
+            }, candidateJids, searchDigits).catch(() => {});
         }
     } catch (e) {
         console.error('Error sending typing state:', e.message);

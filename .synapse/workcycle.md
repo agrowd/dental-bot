@@ -153,3 +153,18 @@
   - El contenedor Docker de Next.js (`dental-bot-nextjs`) o la pila de servicios en el VPS no están activos en el puerto 3000 (el contenedor fue detenido o el servidor se reinició sin relanzar Docker Compose).
 - **Solución**:
   - Ejecutar en la terminal SSH del VPS: `cd ~/odontobot && git pull && ./deploy-vps.sh` para reconstruir y levantar de nuevo los contenedores `dental-bot-nextjs` (puerto 3000) y `dental-bot-runner` (puerto 4000).
+
+### 24/08/2026 - Resolución Universal de ChatModel y Ejecución Nativa de `sendStateTyping()`
+- **Reporte**:
+  - El usuario pide investigar a fondo en la web la solución para los puntitos de "Escribiendo...".
+- **Investigación Web & Diagnóstico Forense**:
+  1. En `whatsapp-web.js` y WhatsApp Web (2024-2026), el método `chat.sendStateTyping()` ejecuta internamente `window.Store.Chat.get(chatId).sendStateTyping()`.
+  2. Si el ID del chat en WhatsApp Web está registrado con formato LID (`@lid`) o sin el prefijo `9` argentino (`5411...`), `Store.Chat.get(chatId)` devuelve `undefined`, provocando que el llamado falle en silencio dentro de Puppeteer sin emitir el paquete de presencia a los servidores de WhatsApp.
+- **Solución Definitiva Aplicada**:
+  1. **Descubrimiento Universal de `ChatModel`**: Dentro de Puppeteer (`client.pupPage.evaluate`), se escanean todos los modelos cargados en `window.Store.Chat.models` y variantes de JID (`@c.us`, `549`, `54`, `@lid`, últimos 8 dígitos).
+  2. **Invocación Multicapa sobre el Modelo Real**: Al encontrar el `ChatModel` real de la conversación, se ejecutan en paralelo:
+     - `chatModel.sendStateTyping()` (método nativo oficial de WhatsApp Web)
+     - `window.Store.ChatPresence.markComposing(chatModel)`
+     - `chatModel.presence.markComposing()`
+     - `window.Store.Presence.sendPresenceChat(chatModel.id, 'composing')`
+  3. **Ventana de Visualización**: Se mantiene la ventana activa de ~2 segundos para que la app móvil de WhatsApp tenga tiempo de renderizar la animación en la cabecera.
