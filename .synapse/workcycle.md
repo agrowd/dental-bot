@@ -163,8 +163,11 @@
 - **Solución Definitiva Aplicada**:
   1. **Descubrimiento Universal de `ChatModel`**: Dentro de Puppeteer (`client.pupPage.evaluate`), se escanean todos los modelos cargados en `window.Store.Chat.models` y variantes de JID (`@c.us`, `549`, `54`, `@lid`, últimos 8 dígitos).
   2. **Invocación Multicapa sobre el Modelo Real**: Al encontrar el `ChatModel` real de la conversación, se ejecutan en paralelo:
+     - `window.Store.Cmd.openChatAt(c)` (activa foco del chat en la UI interna)
+     - `window.Store.Presence.subscribe(wid)` (mantiene activo el canal de presencia)
      - `chatModel.sendStateTyping()` (método nativo oficial de WhatsApp Web)
      - `window.Store.ChatPresence.markComposing(chatModel)`
      - `chatModel.presence.markComposing()`
      - `window.Store.Presence.sendPresenceChat(chatModel.id, 'composing')`
-  3. **Ventana de Visualización**: Se mantiene la ventana activa de ~2 segundos para que la app móvil de WhatsApp tenga tiempo de renderizar la animación en la cabecera.
+  3. **Heartbeat de Presencia (`holdTyping`)**: Se envía presencia cada 800ms durante los 2 segundos para evitar que WhatsApp Web interrumpa o expire el estado `composing` antes de entregar el mensaje.
+  4. **Logs en Tiempo Real**: Se agregó trazabilidad con `[TYPING]` en consola para monitorear coincidencias y candidatos en los logs de Docker del VPS.

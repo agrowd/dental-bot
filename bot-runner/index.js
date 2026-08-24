@@ -473,17 +473,19 @@ const sendTyping = async (chat, targetPhone = null) => {
             const candidateJids = Array.from(new Set(jids)).filter(Boolean);
             const searchDigits = targetPhone ? String(targetPhone).replace(/\D/g, '').slice(-8) : '';
 
-            await client.pupPage.evaluate(async (jids, digits) => {
+            const evalResult = await client.pupPage.evaluate(async (jids, digits) => {
+                let matchedCount = 0;
+                const errors = [];
                 try {
                     // 1. Ensure client is online
                     if (window.Store && window.Store.SendPresenceAvailable) {
-                        await window.Store.SendPresenceAvailable().catch(() => {});
+                        await window.Store.SendPresenceAvailable().catch(e => errors.push('SendPresenceAvailable:' + e.message));
                     }
                     if (window.Store && window.Store.Presence && window.Store.Presence.sendPresenceAvailable) {
-                        await window.Store.Presence.sendPresenceAvailable().catch(() => {});
+                        await window.Store.Presence.sendPresenceAvailable().catch(e => errors.push('sendPresenceAvailable:' + e.message));
                     }
                     if (window.WWebJS && window.WWebJS.sendPresenceAvailable) {
-                        await window.WWebJS.sendPresenceAvailable().catch(() => {});
+                        await window.WWebJS.sendPresenceAvailable().catch(e => errors.push('WWebJS.sendPresenceAvailable:' + e.message));
                     }
 
                     // 2. Locate matching ChatModel in window.Store.Chat
@@ -497,7 +499,9 @@ const sendTyping = async (chat, targetPhone = null) => {
                             if (window.WWebJS && window.WWebJS.sendPresenceChat) {
                                 await window.WWebJS.sendPresenceChat(jid, 'composing');
                             }
-                        } catch (e) {}
+                        } catch (e) {
+                            errors.push('WWebJS.sendPresenceChat:' + e.message);
+                        }
 
                         if (!window.Store) continue;
 
@@ -509,6 +513,13 @@ const sendTyping = async (chat, targetPhone = null) => {
                         } catch (e) {}
 
                         if (wid) {
+                            // Subscribe presence channel
+                            try {
+                                if (window.Store.Presence && window.Store.Presence.subscribe) {
+                                    await window.Store.Presence.subscribe(wid);
+                                }
+                            } catch (e) {}
+
                             try {
                                 let c = window.Store.Chat ? window.Store.Chat.get(wid) : null;
                                 if (!c && window.Store.Chat && window.Store.Chat.find) {
@@ -522,12 +533,16 @@ const sendTyping = async (chat, targetPhone = null) => {
                                 if (window.Store.Presence && window.Store.Presence.sendPresenceChat) {
                                     await window.Store.Presence.sendPresenceChat(wid, 'composing');
                                 }
-                            } catch (e) {}
+                            } catch (e) {
+                                errors.push('Presence.sendPresenceChat:' + e.message);
+                            }
                             try {
                                 if (window.Store.SendPresenceChat) {
                                     await window.Store.SendPresenceChat(wid, 'composing');
                                 }
-                            } catch (e) {}
+                            } catch (e) {
+                                errors.push('SendPresenceChat:' + e.message);
+                            }
                         }
                     }
 
@@ -542,31 +557,66 @@ const sendTyping = async (chat, targetPhone = null) => {
                         }
                     }
 
+                    matchedCount = matchedChats.size;
+
                     // 3. Trigger typing on all resolved ChatModels
                     for (const c of matchedChats) {
                         if (!c) continue;
                         try {
+                            if (window.Store.Cmd && window.Store.Cmd.openChatAt) {
+                                window.Store.Cmd.openChatAt(c).catch(() => {});
+                            }
+                        } catch (e) {}
+                        try {
                             if (typeof c.sendStateTyping === 'function') {
                                 await c.sendStateTyping();
                             }
-                        } catch (e) {}
+                        } catch (e) {
+                            errors.push('c.sendStateTyping:' + e.message);
+                        }
                         try {
                             if (window.Store.ChatPresence && window.Store.ChatPresence.markComposing) {
                                 await window.Store.ChatPresence.markComposing(c);
                             }
-                        } catch (e) {}
+                        } catch (e) {
+                            errors.push('ChatPresence.markComposing:' + e.message);
+                        }
                         try {
                             if (c.presence && typeof c.presence.markComposing === 'function') {
                                 await c.presence.markComposing();
                             }
-                        } catch (e) {}
+                        } catch (e) {
+                            errors.push('c.presence.markComposing:' + e.message);
+                        }
                     }
-                } catch (e) {}
-            }, candidateJids, searchDigits).catch(() => {});
+                } catch (e) {
+                    errors.push('general:' + e.message);
+                }
+                return { matchedCount, errors };
+            }, candidateJids, searchDigits).catch(e => ({ error: e.message }));
+
+            if (evalResult && evalResult.matchedCount !== undefined) {
+                console.log(`[TYPING] 💬 Typing broadcast for ${targetPhone || chat?.id?._serialized}: matched ${evalResult.matchedCount} chats. (candidates: ${candidateJids.join(', ')})`);
+            }
         }
     } catch (e) {
         console.error('Error sending typing state:', e.message);
     }
+};
+
+// Helper: Hold typing state active for a natural duration with heartbeat
+const holdTyping = async (chat, targetPhone, durationMs = 2000) => {
+    await sendTyping(chat, targetPhone);
+    const start = Date.now();
+    const interval = setInterval(() => {
+        if (Date.now() - start >= durationMs) {
+            clearInterval(interval);
+        } else {
+            sendTyping(chat, targetPhone).catch(() => {});
+        }
+    }, 800);
+    await new Promise(resolve => setTimeout(resolve, durationMs));
+    clearInterval(interval);
 };
 
 // Helper: Mark as unread with delay to win the race against WA auto-read
@@ -1939,8 +1989,7 @@ async function startBot(forceClean = false) {
 
                 const response = formatMessage(currentStep, flow);
                 const chat = await getSafeChat(client, msg, contact.phone);
-                await sendTyping(chat, contact.phone);
-                await randomDelay(1800, 400);
+                await holdTyping(chat, contact.phone, 2000);
                 await chat.sendMessage(response);
                 markUnreadWithDelay(chat);
             }
@@ -1977,8 +2026,7 @@ async function startBot(forceClean = false) {
             if (currentStep) {
                 const response = formatMessage(currentStep, flow);
                 const chat = await getSafeChat(client, msg, contact.phone);
-                await sendTyping(chat, contact.phone);
-                await randomDelay(1800, 400);
+                await holdTyping(chat, contact.phone, 2000);
                 await chat.sendMessage(response);
                 markUnreadWithDelay(chat);
             }
@@ -2160,8 +2208,7 @@ async function startBot(forceClean = false) {
                 }
 
                 try {
-                    await sendTyping(chat, contact.phone);
-                    await randomDelay(1800, 400);
+                    await holdTyping(chat, contact.phone, 2000);
 
                     if (currentStep.mediaUrl) {
                         const alreadySentMedia = (conversation.visitedMediaSteps || []).includes(currentStep.id);
