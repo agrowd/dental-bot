@@ -182,7 +182,10 @@
   4. `Puertos 3000 y 4000`: Fallaron por timeout.
   5. **Conclusión**: A diferencia de `ERR_CONNECTION_REFUSED` (donde el servidor responde pero el contenedor está apagado), `ERR_CONNECTION_TIMED_OUT` indica que la máquina virtual / VPS completa está **apagada, reiniciándose, congelada o bloqueada a nivel de firewall/red por el proveedor de hosting**.
 - **Solución Requerida**:
-  1. Ingresar al panel del proveedor de hosting del VPS (e.g., DonWeb, Contabo, Hetzner, etc.).
-  2. Verificar el estado del VPS (Estado: Detenido / Encendido).
-  3. Si está apagado o colgado, encenderlo / reiniciar el VPS desde el panel de control del proveedor.
-  4. Una vez que responda el SSH, levantar los servicios con `./deploy-vps.sh`.
+  1. El proveedor de hosting identificado para la IP `66.97.46.209` es **DonWeb / Dattatec** (`micuenta.donweb.com`).
+  2. Ingresar a `https://micuenta.donweb.com/` → sección **Cloud / Servidores VPS**.
+  3. Verificar el estado del VPS:
+     - **Facturación / Renovación**: Siendo 2 de septiembre (inicio de mes), verificar si el abono mensual del VPS quedó pendiente de pago o renovación automática (DonWeb suspende temporalmente el tráfico de red de la IP si la factura está vencida).
+     - **Estado de Energía**: Si figura "Detenido" o "Apagado", presionar **Iniciar / Encender**.
+     - **Reinicio Forzado**: Si figura "Encendido" pero no responde, presionar **Reiniciar (Reboot)** para que vuelva a levantar el sistema operativo.
+  4. Una vez que el VPS responda por SSH (`ssh -p5125 root@66.97.46.209`), ejecutar `./deploy-vps.sh`.
