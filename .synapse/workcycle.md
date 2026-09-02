@@ -171,3 +171,18 @@
      - `window.Store.Presence.sendPresenceChat(chatModel.id, 'composing')`
   3. **Heartbeat de Presencia (`holdTyping`)**: Se envía presencia cada 800ms durante los 2 segundos para evitar que WhatsApp Web interrumpa o expire el estado `composing` antes de entregar el mensaje.
   4. **Logs en Tiempo Real**: Se agregó trazabilidad con `[TYPING]` en consola para monitorear coincidencias y candidatos en los logs de Docker del VPS.
+
+### 02/09/2026 - Diagnóstico de Error `ERR_CONNECTION_TIMED_OUT` en `66.97.46.209`
+- **Reporte**:
+  - El usuario reporta que no puede acceder a `http://66.97.46.209:3000/admin` y recibe `ERR_CONNECTION_TIMED_OUT` ("66.97.46.209 tardó demasiado en responder").
+- **Diagnóstico de Red**:
+  1. Se ejecutaron pruebas de conectividad de red (TCP y ICMP) desde la máquina local hacia `66.97.46.209`.
+  2. `Ping 66.97.46.209`: Falló por timeout (`PingSucceeded: False`).
+  3. `Puerto 5125 (SSH)`: Falló por timeout (`TcpTestSucceeded: False`).
+  4. `Puertos 3000 y 4000`: Fallaron por timeout.
+  5. **Conclusión**: A diferencia de `ERR_CONNECTION_REFUSED` (donde el servidor responde pero el contenedor está apagado), `ERR_CONNECTION_TIMED_OUT` indica que la máquina virtual / VPS completa está **apagada, reiniciándose, congelada o bloqueada a nivel de firewall/red por el proveedor de hosting**.
+- **Solución Requerida**:
+  1. Ingresar al panel del proveedor de hosting del VPS (e.g., DonWeb, Contabo, Hetzner, etc.).
+  2. Verificar el estado del VPS (Estado: Detenido / Encendido).
+  3. Si está apagado o colgado, encenderlo / reiniciar el VPS desde el panel de control del proveedor.
+  4. Una vez que responda el SSH, levantar los servicios con `./deploy-vps.sh`.
