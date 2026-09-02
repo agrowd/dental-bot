@@ -181,11 +181,11 @@
   3. `Puerto 5125 (SSH)`: Falló por timeout (`TcpTestSucceeded: False`).
   4. `Puertos 3000 y 4000`: Fallaron por timeout.
   5. **Conclusión**: A diferencia de `ERR_CONNECTION_REFUSED` (donde el servidor responde pero el contenedor está apagado), `ERR_CONNECTION_TIMED_OUT` indica que la máquina virtual / VPS completa está **apagada, reiniciándose, congelada o bloqueada a nivel de firewall/red por el proveedor de hosting**.
-- **Solución Requerida**:
-  1. El proveedor de hosting identificado para la IP `66.97.46.209` es **DonWeb / Dattatec** (`micuenta.donweb.com`).
-  2. Ingresar a `https://micuenta.donweb.com/` → sección **Cloud / Servidores VPS**.
-  3. Verificar el estado del VPS:
-     - **Facturación / Renovación**: Siendo 2 de septiembre (inicio de mes), verificar si el abono mensual del VPS quedó pendiente de pago o renovación automática (DonWeb suspende temporalmente el tráfico de red de la IP si la factura está vencida).
-     - **Estado de Energía**: Si figura "Detenido" o "Apagado", presionar **Iniciar / Encender**.
-     - **Reinicio Forzado**: Si figura "Encendido" pero no responde, presionar **Reiniciar (Reboot)** para que vuelva a levantar el sistema operativo.
-  4. Una vez que el VPS responda por SSH (`ssh -p5125 root@66.97.46.209`), ejecutar `./deploy-vps.sh`.
+- **Causa Confirmada Oficialmente por DonWeb (status.donweb.com)**:
+  1. DonWeb reporta una falla mayor en el nodo **NOVA001** (`Major Outage: Fallas en servicios de Cloud Servers en nodo Nova`).
+  2. El 100% de los Cloud Servers del nodo NOVA están inaccesibles.
+  3. **Estado oficial según DonWeb**:
+     - *"Durante esta primera fase, las máquinas virtuales alojadas en el nodo permanecerán APAGADAS hasta finalizar completamente la recuperación y estabilización de la infraestructura de almacenamiento."*
+     - *"Segunda fase: Una vez que el nodo NOVA se encuentre completamente restablecido y estabilizado, se dará inicio al encendido progresivo de los Cloud Servers."*
+     - DonWeb desactivó temporalmente los botones de encender, reiniciar y apagar desde el panel de control.
+  4. **Conclusión**: Salvador creyó que estaba solucionado, pero DonWeb aún no inició el encendido de los servidores. El VPS sigue apagado por decisión de la infraestructura de DonWeb para preservar los datos. No es un problema de código ni de configuración: en cuanto DonWeb complete la fase 2 y encienda las VMs, el servidor volverá a responder en red.
