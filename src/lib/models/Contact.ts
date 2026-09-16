@@ -31,6 +31,8 @@ const ContactSchema = new Schema<IContactDoc>({
     },
     meta: { type: Map, of: String },
     tags: [String],
+    hasUnread: { type: Boolean, default: false },
+    unreadCount: { type: Number, default: 0 },
     events: [{
         event: String,
         date: { type: Date, default: Date.now }

@@ -4,6 +4,7 @@ import { dbConnect } from '@/lib/db';
 import Conversation from '@/lib/models/Conversation';
 import Message from '@/lib/models/Message';
 import Flow from '@/lib/models/Flow';
+import Contact from '@/lib/models/Contact';
 
 interface RouteParams {
     params: Promise<{
@@ -64,7 +65,10 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
                 currentStepConfig, // Added this field
                 allSteps, // Added allSteps to allow targeted injecting
                 state: conversation.state,
-                tags: conversation.tags,
+                tags: conversation.tags || [],
+                hasUnread: !!conversation.hasUnread,
+                unreadCount: conversation.unreadCount || 0,
+                lastMessageText: conversation.lastMessageText || '',
                 createdAt: conversation.createdAt,
                 updatedAt: conversation.updatedAt,
             },
@@ -94,7 +98,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
         const { phone: rawPhone } = await params;
         const phone = decodeURIComponent(rawPhone);
         const body = await req.json();
-        const { state, addTag, removeTag, tags } = body;
+        const { state, addTag, removeTag, tags, hasUnread, unreadCount } = body;
 
         // Build the update object
         const updateOps: any = {};
@@ -104,6 +108,17 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
                 return NextResponse.json({ error: 'Invalid state' }, { status: 400 });
             }
             updateOps.$set = { ...(updateOps.$set || {}), state };
+        }
+
+        if (typeof hasUnread === 'boolean') {
+            updateOps.$set = { ...(updateOps.$set || {}), hasUnread };
+            if (!hasUnread) {
+                updateOps.$set.unreadCount = 0;
+            }
+        }
+
+        if (typeof unreadCount === 'number') {
+            updateOps.$set = { ...(updateOps.$set || {}), unreadCount };
         }
 
         if (addTag && typeof addTag === 'string') {
@@ -127,6 +142,13 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
             updateOps,
             { new: true, sort: { updatedAt: -1 } }
         );
+
+        if (typeof hasUnread === 'boolean') {
+            await Contact.updateOne(
+                { phone },
+                { $set: { hasUnread, ...(hasUnread ? {} : { unreadCount: 0 }) } }
+            ).catch(() => {});
+        }
 
         if (!conversation) {
             const anyConv = await Conversation.findOneAndUpdate(

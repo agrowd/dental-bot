@@ -271,9 +271,32 @@ Al analizar la conversación de prueba de Federico:
 - **Causa**: El servicio Docker `dental-bot-nextjs` o la pila completa del VPS están detenidos.
 - **Solución**: Ejecutar `cd ~/odontobot && git pull && ./deploy-vps.sh` vía SSH en el servidor.
 
+---
 
+## 🔍 Diagnóstico Forense y Solución: Pausado que No Pausa, Pérdida de No Leídos y Fuga de Visibilidad (16/09/2026)
 
+### 1. Problemas Notificados por Salvador Jaef
+1. **El pausado no pausa**: El bot sigue respondiendo en chats pausados.
+2. **No marca mensajes entrantes como no leídos**: Se pierde el badge verde en WhatsApp y no se resalta en el CRM.
+3. **Pérdida de visibilidad operativa**: Caso real de Jorge Ferrer (`5491157583203`) avisando de una urgencia de salud de su esposa que pasó desapercibida mientras el bot le respondió tres veces "No comprendí tu mensaje".
+4. **Lógica de proveedores**: Desconectar la automatización de inmediato tras pedir propuesta/CV (`profesional_postulante_msg`).
 
+### 2. Causas Raíz Comprobadas en Base de Datos y Código
+1. `ALLOW ESCAPE FROM PAUSE` (`bot-runner/index.js:1508-1538`): Reactivaba chats pausados si el mensaje empezaba con saludos comunes (`buen dia`, `hola`), letras (`a, b, c`), números o si tenían >12h de inactividad.
+2. `msg.hasMedia` en el gate de pausa (`bot-runner/index.js:1542`): Si el paciente/proveedor mandaba un audio o archivo, el bot ignoraba la pausa y disparaba el mensaje de rechazo de audio o menú.
+3. `openChatAt(c)` en `sendTyping` (`bot-runner/index.js:567`): Abría la conversación en WhatsApp Web vía Puppeteer, emitiendo `sendSeen` y borrando el contador verde de mensajes no leídos del teléfono de Salvador.
+4. Cero persistencia o campos de `hasUnread` / `unreadCount` en MongoDB ni badges en `/admin/conversations`.
 
+### 3. Implementación y Blindaje Realizado
+1. **Invariante de Pausa Estricta (D-08)**: Se eliminó todo el bloque de escape automático por saludos, letras, números e inactividad. El estado `paused` es inviolable y únicamente un operador humano desde el CRM puede reanudar al bot.
+2. **Preservación de No Leídos (D-09)**: Se eliminó `openChatAt(c)` y el typing prematuro en `sendTyping`, impidiendo que WhatsApp Web emita `sendSeen`. Cuando entra un mensaje a un chat en pausa, el bot invoca `chat.markUnread()`, asegurando que el celular mantenga el globo verde.
+3. **Silenciamiento de Medios y Canales**: Los audios, fotos, documentos y canales (`@newsletter`) no quiebran la pausa ni disparan fallbacks.
+4. **Desconexión en Proveedores**: El paso `profesional_postulante_msg` pausa inmediatamente el bot y aplica la etiqueta `Derivado con Personal`.
+5. **Visibilidad Operativa en CRM**:
+   - Modelos `Conversation` y `Contact` ahora rastrean `hasUnread: boolean`, `unreadCount: number`, `lastMessageText: string`, `lastMessageAt: Date`.
+   - `/admin/conversations` incluye tarjeta de métricas "📩 No Leídos", filtro rápido, filas destacadas en amarillo, y vista de nombres reales de pacientes.
+   - `/admin/conversations/[phone]` incluye botón para alternar leído/no leído manualmente y resetea automáticamente las notificaciones al abrir el chat.
 
-
+### 4. Verificación y Pruebas
+- **Script de Simulación (`verify_pause_unread.js`)**: Ejecutado contra MongoDB Atlas confirmando que mensajes entrantes con saludos o urgencias retienen el estado `state: 'paused'`, activan `hasUnread: true` e incrementan `unreadCount: 1`. Veredicto: `TEST VERDICT: PASSED ✅`.
+- **Build de Next.js (`npm run build`)**: 26 rutas optimizadas, Turbopack compiló exitosamente en 10.8s sin errores de TypeScript.

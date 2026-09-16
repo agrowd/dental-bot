@@ -189,3 +189,39 @@
      - *"Segunda fase: Una vez que el nodo NOVA se encuentre completamente restablecido y estabilizado, se dará inicio al encendido progresivo de los Cloud Servers."*
      - DonWeb desactivó temporalmente los botones de encender, reiniciar y apagar desde el panel de control.
   4. **Conclusión**: Salvador creyó que estaba solucionado, pero DonWeb aún no inició el encendido de los servidores. El VPS sigue apagado por decisión de la infraestructura de DonWeb para preservar los datos. No es un problema de código ni de configuración: en cuanto DonWeb complete la fase 2 y encienda las VMs, el servidor volverá a responder en red.
+
+### 16/09/2026 - Diagnóstico Forense y Plan: Falla en Pausado, Pérdida de "No Leídos" y Urgencias Ignoradas
+- **Reporte de Salvador**:
+  1. El estado "pausado" no funciona: el bot sigue respondiendo o interviniendo aunque esté pausado.
+  2. No marca los mensajes entrantes como "no leídos" en la bandeja cuando entra un contacto que requiere atención humana.
+  3. Pérdida de visibilidad operativa: Nadie se enteró de un contacto clave con urgencia familiar (Jorge Ferrer) y el bot le respondió tres veces "No comprendí tu mensaje".
+  4. Lógica de proveedores: desconectar la automatización de inmediato tras pedir la propuesta/CV.
+- **Causas Raíz Detectadas**:
+  1. `bot-runner/index.js` líneas 1508-1538: Auto-unpause indiscriminado si el mensaje inicia con saludos (`buen dia`, `hola`), letras (`a`, `b`, `c`), números o si pasaron > 12hs (`isStalePause`). Al escribir Jorge Ferrer "Buen día... María Inés amaneció con problema de salud", el bot lo reactivó y respondió "No comprendí tu mensaje".
+  2. `bot-runner/index.js` línea 1542: El gate de pausa tenía `!msg.hasMedia`, por lo que cualquier audio o archivo en chat pausado evadía la pausa y disparaba respuestas automáticas.
+  3. `bot-runner/index.js` línea 567: `sendTyping` ejecutaba `window.Store.Cmd.openChatAt(c)`. Abrir el chat en WhatsApp Web emite `sendSeen`, destruyendo el globo/contador verde (1, 2, 3) en el celular de Salvador.
+  4. `bot-runner/index.js` línea 1375: `sendTyping` se disparaba en TODO mensaje entrante antes de saber si el chat estaba pausado.
+  5. Cero persistencia o indicador de `hasUnread` / `unreadCount` en los esquemas de MongoDB (`Conversation`, `Contact`) y en el panel de Next.js (`/admin/conversations`).
+  6. Proveedores (`profesional_postulante_msg`): El paso pedía la propuesta pero el bot continuaba evaluando opciones o fallaba en PDFs, rompiendo la pausa.
+- **Plan de Acción Creado**: Documentado en `implementation_plan.md`.
+- **Implementación Realizada**:
+  1. `bot-runner/index.js`:
+     - Eliminado el bloque de auto-unpause arbitrario (`ALLOW ESCAPE FROM PAUSE`).
+     - Blindado el silencio en chats pausados contra todo tipo de mensaje (texto, audio, imagen, documentos).
+     - Añadido marcado activo `chat.markUnread()` en WhatsApp Web y sincronización con etiqueta `Derivado con Personal`.
+     - Removido `window.Store.Cmd.openChatAt(c)` y el typing prematuro en mensajes entrantes para no emitir `sendSeen` ni borrar el globo verde del teléfono.
+     - Añadido filtro silencioso para canales de WhatsApp (`@newsletter`).
+     - Corregido `PAUSE_STEP_IDS` excluyendo menús interactivos intermedios (`derivacion_profesional`) y asegurando la desconexión inmediata en `profesional_postulante_msg`.
+  2. `src/lib/types.ts`, `src/lib/models/Conversation.ts`, `src/lib/models/Contact.ts`:
+     - Incorporados campos `hasUnread: boolean`, `unreadCount: number`, `lastMessageText?: string`, `lastMessageAt?: Date`.
+  3. `src/app/api/conversations/route.ts` & `src/app/api/conversations/[phone]/route.ts`:
+     - Soporte para filtro `?filter=unread`.
+     - Cruce automático con `Contact` para mostrar nombres de pacientes en el listado.
+     - Endpoints para alternar marcado de leído / no leído y reseteo automático al visualizar el chat en el CRM.
+  4. `src/app/admin/conversations/page.tsx` & `[phone]/page.tsx`:
+     - Añadida card de métricas "📩 No Leídos" con filtro de un clic.
+     - Filas no leídas resaltadas con fondo amarillo suave y badges de recuento.
+     - Botón interactivo "Marcar como Leído / No Leído" en la vista del chat.
+- **Verificación**:
+  - Test de MongoDB Atlas ejecutado (`verify_pause_unread.js`): `TEST VERDICT: PASSED ✅`.
+  - Build de Next.js (`npm run build`): Compilación exitosa en 10.8s, 26 rutas optimizadas, cero errores de TypeScript.

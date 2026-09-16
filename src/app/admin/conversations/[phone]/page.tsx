@@ -51,6 +51,14 @@ export default function ConversationDetailPage() {
                 const data = await res.json();
                 setConversation(data.conversation);
                 setMessages(data.messages || []);
+                // If it had unread messages, auto-mark as read now that operator is viewing it
+                if (data.conversation?.hasUnread) {
+                    fetch(`/api/conversations/${encodeURIComponent(phone)}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ hasUnread: false, unreadCount: 0 })
+                    }).catch(() => {});
+                }
             } else {
                 if (loading) setConversation(null); // Only nullify if initial load
             }
@@ -60,6 +68,23 @@ export default function ConversationDetailPage() {
             setLoading(false);
         }
     }
+
+    const toggleUnread = async () => {
+        try {
+            setSending(true);
+            const newStatus = !conversation?.hasUnread;
+            const res = await fetch(`/api/conversations/${encodeURIComponent(phone)}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ hasUnread: newStatus, unreadCount: newStatus ? 1 : 0 })
+            });
+            if (res.ok) {
+                setConversation((prev: any) => prev ? { ...prev, hasUnread: newStatus, unreadCount: newStatus ? 1 : 0 } : null);
+            }
+        } finally {
+            setSending(false);
+        }
+    };
 
     const handlePause = async () => {
         try {
@@ -258,6 +283,14 @@ export default function ConversationDetailPage() {
                             Pausar Bot
                         </button>
                     )}
+                    <button
+                        onClick={toggleUnread}
+                        disabled={sending}
+                        className={`btn text-xs ${conversation?.hasUnread ? 'bg-emerald-600 text-white' : 'btn-secondary text-slate-700'}`}
+                        title="Alternar estado de leído/no leído"
+                    >
+                        {conversation?.hasUnread ? '✓ Marcar como Leído' : '📩 Marcar como No Leído'}
+                    </button>
                     <button
                         onClick={() => handleForceBot()}
                         disabled={sending}

@@ -5,16 +5,17 @@ import Link from 'next/link';
 import { ConversationState } from '@/lib/types';
 
 export default function ConversationsPage() {
-    const [stateFilter, setStateFilter] = useState<ConversationState | 'all' | 'attention'>('all');
+    const [stateFilter, setStateFilter] = useState<ConversationState | 'all' | 'attention' | 'unread'>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [conversations, setConversations] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Read ?filter=attention from URL without useSearchParams (avoids Suspense requirement)
+        // Read ?filter=attention or ?filter=unread from URL without useSearchParams (avoids Suspense requirement)
         const params = new URLSearchParams(window.location.search);
         const filter = params.get('filter');
         if (filter === 'attention') setStateFilter('attention');
+        if (filter === 'unread') setStateFilter('unread');
     }, []);
 
     useEffect(() => {
@@ -53,14 +54,19 @@ export default function ConversationsPage() {
     // Filter conversations
     const filteredConversations = conversations.filter(conv => {
         const matchesState = stateFilter === 'all'
-            || (stateFilter === 'attention' ? (conv.tags || []).some((t: string) => ATTENTION_TAGS.includes(t))
+            || (stateFilter === 'unread' ? conv.hasUnread
+                : stateFilter === 'attention' ? ((conv.tags || []).some((t: string) => ATTENTION_TAGS.includes(t)) || conv.hasUnread)
                 : conv.state === stateFilter);
         const q = normalizePhone(searchQuery);
-        const matchesSearch = !searchQuery || normalizePhone(conv.phone).includes(q) || (conv.phone || '').includes(searchQuery.trim());
+        const matchesSearch = !searchQuery 
+            || normalizePhone(conv.phone).includes(q) 
+            || (conv.phone || '').includes(searchQuery.trim())
+            || (conv.contactName || '').toLowerCase().includes(searchQuery.toLowerCase().trim());
         return matchesState && matchesSearch;
     });
 
-    const attentionCount = conversations.filter(c => (c.tags || []).some((t: string) => ATTENTION_TAGS.includes(t))).length;
+    const unreadCountTotal = conversations.filter(c => c.hasUnread).length;
+    const attentionCount = conversations.filter(c => (c.tags || []).some((t: string) => ATTENTION_TAGS.includes(t)) || c.hasUnread).length;
 
     async function handleDelete(phone: string) {
         if (!confirm(`¿Estás seguro de eliminar la conversación de ${phone} y todo su historial?`)) return;
@@ -124,13 +130,20 @@ export default function ConversationsPage() {
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 mb-6">
                 <button
                     onClick={() => setStateFilter('all')}
                     className={`card p-4 text-left transition-all ${stateFilter === 'all' ? 'ring-2 ring-blue-500' : 'hover:shadow-md'}`}
                 >
                     <p className="text-sm text-slate-500">Total</p>
                     <p className="text-2xl font-bold text-slate-900">{conversations.length}</p>
+                </button>
+                <button
+                    onClick={() => setStateFilter('unread')}
+                    className={`card p-4 text-left transition-all ${stateFilter === 'unread' ? 'ring-2 ring-emerald-500 bg-emerald-50/40' : 'hover:shadow-md'}`}
+                >
+                    <p className="text-sm text-emerald-700 font-semibold flex items-center gap-1">📩 No Leídos</p>
+                    <p className="text-2xl font-bold text-emerald-600">{unreadCountTotal}</p>
                 </button>
                 <button
                     onClick={() => setStateFilter('active')}
@@ -166,7 +179,7 @@ export default function ConversationsPage() {
                                 </svg>
                                 <input
                                     type="text"
-                                    placeholder="Buscar por teléfono..."
+                                    placeholder="Buscar por teléfono o nombre..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     onPaste={(e) => {
@@ -198,14 +211,15 @@ export default function ConversationsPage() {
                     </div>
                     <select
                         value={stateFilter}
-                        onChange={(e) => setStateFilter(e.target.value as ConversationState | 'all')}
-                        className="input sm:w-auto"
+                        onChange={(e) => setStateFilter(e.target.value as any)}
+                        className="input sm:w-auto font-medium"
                     >
-                        <option value="all">Todos los estados</option>
+                        <option value="all">Todos los chats</option>
+                        <option value="unread">📩 Solo No Leídos ({unreadCountTotal})</option>
                         <option value="active">Activas</option>
                         <option value="paused">Pausadas</option>
+                        <option value="attention">⚠️ Requieren atención ({attentionCount})</option>
                         <option value="closed">Cerradas</option>
-                        <option value="attention">⚠️ Requieren atención</option>
                     </select>
                 </div>
             </div>
@@ -213,13 +227,14 @@ export default function ConversationsPage() {
             {/* Table wrapper for horizontal scroll */}
             <div className="card overflow-hidden">
                 <div className="overflow-x-auto">
-                    <table className="table min-w-[800px]">
+                    <table className="table min-w-[850px]">
                         <thead>
                             <tr>
-                                <th>Teléfono</th>
+                                <th>Contacto</th>
                                 <th>Estado</th>
+                                <th>Último mensaje</th>
                                 <th>Paso Actual</th>
-                                <th className="max-w-[200px]">Tags</th>
+                                <th className="max-w-[180px]">Tags</th>
                                 <th>Última actividad</th>
                                 <th className="text-right">Acciones</th>
                             </tr>
@@ -227,48 +242,69 @@ export default function ConversationsPage() {
                         <tbody>
                             {filteredConversations.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="text-center py-12 text-slate-500">
+                                    <td colSpan={7} className="text-center py-12 text-slate-500">
                                         No se encontraron conversaciones
                                     </td>
                                 </tr>
                             ) : (
                                 filteredConversations.map((conv) => (
-                                    <tr key={conv.id}>
+                                    <tr key={conv.id} className={conv.hasUnread ? 'bg-emerald-50/30 border-l-4 border-l-emerald-500' : ''}>
                                         <td>
                                             <div className="flex items-center gap-3">
                                                 <div className="relative w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
                                                     <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                                                     </svg>
-                                                    {(conv.tags || []).some((t: string) => ATTENTION_TAGS.includes(t)) && (
+                                                    {conv.hasUnread ? (
+                                                        <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 rounded-full animate-pulse border-2 border-white" title="Mensaje sin leer"></span>
+                                                    ) : (conv.tags || []).some((t: string) => ATTENTION_TAGS.includes(t)) ? (
                                                         <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-orange-500 rounded-full animate-pulse border-2 border-white" title="Requiere atención"></span>
+                                                    ) : null}
+                                                </div>
+                                                <div className="flex flex-col">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={`font-semibold whitespace-nowrap ${conv.hasUnread ? 'text-slate-900 font-bold' : 'text-slate-800'}`}>
+                                                            {conv.contactName || conv.phone}
+                                                        </span>
+                                                        {conv.hasUnread && (
+                                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                                                📩 No Leído {conv.unreadCount > 1 ? `(${conv.unreadCount})` : ''}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    {conv.contactName && (
+                                                        <span className="text-xs text-slate-500 font-mono">{conv.phone}</span>
                                                     )}
                                                 </div>
-                                                <span className="font-medium whitespace-nowrap">{conv.phone}</span>
                                             </div>
                                         </td>
                                         <td>{getStateBadge(conv.state)}</td>
+                                        <td className="max-w-[220px]">
+                                            <p className={`text-xs truncate ${conv.hasUnread ? 'font-semibold text-slate-900' : 'text-slate-500'}`} title={conv.lastMessageText || ''}>
+                                                {conv.lastMessageText || '—'}
+                                            </p>
+                                        </td>
                                         <td>
                                             <span className="badge badge-info truncate max-w-[120px]" title={conv.currentStepId}>
                                                 {conv.currentStepId}
                                             </span>
                                         </td>
-                                        <td className="max-w-[200px]">
+                                        <td className="max-w-[180px]">
                                             <div className="flex flex-wrap gap-1 max-h-[48px] overflow-hidden">
                                                 {conv.tags.length === 0 ? (
                                                     <span className="text-slate-400 text-sm">—</span>
                                                 ) : (
                                                     conv.tags.map((tag: string, i: number) => (
                                                         <span key={i} className={`badge text-[10px] py-0.5 px-1.5 ${tag === 'atencion-requerida' ? 'bg-orange-100 text-orange-700 border border-orange-200' :
-                                                            tag === 'otros-temas' ? 'bg-purple-100 text-purple-700 border border-purple-200' :
+                                                            tag === 'otros-temas' || tag === 'propuesta-comercial' ? 'bg-purple-100 text-purple-700 border border-purple-200' :
                                                                 'badge-neutral'
                                                             }`}>{tag}</span>
                                                     ))
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="text-slate-500 whitespace-nowrap">
-                                            {new Date(conv.updatedAt).toLocaleString('es-AR', {
+                                        <td className="text-slate-500 whitespace-nowrap text-xs">
+                                            {new Date(conv.lastMessageAt || conv.updatedAt).toLocaleString('es-AR', {
                                                 day: '2-digit',
                                                 month: '2-digit',
                                                 hour: '2-digit',
@@ -279,9 +315,9 @@ export default function ConversationsPage() {
                                             <div className="flex items-center justify-end gap-2">
                                                 <Link
                                                     href={`/admin/conversations/${encodeURIComponent(conv.phone)}`}
-                                                    className="btn btn-secondary py-1.5 px-3 text-xs"
+                                                    className={`btn py-1.5 px-3 text-xs ${conv.hasUnread ? 'btn-primary' : 'btn-secondary'}`}
                                                 >
-                                                    Detalles
+                                                    {conv.hasUnread ? 'Atender' : 'Detalles'}
                                                 </Link>
                                                 <button
                                                     onClick={() => handleDelete(conv.phone)}

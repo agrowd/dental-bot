@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 
 // ... (existing code)
-const PAUSE_STEP_IDS = ['derivacion_paciente', 'derivacion_profesional', 'profesional_activo_msg', 'profesional_postulante_msg'];
+const PAUSE_STEP_IDS = ['derivacion_paciente', 'profesional_activo_msg', 'profesional_postulante_msg', 'instruccion_comprobante', 'ack_and_pause'];
 
 // Connect to MongoDB
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://mongo:27017/odontobot';
@@ -559,14 +559,9 @@ const sendTyping = async (chat, targetPhone = null) => {
 
                     matchedCount = matchedChats.size;
 
-                    // 3. Trigger typing on all resolved ChatModels
+                    // 3. Trigger typing on all resolved ChatModels (without opening/reading the chat)
                     for (const c of matchedChats) {
                         if (!c) continue;
-                        try {
-                            if (window.Store.Cmd && window.Store.Cmd.openChatAt) {
-                                window.Store.Cmd.openChatAt(c).catch(() => {});
-                            }
-                        } catch (e) {}
                         try {
                             if (typeof c.sendStateTyping === 'function') {
                                 await c.sendStateTyping();
@@ -1321,6 +1316,7 @@ async function startBot(forceClean = false) {
             // SILENT FILTERS
             if (msg.from === 'status@broadcast') { await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout); return; }
             if (msg.from.endsWith('@g.us')) { await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout); return; }
+            if (msg.from.endsWith('@newsletter')) { await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout); return; }
 
             // P1 FIX: Ignore system/notification messages (phone number changes, security code changes, etc.)
             // These are NOT real user messages and should never trigger the bot.
@@ -1372,24 +1368,17 @@ async function startBot(forceClean = false) {
 
             console.log(`[TRACE] 📨 RAW MESSAGE from ${sender}: "${body}"`);
 
-            // Trigger instant typing presence immediately upon receiving valid message
-            getSafeChat(client, msg, phone).then(c => {
-                if (c) sendTyping(c, phone).catch(() => {});
-            }).catch(() => {});
-
-            // --- NAVIGATION INTERCEPTOR (V/M) ---
+            // --- NAVIGATION INTERCEPTOR (V/M) FOR ACTIVE CONVERSATIONS ONLY ---
             const inputRaw = (body || '').trim().toLowerCase();
             const isNav = inputRaw === 'm' || inputRaw === 'v' || inputRaw === 'menu' || inputRaw === 'atras' || inputRaw.includes('menu principal') || inputRaw.includes('volver');
 
             if (isNav) {
-                console.log(`[TRACE] 🔓 Universal Navigation command detected from ${phone}: "${inputRaw}"`);
-                // If there's an existing conversation, unpause it in DB and CLEAR ALL PENDING FORM/FREE-TEXT MODES
+                // If there's an ACTIVE conversation stuck in form/free-text, clear those modes. Never touch paused conversations!
                 await Conversation.updateMany(
-                    { phone, state: { $in: ['active', 'paused'] } }, 
+                    { phone, state: 'active' }, 
                     { 
                         $set: { 
-                            state: 'active', 
-                            'formState.active': false,
+                            'formState.active': false, 
                             'freeTextState.active': false,
                             handoffAckSent: false
                         } 
@@ -1491,104 +1480,77 @@ async function startBot(forceClean = false) {
 
                 if (forcingFlow) {
                     if (conversation.state === 'paused') {
-                        console.log(`[TRACE] 🔓 Force restart keyword detected! Unpausing conversation for ${phone}`);
-                    }
-
-                    console.log(`[TRACE] ⚡ FORCE RESTART: "${forcingFlow.name}"`);
-                    await Conversation.updateMany({ phone, state: { $in: ['active', 'paused'] } }, { $set: { state: 'closed' } });
-                    conversation = await Conversation.create({
-                        phone, flowId: forcingFlow._id, flowVersion: forcingFlow.publishedVersion,
-                        currentStepId: forcingFlow.published.entryStepId,
-                        state: 'active', tags: [],
-                        loopDetection: { currentStepId: forcingFlow.published.entryStepId, messagesInCurrentStep: 0, lastStepChangeAt: new Date() }
-                    });
-                }
-            }
-
-            // 🔓 ALLOW ESCAPE FROM PAUSE (Greetings, Nav Commands, Options & Stale Pauses)
-            const cleanBody = (msg.body || '').trim().toLowerCase();
-            const GREETINGS_AND_NAV = [
-                'hola', 'buenas', 'buen dia', 'buenos dias', 'buenas tardes', 'buenas noches', 'hola!', 'hello',
-                'v', 'm', 'volver', 'menu', 'atras', 'inicio', 'empezar', 'reset',
-                '1', '2', '3', '4', 'a', 'b', 'c', 'd'
-            ];
-            const isGreetingOrNav = GREETINGS_AND_NAV.some(term => cleanBody === term || cleanBody.startsWith(term + ' ')) || cleanBody.includes('menu principal');
-            
-            const pausedDurationMs = conversation.updatedAt ? (Date.now() - new Date(conversation.updatedAt).getTime()) : 0;
-            const isStalePause = pausedDurationMs > 12 * 60 * 60 * 1000; // 12 hours
-
-            if (conversation.state === 'paused' && (isGreetingOrNav || isStalePause)) {
-                console.log(`[TRACE] 🔓 Auto-unpausing conversation for ${phone} (Reason: ${isGreetingOrNav ? 'Greeting/Nav keyword' : 'Stale pause >12h'}).`);
-                conversation.state = 'active';
-                if (conversation.formState) conversation.formState.active = false;
-                if (conversation.freeTextState) conversation.freeTextState.active = false;
-                conversation.handoffAckSent = false;
-                
-                await Conversation.updateOne(
-                    { _id: conversation._id },
-                    { 
-                        $set: { 
-                            state: 'active',
-                            'formState.active': false,
-                            'freeTextState.active': false,
-                            handoffAckSent: false
-                        } 
-                    }
-                );
-            }
-
-            // --- FINAL SILENCE GATE ---
-            // If the conversation is officially paused, we STOP here. No automation.
-            if (conversation.state === 'paused' && !msg.hasMedia) {
-                // ============================================================
-                // HANDOFF ACKNOWLEDGMENT
-                // When the user sends their first message after a handoff step,
-                // send a one-time acknowledgment so they know their message arrived.
-                // Text is pulled dynamically from the flow step configuration.
-                // ============================================================
-                if (!conversation.handoffAckSent) {
-                    let ackMessage = null;
-                    const flow = await Flow.findOne({ publishedVersion: conversation.flowVersion });
-
-                    if (flow && flow.published && flow.published.steps) {
-                        const steps = flow.published.steps;
-                        const getStep = (id) => (typeof steps.get === 'function') ? steps.get(id) : steps[id];
-                        const lastStep = getStep(conversation.currentStepId);
-
-                        if (lastStep?.actions?.handoffAckMessage) {
-                            ackMessage = lastStep.actions.handoffAckMessage;
-
-                            // 🚀 DYNAMICALLY APPEND M/V TEXT TO ACK MESSAGE
-                            if (lastStep.showNavigation !== false) {
-                                const defaultNavMenu = '🔹 *V:* Volver atrás\n🔹 *M:* Menú principal';
-                                const defaultNavBack = '_(Si te equivocaste, escribí *V* para volver)_';
-                                if (lastStep.id !== flow.published.entryStepId) {
-                                    ackMessage += '\n\n' + (flow.published.msgNavigationMenu || defaultNavMenu);
-                                } else {
-                                    ackMessage += '\n\n' + (flow.published.msgNavigationBack || defaultNavBack);
-                                }
-                            }
-                        }
-                    }
-
-                    if (ackMessage) {
-                        try {
-                            const chat = await getSafeChat(client, msg, phone);
-                            await chat.sendMessage(ackMessage);
-                            await Conversation.updateOne({ _id: conversation._id }, { $set: { handoffAckSent: true } });
-                            console.log(`[TRACE] 📨 Handoff ACK sent to ${phone}`);
-                        } catch (ackErr) {
-                            console.error(`[ERROR] Failed to send handoff ACK to ${phone}:`, ackErr);
-                        }
+                        console.log(`[TRACE] 🛑 Conversation is PAUSED for ${phone}. Forcing flow "${forcingFlow.name}" ignored.`);
                     } else {
-                        // Mark as sent anyway to avoid evaluating DB queries again
-                        await Conversation.updateOne({ _id: conversation._id }, { $set: { handoffAckSent: true } });
+                        console.log(`[TRACE] ⚡ FORCE RESTART: "${forcingFlow.name}"`);
+                        await Conversation.updateMany({ phone, state: { $in: ['active', 'paused'] } }, { $set: { state: 'closed' } });
+                        conversation = await Conversation.create({
+                            phone, flowId: forcingFlow._id, flowVersion: forcingFlow.publishedVersion,
+                            currentStepId: forcingFlow.published.entryStepId,
+                            state: 'active', tags: [],
+                            loopDetection: { currentStepId: forcingFlow.published.entryStepId, messagesInCurrentStep: 0, lastStepChangeAt: new Date() }
+                        });
                     }
                 }
-                console.log(`[TRACE] 🛑 Conversation is PAUSED for ${phone}. Bot remains silent.`);
+            }
+
+            // --- FINAL SILENCE GATE (STRICT INVARIANT: PAUSED MEANS ZERO AUTOMATION) ---
+            if (conversation.state === 'paused') {
+                console.log(`[TRACE] 🛑 Conversation is STRICTLY PAUSED for ${phone}. Bot remains 100% silent.`);
+
+                const incomingPreview = (msg.body || '').trim() 
+                    || (msg.hasMedia ? (msg.type === 'ptt' || msg.type === 'audio' ? '🎤 [Mensaje de voz]' : '📷 [Archivo multimedia]') : '📩 [Mensaje]');
+
+                // 1. Trazabilidad de No Leído y Urgencia en CRM
+                try {
+                    await Conversation.updateOne(
+                        { _id: conversation._id },
+                        { 
+                            $set: { 
+                                hasUnread: true,
+                                lastMessageText: incomingPreview,
+                                lastMessageAt: new Date(),
+                                updatedAt: new Date()
+                            },
+                            $inc: { unreadCount: 1 },
+                            $addToSet: { tags: 'atencion-requerida' }
+                        }
+                    );
+                    await Contact.updateOne(
+                        { phone },
+                        { 
+                            $set: { 
+                                hasUnread: true,
+                                lastSeenAt: new Date()
+                            },
+                            $inc: { unreadCount: 1 }
+                        }
+                    );
+                } catch (dbErr) {
+                    console.error('[ERROR] Failed to update unread status in CRM:', dbErr.message);
+                }
+
+                // 2. Preservar y forzar estado "No leído" en WhatsApp Web y etiquetar en WhatsApp Business
+                try {
+                    const chat = await getSafeChat(client, msg, phone);
+                    if (chat) {
+                        await chat.markUnread().catch(() => {});
+                        markUnreadWithDelay(chat, 1500);
+                        markUnreadWithDelay(chat, 3500);
+                        await syncWhatsAppLabel(chat, 'Derivado con Personal');
+                    }
+                } catch (wppErr) {
+                    console.error(`[ERROR] Failed to mark chat unread for ${phone}:`, wppErr.message);
+                }
+
                 await releaseLock(); if (lockTimeout) clearTimeout(lockTimeout);
                 return;
             }
+
+            // Trigger typing presence ONLY for active automated conversations
+            getSafeChat(client, msg, phone).then(c => {
+                if (c) sendTyping(c, phone).catch(() => {});
+            }).catch(() => {});
 
 
             // Try strict ID first (if exists), then fallback to publishedVersion

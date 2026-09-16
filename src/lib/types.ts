@@ -104,12 +104,15 @@ export type ConversationState = 'active' | 'paused' | 'closed';
 export interface Contact {
   id: string;
   phone: string;
+  name?: string;
   firstSeenAt: string;
   lastSeenAt: string;
   source: LeadSource;
   status: LeadStatus;
   meta?: Record<string, string>;
   tags: string[];
+  hasUnread?: boolean;
+  unreadCount?: number;
 }
 
 export interface Conversation {
@@ -119,6 +122,10 @@ export interface Conversation {
   currentStepId: string;
   state: ConversationState;
   tags: string[];
+  hasUnread?: boolean;
+  unreadCount?: number;
+  lastMessageText?: string;
+  lastMessageAt?: string;
   createdAt: string;
   updatedAt: string;
 }

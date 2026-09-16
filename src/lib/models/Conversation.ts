@@ -12,6 +12,10 @@ interface IConversationDoc extends Omit<IConversation, 'id'>, Document {
     visitedMediaSteps: string[]; // Steps where media was already sent (skip on revisit)
     handoffAckSent: boolean; // True after the first "ack" message is sent in a paused/handoff state
     forceUnread: boolean; // When true, bot re-marks chat as unread after every interaction until human clears it
+    hasUnread: boolean;   // True when an incoming message needs human attention
+    unreadCount: number;  // Number of unread incoming messages
+    lastMessageText: string; // Snippet of the latest message for operational visibility
+    lastMessageAt: Date;
     formState: {
         active: boolean;      // Currently collecting data
         pendingStepId: string; // Step to go to after form completes
@@ -37,6 +41,10 @@ const ConversationSchema = new Schema<IConversationDoc>({
         default: 'active',
     },
     tags: [String],
+    hasUnread: { type: Boolean, default: false, index: true },
+    unreadCount: { type: Number, default: 0 },
+    lastMessageText: { type: String, default: '' },
+    lastMessageAt: { type: Date, default: Date.now as any },
     loopDetection: {
         currentStepId: { type: String, default: '' },
         messagesInCurrentStep: { type: Number, default: 0 },

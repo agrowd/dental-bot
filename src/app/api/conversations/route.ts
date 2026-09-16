@@ -11,8 +11,13 @@ export async function GET(req: NextRequest) {
 
         const { searchParams } = new URL(req.url);
         const search = searchParams.get('search');
+        const filter = searchParams.get('filter');
         const matchStage: any = {};
         
+        if (filter === 'unread') {
+            matchStage.hasUnread = true;
+        }
+
         if (search) {
             const cleanSearch = search.trim().replace(/[\s\-\+]/g, '');
             
@@ -41,7 +46,7 @@ export async function GET(req: NextRequest) {
 
         // Use aggregation to group by phone and get the most recent conversation for each
         const pipeline: any[] = [];
-        if (search) pipeline.push({ $match: matchStage });
+        if (Object.keys(matchStage).length > 0) pipeline.push({ $match: matchStage });
         
         pipeline.push(
             { $sort: { updatedAt: -1 } },
@@ -52,8 +57,16 @@ export async function GET(req: NextRequest) {
                 }
             },
             { $replaceRoot: { newRoot: "$doc" } },
+            {
+                $lookup: {
+                    from: "contacts",
+                    localField: "phone",
+                    foreignField: "phone",
+                    as: "contactDoc"
+                }
+            },
             { $sort: { updatedAt: -1 } },
-            { $limit: search ? 500 : 100 }
+            { $limit: search ? 500 : 150 }
         );
 
         const conversations = await Conversation.aggregate(pipeline);
@@ -62,10 +75,15 @@ export async function GET(req: NextRequest) {
             conversations: conversations.map(c => ({
                 id: c._id.toString(),
                 phone: c.phone,
+                contactName: c.contactDoc?.[0]?.name || c.contactDoc?.[0]?.pushname || '',
                 flowVersion: c.flowVersion,
                 currentStepId: c.currentStepId,
                 state: c.state,
-                tags: c.tags,
+                tags: c.tags || [],
+                hasUnread: !!c.hasUnread,
+                unreadCount: c.unreadCount || 0,
+                lastMessageText: c.lastMessageText || '',
+                lastMessageAt: c.lastMessageAt || c.updatedAt,
                 createdAt: c.createdAt,
                 updatedAt: c.updatedAt,
             })),
