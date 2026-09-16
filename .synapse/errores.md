@@ -24,11 +24,13 @@
 **Síntoma:** Un contacto en pausa por derivación humana (Jorge Ferrer con urgencia médica familiar) escribió "Buen día..." y el bot lo despausó automáticamente y le respondió tres veces "No comprendí tu mensaje", silenciando la urgencia operativa.
 **Root Cause:** En `bot-runner/index.js` existía un bloque `ALLOW ESCAPE FROM PAUSE` que despausaba conversaciones si el mensaje contenía saludos ("hola", "buen dia"), dígitos, o si habían pasado >12h (`isStalePause`). Además, el chequeo de pausa tenía una cláusula `!msg.hasMedia`, lo que permitía que mensajes de voz o archivos eludieran la pausa y dispararan respuestas automatizadas.
 **Solución:** Se eliminó por completo el bloque de auto-unpause `ALLOW ESCAPE FROM PAUSE`. Se blindó la compuerta de pausa para abarcar TODOS los mensajes (texto, audios, documentos, imágenes). Ahora cualquier chat pausado permanece inmutablemente pausado, marca `chat.markUnread()` en WhatsApp Web, sincroniza la etiqueta `Derivado con Personal` y notifica al CRM con `hasUnread: true`, incrementando `unreadCount`.
+**Commit:** `28e1a5c`
 **Estado:** ✅ FIXED
 
 ## ERR-08: Pérdida de Globos Verdes "No Leído" en el Móvil por openChatAt (16/09/2026)
 **Síntoma:** Cuando un contacto derivado o en pausa escribía por WhatsApp, en el celular de Salvador el mensaje no quedaba destacado ni con globo verde de "no leído", perdiendo visibilidad operativa.
 **Root Cause:** La función `sendTyping` ejecutaba `window.Store.Cmd.openChatAt(c)` y se ejecutaba prematuramente antes de verificar si el chat estaba pausado. Abrir el chat en Puppeteer enfoca la ventana y WhatsApp Web emite internamente un `sendSeen` (marca como leído), borrando el contador de no leídos en todos los dispositivos vinculados.
 **Solución:** Se retiró `window.Store.Cmd.openChatAt(c)` de `sendTyping` y se eliminó el disparo de typing prematuro antes del gate de pausa. Si el chat está pausado, el bot ejecuta activamente `chat.markUnread()` en WhatsApp Web y actualiza el contador `hasUnread: true` en la base de datos de MongoDB.
+**Commit:** `28e1a5c`
 **Estado:** ✅ FIXED
 
